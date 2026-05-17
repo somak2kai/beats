@@ -1,0 +1,94 @@
+version: 2
+
+project_name: beats
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: beats
+    binary: beats
+    main: ./cmd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+  - id: beats-cmp
+    binary: beats-cmp
+    main: ./x/tools/cmp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: beats-archive
+    builds:
+      - beats
+      - beats-cmp
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - BEATS.md
+      - goals.md
+      - skills/**
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "New Features"
+      regexp: "^feat"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^fix"
+      order: 1
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: somak2kai
+    name: beats
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} {{.Tag}}"
