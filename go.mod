@@ -5,7 +5,6 @@ go 1.26.2
 require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/sourcegraph/scip v0.5.2
-	go.uber.org/zap v1.28.0
 	golang.org/x/sync v0.20.0
 )
 
@@ -68,6 +67,7 @@ require (
 	github.com/vbatts/tar-split v0.11.3 // indirect
 	go.opentelemetry.io/otel/sdk v1.37.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/term v0.34.0 // indirect
