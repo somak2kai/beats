@@ -122,6 +122,9 @@ func (l *LabelCluster) Execute() error {
 func (w *FunctionMetadataWriter) Execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "funcMeta", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "func_meta.json")
+	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
+		return err
+	}
 	f, err := os.Create(tmp)
 	if err != nil {
 		return err
@@ -144,6 +147,9 @@ func (w *FunctionMetadataWriter) SkipInDryRun() bool {
 func (w *IndexMetadataWriter) Execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "indexMeta", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "index.json")
+	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
+		return err
+	}
 	f, err := os.Create(tmp)
 	if err != nil {
 		return err
@@ -162,10 +168,14 @@ func (w *IndexMetadataWriter) SkipInDryRun() bool {
 
 func (c *ClusterWriter) Execute() error {
 	tmp := filepath.Join(os.TempDir(), "cluster", uuid.NewString(), filepath.Base(c.State.RepositoryPath), "cluster.json")
+	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
+		return err
+	}
 	if err := c.dumpClusters(c.State.CollapsedCluster, tmp); err != nil {
 		log.Error("unable to write cluster ", slog.String("cluster_path", tmp))
 		return err
 	}
+	log.Info("collapsed cluster written", slog.String("path", tmp))
 	return nil
 }
 
@@ -233,6 +243,7 @@ func (b *BeatsLabelWriter) Execute() error {
 		log.Error("unable to create cluster labels ", slog.Any("error", err))
 		return err
 	}
+	log.Info("beats label wrote", slog.String("path", labelFile))
 	return nil
 }
 
