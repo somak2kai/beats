@@ -35,6 +35,11 @@ var (
 	_ Skippable = (*ClusterWriter)(nil)
 	_ Command   = (*ClusterPersistor)(nil)
 	_ Skippable = (*ClusterPersistor)(nil)
+	_ Command   = (*MemberScorer)(nil)
+	_ Command   = (*MemberScoreWriter)(nil)
+	_ Skippable = (*MemberScoreWriter)(nil)
+	_ Command   = (*MemberScorePersistor)(nil)
+	_ Skippable = (*MemberScorePersistor)(nil)
 )
 
 type Command interface{ Execute() error }
@@ -51,6 +56,9 @@ type LabelCluster struct{ State *State }
 type BeatsLabelWriter struct{ State *State }
 type ClusterWriter struct{ State *State }
 type ClusterPersistor struct{ State *State }
+type MemberScorer struct{ State *State }
+type MemberScoreWriter struct{ State *State }
+type MemberScorePersistor struct{ State *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -61,6 +69,7 @@ type State struct {
 	OriginalCluster   []ds.Cluster
 	CollapsedCluster  []ds.Cluster
 	LabelableCluster  []ds.Cluster
+	MemberScores      []ds.MemberScore
 	RepositoryPath    string
 	Index             ds.Index
 }
@@ -295,6 +304,54 @@ func (b *BeatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo stri
 	return ast.WriteClusters(f, repo, cls)
 }
 
+func (m *MemberScorer) Execute() error {
+	m.State.MemberScores = ast.ComputeMemberScores(m.State.CollapsedCluster)
+	log.Info("member scores computed", slog.Int("count", len(m.State.MemberScores)))
+	return nil
+}
+
+func (m *MemberScoreWriter) Execute() error {
+	tmp := filepath.Join(os.TempDir(), "memberScore", uuid.NewString(), filepath.Base(m.State.RepositoryPath), "member_score.json")
+	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
+		return err
+	}
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, ms := range m.State.MemberScores {
+		if err := enc.Encode(ms); err != nil {
+			log.Error("unable to write member score", slog.String("path", tmp))
+			return err
+		}
+	}
+	log.Info("member scores written", slog.String("path", tmp))
+	return nil
+}
+
+func (m *MemberScoreWriter) SkipInDryRun() bool { return true }
+
+func (m *MemberScorePersistor) Execute() error {
+	tmp := filepath.Join(os.TempDir(), "badger", m.State.RepositoryPath)
+	bDb := db.NewDb(tmp)
+	defer bDb.Close()
+	for _, ms := range m.State.MemberScores {
+		if err := bDb.StoreMemberScore(ms.FunctionID, ms); err != nil {
+			log.Error("unable to save member score",
+				slog.String("function_id", ms.FunctionID),
+				slog.Any("error", err),
+			)
+			return err
+		}
+	}
+	log.Info("member scores persisted", slog.Int("count", len(m.State.MemberScores)))
+	return nil
+}
+
+func (m *MemberScorePersistor) SkipInDryRun() bool { return true }
+
 func (b *Beats) run(repo string) error {
 
 	s := &State{
@@ -330,8 +387,12 @@ func getCommands(s *State) []Command {
 		&IndexPersistor{State: s},
 		&ClusterMetadata{State: s},
 		&CollapseClusterToFamily{State: s},
+		&ClusterWriter{State: s},
 		&LabelCluster{State: s},
 		&ClusterPersistor{State: s},
+		&MemberScorer{State: s},
+		&MemberScoreWriter{State: s},
+		&MemberScorePersistor{State: s},
 		&BeatsLabelWriter{State: s},
 	}
 }

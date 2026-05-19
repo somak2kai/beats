@@ -132,6 +132,26 @@ type Index struct {
 	TotalDocs int
 }
 
+// MemberScore holds the cluster membership probability distribution for a
+// single function. Computed after clustering by scoring the function against
+// every non-primitive collapsed cluster using the three-term scoring function:
+//
+//	score(f, C) = shape_match + import_jaccard + call_target_jaccard
+//
+// Scores are normalised to probabilities via softmax. High Entropy means the
+// function fits multiple clusters (boundary candidate). Low Entropy means it
+// clearly belongs to one cluster.
+type MemberScore struct {
+	FunctionID string             // stable 16-hex identity: sha256(pkg.name@path:line)
+	Package    string
+	Name       string
+	FilePath   string
+	Line       int
+	Probs      map[string]float64 // clusterShapeHash → P(C_i | f)
+	WinnerID   string             // shapeHash of the highest-probability cluster
+	Entropy    float64            // H = -Σ p·log(p); high = boundary candidate
+}
+
 func PopulateIndex(fMeta []FunctionMeta) Index {
 
 	funcMeta := make(map[string]FunctionMeta, len(fMeta))

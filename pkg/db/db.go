@@ -144,6 +144,34 @@ func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
 	return c, err
 }
 
+// StoreMemberScore persists a MemberScore under key score:<functionID>.
+func (d *BadgerDb) StoreMemberScore(id string, ms ds.MemberScore) error {
+	key := fmt.Sprintf("score:%s", id)
+	val, err := gobEncode(ms)
+	if err != nil {
+		return fmt.Errorf("encode member score %s: %w", id, err)
+	}
+	return d.db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(key), val)
+	})
+}
+
+// LoadMemberScore retrieves a MemberScore by functionID.
+func (d *BadgerDb) LoadMemberScore(id string) (ds.MemberScore, error) {
+	key := fmt.Sprintf("score:%s", id)
+	var ms ds.MemberScore
+	err := d.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(key))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			return gobDecode(val, &ms)
+		})
+	})
+	return ms, err
+}
+
 // ScanClusters returns all clusters stored under the given tier prefix.
 func (d *BadgerDb) ScanClusters(tier string) ([]ds.Cluster, error) {
 	prefix := []byte(fmt.Sprintf("cluster:%s:", tier))
