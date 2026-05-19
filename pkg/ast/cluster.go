@@ -618,17 +618,20 @@ func jaccard(a, b map[string]bool) float64 {
 	return float64(intersection) / float64(union)
 }
 
+// topNKeys returns the n most frequent keys from freq, sorted by count desc.
+// Ties are broken alphabetically for determinism — this is a display field
+// (used only in the LLM label file), not a clustering signal.
 func topNKeys(freq map[string]int, n int) []string {
-	type kv struct {
-		key   string
-		count int
-	}
+	type kv struct{ key string; count int }
 	ranked := make([]kv, 0, len(freq))
 	for k, v := range freq {
 		ranked = append(ranked, kv{k, v})
 	}
 	sort.Slice(ranked, func(i, j int) bool {
-		return ranked[i].count > ranked[j].count
+		if ranked[i].count != ranked[j].count {
+			return ranked[i].count > ranked[j].count
+		}
+		return ranked[i].key < ranked[j].key
 	})
 	out := make([]string, 0, n)
 	for i := 0; i < n && i < len(ranked); i++ {
