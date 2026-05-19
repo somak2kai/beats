@@ -4,10 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"log"
 
 	badger "github.com/dgraph-io/badger/v4"
 	ds "github.com/somak2kai/beats/pkg/types"
+)
+
+const (
+	TierRaw       = "raw"
+	TierCollapsed = "collapsed"
+	TierLabel     = "label"
 )
 
 type BadgerDb struct {
@@ -106,4 +113,56 @@ func gobDecode(data []byte, v any) error {
 	buf := bytes.NewBuffer(data)
 	dec := gob.NewDecoder(buf)
 	return dec.Decode(v)
+}
+
+// StoreCluster persists a cluster under the given tier prefix.
+// Key format: cluster:<tier>:<shapeHash>
+func (d *BadgerDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
+	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
+	val, err := gobEncode(c)
+	if err != nil {
+		return fmt.Errorf("encode cluster %s/%s: %w", tier, shapeHash, err)
+	}
+	return d.db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(key), val)
+	})
+}
+
+// LoadCluster retrieves a single cluster by tier and shapeHash.
+func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
+	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
+	var c ds.Cluster
+	err := d.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(key))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			return gobDecode(val, &c)
+		})
+	})
+	return c, err
+}
+
+// ScanClusters returns all clusters stored under the given tier prefix.
+func (d *BadgerDb) ScanClusters(tier string) ([]ds.Cluster, error) {
+	prefix := []byte(fmt.Sprintf("cluster:%s:", tier))
+	var clusters []ds.Cluster
+	err := d.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			var c ds.Cluster
+			if err := it.Item().Value(func(val []byte) error {
+				return gobDecode(val, &c)
+			}); err != nil {
+				return err
+			}
+			clusters = append(clusters, c)
+		}
+		return nil
+	})
+	return clusters, err
 }

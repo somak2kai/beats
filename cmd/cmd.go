@@ -33,6 +33,8 @@ var (
 	_ Command   = (*BeatsLabelWriter)(nil)
 	_ Command   = (*ClusterWriter)(nil)
 	_ Skippable = (*ClusterWriter)(nil)
+	_ Command   = (*ClusterPersistor)(nil)
+	_ Skippable = (*ClusterPersistor)(nil)
 )
 
 type Command interface{ Execute() error }
@@ -48,6 +50,7 @@ type CollapseClusterToFamily struct{ State *State }
 type LabelCluster struct{ State *State }
 type BeatsLabelWriter struct{ State *State }
 type ClusterWriter struct{ State *State }
+type ClusterPersistor struct{ State *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -198,10 +201,46 @@ func (w *ClusterWriter) SkipInDryRun() bool {
 	return true
 }
 
+func (c *ClusterPersistor) Execute() error {
+	tmp := filepath.Join(os.TempDir(), "badger", c.State.RepositoryPath)
+	bDb := db.NewDb(tmp)
+	defer bDb.Close()
+
+	tiers := []struct {
+		name     string
+		clusters []ds.Cluster
+	}{
+		{db.TierRaw, c.State.OriginalCluster},
+		{db.TierCollapsed, c.State.CollapsedCluster},
+		{db.TierLabel, c.State.LabelableCluster},
+	}
+
+	for _, tier := range tiers {
+		for _, cl := range tier.clusters {
+			if err := bDb.StoreCluster(tier.name, cl.ShapeHash, cl); err != nil {
+				log.Error("unable to save cluster",
+					slog.String("tier", tier.name),
+					slog.String("shape_hash", cl.ShapeHash),
+					slog.Any("error", err),
+				)
+				return err
+			}
+		}
+		log.Info("clusters persisted",
+			slog.String("tier", tier.name),
+			slog.Int("count", len(tier.clusters)),
+		)
+	}
+	return nil
+}
+
+func (c *ClusterPersistor) SkipInDryRun() bool { return true }
+
 func (w *IndexPersistor) Execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "badger", w.State.RepositoryPath)
 	bDb := db.NewDb(tmp)
+	defer bDb.Close()
 	for k, v := range w.State.Index.Postings {
 		if err := bDb.StorePostings(k, v); err != nil {
 			log.Error("unable to save inverted index", slog.Any("error", err))
@@ -292,7 +331,7 @@ func getCommands(s *State) []Command {
 		&ClusterMetadata{State: s},
 		&CollapseClusterToFamily{State: s},
 		&LabelCluster{State: s},
-		&ClusterWriter{State: s},
+		&ClusterPersistor{State: s},
 		&BeatsLabelWriter{State: s},
 	}
 }
