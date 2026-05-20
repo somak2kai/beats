@@ -121,6 +121,7 @@ type Cluster struct {
 	Size          int
 	Profile       ClusterProfile
 	Coherence     float64 // mean pairwise Jaccard of DirectImports
+	CallCoherence float64 // mean pairwise Jaccard of CallTargets
 	IsPrimitive   bool    // true if cluster is too common to be meaningful (IDF stop-word)
 	Label         string  // filled later by labelling pass
 }

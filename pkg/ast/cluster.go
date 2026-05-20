@@ -15,9 +15,12 @@ import (
 // per-cluster profile and coherence. Returns clusters sorted by size desc.
 //
 // Filters applied:
-//   - Size < 4          → too small to be a pattern
-//   - len(TokenSeq) < 3 → structural stop-word (single token sequences etc.)
-//   - IsPrimitive        → appears in ≥5% of corpus; still returned but flagged
+//   - Size < 4                → too small to be a pattern
+//   - len(TokenSeq) < 4       → structural stop-word (trivial sequences)
+//   - Size >= 5% of corpus    → structural stop-word; pattern is so universal
+//     it carries no information (e.g. every model has a fetch-by-ID function).
+//     These are dropped entirely rather than flagged — they pollute reports and
+//     CollapseToFamilies without contributing meaningful signal.
 func BuildClusters(fns []ds.FunctionMeta) []ds.Cluster {
 	totalDocs := len(fns)
 	primitiveThreshold := float64(totalDocs) * 0.05
@@ -38,17 +41,20 @@ func BuildClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		if len(seq) < 4 {
 			continue
 		}
+		if float64(len(members)) >= primitiveThreshold {
+			continue // structural stop-word — too common to be meaningful
+		}
 
 		c := ds.Cluster{
-			SeqKey:      key,
-			ShapeHash:   shapeHash(key),
-			TokenSeq:    seq,
-			Members:     members,
-			Size:        len(members),
-			IsPrimitive: float64(len(members)) >= primitiveThreshold,
+			SeqKey:    key,
+			ShapeHash: shapeHash(key),
+			TokenSeq:  seq,
+			Members:   members,
+			Size:      len(members),
 		}
 		c.Profile = computeProfile(members)
 		c.Coherence = computeCoherence(members)
+		c.CallCoherence = computeCallCoherence(members)
 		clusters = append(clusters, c)
 	}
 
@@ -72,11 +78,11 @@ func computeProfile(members []ds.FunctionMeta) ds.ClusterProfile {
 	callFreq := make(map[string]int)
 
 	// accumulators for std dev and percentile computation
-	cycloVals        := make([]float64, len(members))
-	nestingVals      := make([]float64, len(members))
-	callVals         := make([]float64, len(members))
-	earlyReturnVals  := make([]float64, len(members))
-	deferCountVals   := make([]float64, len(members))
+	cycloVals := make([]float64, len(members))
+	nestingVals := make([]float64, len(members))
+	callVals := make([]float64, len(members))
+	earlyReturnVals := make([]float64, len(members))
+	deferCountVals := make([]float64, len(members))
 
 	for i, fn := range members {
 		f := fn.Features
@@ -196,20 +202,42 @@ func computeCoherence(members []ds.FunctionMeta) float64 {
 		return 1.0
 	}
 
-	// build import sets once
 	sets := make([]map[string]bool, len(members))
 	for i, fn := range members {
 		s := make(map[string]bool, len(fn.DirectImports))
-		// considering function level imports and also call targets on them to create a coherent groups of family of code.
 		for _, imp := range fn.DirectImports {
 			s[imp] = true
-		}
-		for _, ct := range fn.CallTargets {
-			s["c:"+ct] = true
 		}
 		sets[i] = s
 	}
 
+	return meanPairwiseJaccard(sets)
+}
+
+// computeCallCoherence returns mean pairwise Jaccard similarity of CallTargets.
+// 1.0 = all members call the same external functions (tight structural role)
+// 0.0 = members call completely different things (cross-cutting structural shape)
+func computeCallCoherence(members []ds.FunctionMeta) float64 {
+	if len(members) < 2 {
+		return 1.0
+	}
+
+	sets := make([]map[string]bool, len(members))
+	for i, fn := range members {
+		s := make(map[string]bool, len(fn.CallTargets))
+		for _, ct := range fn.CallTargets {
+			s[ct] = true
+		}
+		sets[i] = s
+	}
+
+	return meanPairwiseJaccard(sets)
+}
+
+// meanPairwiseJaccard computes the mean pairwise Jaccard similarity over a
+// slice of sets. Stride-samples down to 50 when the slice is large so that
+// O(n²) comparisons remain cheap. Sampling is deterministic (no randomness).
+func meanPairwiseJaccard(sets []map[string]bool) float64 {
 	// cap pairwise comparisons for large clusters (O(n²) gets expensive).
 	// Stride-sample so the selection is deterministic across runs and evenly
 	// distributed across the full member slice — neither the first-N bias
@@ -427,6 +455,7 @@ func CollapseToFamilies(clusters []ds.Cluster) []ds.Cluster {
 		primary.Size = len(primary.Members)
 		primary.Profile = computeProfile(primary.Members)
 		primary.Coherence = computeCoherence(primary.Members)
+		primary.CallCoherence = computeCallCoherence(primary.Members)
 		result = append(result, primary)
 	}
 
@@ -455,17 +484,27 @@ func minGroupSim(g1, g2 []int, sims [][]float64) float64 {
 // clusterSimilarity returns a weighted similarity score in [0, 1] between two
 // clusters using token sequence edit distance, import Jaccard, and call Jaccard.
 //
-// Two hard gates are applied before the weighted score:
+// Three hard gates are applied before the weighted score:
 //
 //  1. Length ratio: if the longer sequence is more than 2.5× the shorter, the
 //     clusters cannot be arity variants — return 0 immediately. This prevents
 //     monorepo chaining where a 6-token shape absorbs a 40-token shape via
 //     intermediate clusters with high import overlap.
 //
-//  2. Sequence similarity floor: seqSim must be ≥ 0.40. Below this the shapes
+//  2. Short sequence exact match: if either sequence is shorter than 6 tokens,
+//     the token sequences must be identical. For short functions a single token
+//     substitution (e.g. ASSIGN → IF) represents a fundamental structural
+//     difference — not a minor arity variant — and edit-distance similarity
+//     inflates to 0.80 on a 5-token sequence, making collapse too aggressive.
+//     Sequences of length ≥ 6 have enough tokens that a 1-2 edit is genuinely
+//     minor and the weighted score can be trusted.
+//
+//  3. Sequence similarity floor: seqSim must be ≥ 0.40. Below this the shapes
 //     are structurally too different to be the same pattern. Without this floor,
 //     high importSim (common in monorepos that share a small set of packages)
 //     can push the weighted score over threshold even for unrelated shapes.
+const shortSeqThreshold = 6
+
 func clusterSimilarity(seqA, seqB []int, importsA, importsB, callsA, callsB map[string]bool) float64 {
 	la, lb := len(seqA), len(seqB)
 
@@ -478,7 +517,14 @@ func clusterSimilarity(seqA, seqB []int, importsA, importsB, callsA, callsB map[
 		return 0.0
 	}
 
-	// gate 2 — sequence similarity floor
+	// gate 2 — short sequences must match exactly
+	if la < shortSeqThreshold || lb < shortSeqThreshold {
+		if seqSimilarity(seqA, seqB) < 1.0 {
+			return 0.0
+		}
+	}
+
+	// gate 3 — sequence similarity floor
 	seqSim := seqSimilarity(seqA, seqB)
 	if seqSim < 0.40 {
 		return 0.0
@@ -603,7 +649,7 @@ func seqKey(tokens []int) string {
 
 func jaccard(a, b map[string]bool) float64 {
 	if len(a) == 0 && len(b) == 0 {
-		return 1.0
+		return 0.0 // both empty — no shared vocabulary, not "perfectly similar"
 	}
 	var intersection int
 	for k := range a {
@@ -622,7 +668,10 @@ func jaccard(a, b map[string]bool) float64 {
 // Ties are broken alphabetically for determinism — this is a display field
 // (used only in the LLM label file), not a clustering signal.
 func topNKeys(freq map[string]int, n int) []string {
-	type kv struct{ key string; count int }
+	type kv struct {
+		key   string
+		count int
+	}
 	ranked := make([]kv, 0, len(freq))
 	for k, v := range freq {
 		ranked = append(ranked, kv{k, v})
@@ -643,7 +692,7 @@ func topNKeys(freq map[string]int, n int) []string {
 var tokenNames = []string{
 	"IF", "FOR", "RANGE", "SWITCH", "CASE", "SELECT", "COMM",
 	"RETURN", "GO", "SEND", "DEFER", "CONTINUE", "BREAK", "GOTO",
-	"CALL", "FUNCLIT",
+	"CALL", "FUNCLIT", "ASSIGN", "CALL_PKG", "CALL_METHOD",
 }
 
 func tokenName(t int) string {

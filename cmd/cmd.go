@@ -18,6 +18,8 @@ import (
 )
 
 var (
+	_ Command   = (*DbCleaner)(nil)
+	_ Skippable = (*DbCleaner)(nil)
 	_ Command   = (*FileMetadata)(nil)
 	_ Command   = (*FunctionMetadata)(nil)
 	_ Command   = (*ClusterMetadata)(nil)
@@ -44,6 +46,7 @@ var (
 
 type Command interface{ Execute() error }
 type Skippable interface{ SkipInDryRun() bool }
+type DbCleaner struct{ State *State }
 type FileMetadata struct{ State *State }
 type FunctionMetadata struct{ State *State }
 type IndexCommand struct{ State *State }
@@ -73,6 +76,22 @@ type State struct {
 	RepositoryPath    string
 	Index             ds.Index
 }
+
+// DbCleaner removes the BadgerDB directory for the repository before the
+// pipeline writes anything. Without this, re-running beats init accumulates
+// stale keys from previous runs — old shape hashes coexist with new ones and
+// ScanClusters returns both, inflating all counts.
+func (d *DbCleaner) Execute() error {
+	dbPath := filepath.Join(os.TempDir(), "badger", d.State.RepositoryPath)
+	if err := os.RemoveAll(dbPath); err != nil {
+		log.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
+		return err
+	}
+	log.Info("cleared existing db", slog.String("path", dbPath))
+	return nil
+}
+
+func (d *DbCleaner) SkipInDryRun() bool { return true }
 
 func (f *FileMetadata) Execute() error {
 	files, err := util.GetFileMetadata(f.State.RepositoryPath)
@@ -240,6 +259,14 @@ func (c *ClusterPersistor) Execute() error {
 			slog.Int("count", len(tier.clusters)),
 		)
 	}
+
+	// persist total corpus size so analyze can show "functions in codebase" vs "functions in clusters"
+	corpusSize := len(c.State.FunctionMetadata)
+	if err := bDb.Save("meta:corpus_size", corpusSize); err != nil {
+		log.Error("unable to save corpus size", slog.Any("error", err))
+		return err
+	}
+	log.Info("corpus size persisted", slog.Int("corpus_size", corpusSize))
 	return nil
 }
 
@@ -379,6 +406,7 @@ func (b *Beats) run(repo string) error {
 
 func getCommands(s *State) []Command {
 	return []Command{
+		&DbCleaner{State: s},
 		&FileMetadata{State: s},
 		&FunctionMetadata{State: s},
 		&FunctionMetadataWriter{State: s},
@@ -390,9 +418,10 @@ func getCommands(s *State) []Command {
 		&ClusterWriter{State: s},
 		&LabelCluster{State: s},
 		&ClusterPersistor{State: s},
-		&MemberScorer{State: s},
-		&MemberScoreWriter{State: s},
-		&MemberScorePersistor{State: s},
+		// TODO membership scoring is brittle at the moment.
+		// &MemberScorer{State: s},
+		// &MemberScoreWriter{State: s},
+		// &MemberScorePersistor{State: s},
 		&BeatsLabelWriter{State: s},
 	}
 }

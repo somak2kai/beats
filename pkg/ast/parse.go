@@ -25,8 +25,11 @@ const (
 	TK_CONTINUE
 	TK_BREAK
 	TK_GOTO
-	TK_CALL
+	TK_CALL        // plain local call: drawBlock(...), delete(...), make(...)
 	TK_FUNCLIT
+	TK_ASSIGN
+	TK_CALL_PKG    // package-qualified call: fmt.Sprintf(...), xorm.In(...)
+	TK_CALL_METHOD // method or chained call: rref.LinkName(), w.Close(), a.b.Method()
 )
 
 func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
@@ -50,7 +53,7 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 		start := fset.Position(fn.Pos())
 		end := fset.Position(fn.End())
 
-		features, tokens := extractStructuralFeatures(fn)
+		features, tokens := extractStructuralFeatures(fn, aliasMap)
 		funcs = append(funcs, ds.FunctionMeta{
 			Package:       file.Name.Name,
 			FileMeta:      f,
@@ -237,7 +240,7 @@ func typeString(expr ast.Expr) string {
 	return ""
 }
 
-func extractStructuralFeatures(fn *ast.FuncDecl) (ds.StructuralFeatures, []int) {
+func extractStructuralFeatures(fn *ast.FuncDecl, aliasMap map[string]string) (ds.StructuralFeatures, []int) {
 	var f ds.StructuralFeatures
 	f.CyclomaticComplexity = 1
 
@@ -298,10 +301,12 @@ func extractStructuralFeatures(fn *ast.FuncDecl) (ds.StructuralFeatures, []int) 
 			}
 		case *ast.CallExpr:
 			f.OutboundCalls++
-			tokens = append(tokens, TK_CALL)
+			tokens = append(tokens, classifyCall(node, aliasMap))
 		case *ast.FuncLit:
 			f.FuncLiteralCount++
 			tokens = append(tokens, TK_FUNCLIT)
+		case *ast.AssignStmt:
+			tokens = append(tokens, TK_ASSIGN)
 		}
 		return true
 	})
@@ -315,7 +320,45 @@ func extractStructuralFeatures(fn *ast.FuncDecl) (ds.StructuralFeatures, []int) 
 	f.HasContextParam = hasContextParam(fn.Type.Params)
 	f.HasErrorReturn = hasErrorReturn(fn.Type.Results)
 
+	// Append one TK_RETURN token per return value so that functions sharing
+	// an identical control-flow body but different return contracts produce
+	// different token sequences and land in different clusters.
+	//
+	// func() error             → [...body..., RETURN]
+	// func() (*T, error)       → [...body..., RETURN, RETURN]
+	// func() (*T, *R, error)   → [...body..., RETURN, RETURN, RETURN]
+	for range f.ReturnCount {
+		tokens = append(tokens, TK_RETURN)
+	}
+
 	return f, tokens
+}
+
+// classifyCall returns the token type for a call expression:
+//   - TK_CALL_PKG    — package-qualified call where the selector's left-hand side
+//     is a known import alias: fmt.Sprintf(...), xorm.In(...).
+//   - TK_CALL_METHOD — method or chained call where the left-hand side is a
+//     variable or another expression: rref.LinkName(), w.Close(), a.b.Method().
+//   - TK_CALL        — plain identifier call (local function, builtin, type
+//     conversion): drawBlock(...), make(...), int64(x).
+//
+// This three-way split is what separates b19 ([ASSIGN CALL CALL CALL CALL])
+// from RecipeUploadURLs ([ASSIGN CALL CALL_PKG CALL CALL_METHOD]) — functions
+// that are semantically unrelated but would otherwise share an identical
+// token sequence.
+func classifyCall(call *ast.CallExpr, aliasMap map[string]string) int {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return TK_CALL // plain ident call or type conversion
+	}
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return TK_CALL_METHOD // chained: a.b.Method() — X is not a bare ident
+	}
+	if _, isPkg := aliasMap[ident.Name]; isPkg {
+		return TK_CALL_PKG // known import alias: fmt.Sprintf, xorm.In
+	}
+	return TK_CALL_METHOD // variable receiver: rref.LinkName(), w.Close()
 }
 
 // computeNestingDepth returns max nesting depth of scope-opening constructs.

@@ -65,10 +65,23 @@ func ComputeMemberScores(clusters []ds.Cluster) []ds.MemberScore {
 			}
 			seen[id] = true
 
-			// raw score against every active cluster
-			raw := make(map[string]float64, len(active))
+			// raw score against relevant clusters only.
+			// A cluster is relevant only if shape_match fired (score >= 1.0).
+			// Clusters with no shape match produce near-zero scores from import/call
+			// Jaccard alone — including them inflates the softmax denominator with
+			// noise and compresses entropy to a useless near-uniform distribution.
+			raw := make(map[string]float64, 8)
 			for i, ci := range active {
-				raw[ci.ShapeHash] = scoreFunction(fn, ci, sets[i].imports, sets[i].calls)
+				s := scoreFunction(fn, ci, sets[i].imports, sets[i].calls)
+				if s >= 1.0 {
+					raw[ci.ShapeHash] = s
+				}
+			}
+
+			// if no cluster matched on shape, this function sits outside all known
+			// patterns — skip it rather than writing a meaningless uniform distribution
+			if len(raw) == 0 {
+				continue
 			}
 
 			probs := softmax(raw)
