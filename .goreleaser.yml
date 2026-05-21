@@ -83,6 +83,22 @@ changelog:
     - title: "Other"
       order: 999
 
+brews:
+  - name: beats
+    ids:
+      - beats-archive
+    repository:
+      owner: somak2kai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/somak2kai/beats"
+    description: "Structural clustering and code intelligence for Go repositories."
+    license: "MIT"
+    install: |
+      bin.install "beats"
+    test: |
+      system "#{bin}/beats", "--help"
+
 release:
   github:
     owner: somak2kai
