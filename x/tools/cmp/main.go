@@ -4,12 +4,12 @@
 // (derived from the consensus symbols beats' own members share), would SCIP find the
 // same functions?
 //
-//   Precision = |beats ∩ SCIP query| / |SCIP query|
-//               fraction of SCIP results also in beats  → LOW means SCIP over-includes
+//	Precision = |beats ∩ SCIP query| / |SCIP query|
+//	            fraction of SCIP results also in beats  → LOW means SCIP over-includes
 //
-//   Recall    = |beats ∩ SCIP query| / |beats|
-//               fraction of beats cluster SCIP confirms → LOW means beats found novel functions
-//               invisible to reference-graph search
+//	Recall    = |beats ∩ SCIP query| / |beats|
+//	            fraction of beats cluster SCIP confirms → LOW means beats found novel functions
+//	            invisible to reference-graph search
 //
 // Usage:
 //
@@ -38,14 +38,14 @@ import (
 )
 
 func main() {
-	scipFile    := flag.String("scip", "", "path to SCIP index file (index.scip)")
+	scipFile := flag.String("scip", "", "path to SCIP index file (index.scip)")
 	clusterFile := flag.String("clusters", "", "path to beats cluster JSONL file (use --badger instead for IdentifyCluster output)")
-	badgerPath  := flag.String("badger", "", "repo path to load TierIdentified clusters from beats BadgerDB (same value as --repo)")
-	repoRoot    := flag.String("repo", "", "absolute path to repo root")
-	minSize     := flag.Int("min-size", 4, "skip clusters smaller than this")
-	topN        := flag.Int("top", 0, "limit report to top N clusters by size (0 = all)")
-	showPaths   := flag.Bool("show-paths", false, "print 20 sample SCIP paths and first-cluster member paths, then exit (path alignment diagnostic)")
-	quorum      := flag.Float64("quorum", 0.6,
+	badgerPath := flag.String("badger", "", "repo path to load TierIdentified clusters from beats BadgerDB (same value as --repo)")
+	repoRoot := flag.String("repo", "", "absolute path to repo root")
+	minSize := flag.Int("min-size", 4, "skip clusters smaller than this")
+	topN := flag.Int("top", 0, "limit report to top N clusters by size (0 = all)")
+	showPaths := flag.Bool("show-paths", false, "print 20 sample SCIP paths and first-cluster member paths, then exit (path alignment diagnostic)")
+	quorum := flag.Float64("quorum", 0.6,
 		"fraction of consensus refs a corpus function must match to count as a SCIP query hit")
 	flag.Parse()
 

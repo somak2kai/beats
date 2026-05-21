@@ -25,7 +25,7 @@ const (
 	TK_CONTINUE
 	TK_BREAK
 	TK_GOTO
-	TK_CALL        // plain local call: drawBlock(...), delete(...), make(...)
+	TK_CALL // plain local call: drawBlock(...), delete(...), make(...)
 	TK_FUNCLIT
 	TK_ASSIGN
 	TK_CALL_PKG    // package-qualified call: fmt.Sprintf(...), xorm.In(...)

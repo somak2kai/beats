@@ -102,9 +102,9 @@ type ClusterProfile struct {
 
 	// Percentile distributions — used for conformity scoring (Apps 2, 3, 9).
 	// All values are linear-interpolated over the sorted member distribution.
-	CycloP50, CycloP75, CycloP95             float64
-	NestingP50, NestingP75, NestingP95       float64
-	CallsP50, CallsP75, CallsP95             float64
+	CycloP50, CycloP75, CycloP95                      float64
+	NestingP50, NestingP75, NestingP95                float64
+	CallsP50, CallsP75, CallsP95                      float64
 	EarlyReturnsP50, EarlyReturnsP75, EarlyReturnsP95 float64
 	DeferCountP50, DeferCountP75, DeferCountP95       float64
 
@@ -143,7 +143,7 @@ type Index struct {
 // function fits multiple clusters (boundary candidate). Low Entropy means it
 // clearly belongs to one cluster.
 type MemberScore struct {
-	FunctionID string             // stable 16-hex identity: sha256(pkg.name@path:line)
+	FunctionID string // stable 16-hex identity: sha256(pkg.name@path:line)
 	Package    string
 	Name       string
 	FilePath   string

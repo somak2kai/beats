@@ -286,15 +286,15 @@ func shortPath(p string) string {
 
 func renderHTML(w *os.File, report RepoReport) error {
 	funcMap := template.FuncMap{
-		"badgeClass":     coherenceBadgeClass,
-		"pct":            pct,
-		"f2":             f2,
-		"f1":             f1,
-		"joinComma":      joinComma,
-		"labelOrHash":    labelOrHash,
-		"shortPath":      shortPath,
-		"quadrantCode":   quadrantCode,
-		"quadrantLabel":  quadrantLabel,
+		"badgeClass":    coherenceBadgeClass,
+		"pct":           pct,
+		"f2":            f2,
+		"f1":            f1,
+		"joinComma":     joinComma,
+		"labelOrHash":   labelOrHash,
+		"shortPath":     shortPath,
+		"quadrantCode":  quadrantCode,
+		"quadrantLabel": quadrantLabel,
 	}
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
