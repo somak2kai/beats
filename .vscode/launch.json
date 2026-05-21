@@ -1,0 +1,48 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "beats init (mattermost)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd",
+      "args": [
+        "init",
+        "--repo",
+        "/Users/admin/ws/golang/mattermost/server"
+      ],
+      "env": {},
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "beats init (mattermost) --dry-run",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd",
+      "args": [
+        "init",
+        "--repo",
+        "/Users/admin/ws/golang/mattermost/server",
+        "--dry-run"
+      ],
+      "env": {},
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "beats analyze (mattermost)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd",
+      "args": [
+        "analyze",
+        "--repo",
+        "/Users/admin/ws/golang/mattermost/server"
+      ],
+      "env": {},
+      "cwd": "${workspaceFolder}"
+    },
+  ]
+}
