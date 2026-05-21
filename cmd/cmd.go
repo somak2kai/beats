@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log/slog"
-	log "log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -86,10 +85,10 @@ type State struct {
 func (d *DbCleaner) Execute() error {
 	dbPath := filepath.Join(os.TempDir(), "badger", d.State.RepositoryPath)
 	if err := os.RemoveAll(dbPath); err != nil {
-		log.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
+		slog.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
 		return err
 	}
-	log.Info("cleared existing db", slog.String("path", dbPath))
+	slog.Info("cleared existing db", slog.String("path", dbPath))
 	return nil
 }
 
@@ -98,7 +97,7 @@ func (d *DbCleaner) SkipInDryRun() bool { return true }
 func (f *FileMetadata) Execute() error {
 	files, err := util.GetFileMetadata(f.State.RepositoryPath)
 	if err != nil {
-		log.Error("failed to get file metadata", slog.Any("error", err))
+		slog.Error("failed to get file metadata", slog.Any("error", err))
 		return err
 	}
 	f.State.PkgToFileMetadata = files
@@ -127,7 +126,7 @@ func (f *FunctionMetadata) Execute() error {
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Error("unable to capture file metadata record", slog.Any("error", err))
+		slog.Error("unable to capture file metadata record", slog.Any("error", err))
 		return err
 	}
 	return nil
@@ -148,15 +147,15 @@ func (w *FunctionMetadataWriter) Execute() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
 	for _, fn := range w.State.FunctionMetadata {
 		if err := enc.Encode(fn); err != nil {
-			log.Error("unable to write function metadata", slog.String("function_metadata_path", tmp))
+			slog.Error("unable to write function metadata", slog.String("function_metadata_path", tmp))
 			return err
 		}
 	}
-	log.Info("function metadata written", slog.String("function_metadata_path", tmp))
+	slog.Info("function metadata written", slog.String("function_metadata_path", tmp))
 	return nil
 }
 func (w *FunctionMetadataWriter) SkipInDryRun() bool {
@@ -173,12 +172,12 @@ func (w *IndexMetadataWriter) Execute() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	if err := json.NewEncoder(f).Encode(w.State.Index); err != nil {
-		log.Error("unable to write index metadata", slog.String("index_metadata_path", tmp))
+		slog.Error("unable to write index metadata", slog.String("index_metadata_path", tmp))
 		return err
 	}
-	log.Info("index metadata written", slog.String("index_metadata_path", tmp))
+	slog.Info("index metadata written", slog.String("index_metadata_path", tmp))
 	return nil
 }
 func (w *IndexMetadataWriter) SkipInDryRun() bool {
@@ -189,24 +188,24 @@ func (w *IndexPersistor) Execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "badger", w.State.RepositoryPath)
 	bDb := db.NewDb(tmp)
-	defer bDb.Close()
+	defer bDb.Close() //nolint:errcheck
 	for k, v := range w.State.Index.Postings {
 		if err := bDb.StorePostings(k, v); err != nil {
-			log.Error("unable to save inverted index", slog.Any("error", err))
+			slog.Error("unable to save inverted index", slog.Any("error", err))
 			return err
 		}
 	}
 
 	for k, v := range w.State.Index.DocFreq {
 		if err := bDb.StoreDocFreq(k, v); err != nil {
-			log.Error("unable to save document frequency", slog.Any("error", err))
+			slog.Error("unable to save document frequency", slog.Any("error", err))
 			return err
 		}
 	}
 
 	for k, v := range w.State.Index.FuncMeta {
 		if err := bDb.StoreFunctionMeta(k, v); err != nil {
-			log.Error("unable to save function metadata", slog.Any("error", err))
+			slog.Error("unable to save function metadata", slog.Any("error", err))
 			return err
 		}
 	}
@@ -220,7 +219,7 @@ func (b *BeatsLabelWriter) Execute() error {
 
 	beatsDir := filepath.Join(b.State.RepositoryPath, ".beats")
 	if err := os.MkdirAll(beatsDir, 0755); err != nil {
-		log.Error("unable to create .beats directory", slog.Any("error", err))
+		slog.Error("unable to create .beats directory", slog.Any("error", err))
 		return err
 	}
 
@@ -228,10 +227,10 @@ func (b *BeatsLabelWriter) Execute() error {
 	labelFile := filepath.Join(beatsDir, "beats_label_"+base+".md")
 
 	if err := b.createClusterLabels(b.State.LabelableCluster, labelFile, base); err != nil {
-		log.Error("unable to create cluster labels ", slog.Any("error", err))
+		slog.Error("unable to create cluster labels ", slog.Any("error", err))
 		return err
 	}
-	log.Info("beats label wrote", slog.String("path", labelFile))
+	slog.Info("beats label wrote", slog.String("path", labelFile))
 	return nil
 }
 
@@ -240,13 +239,13 @@ func (b *BeatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo stri
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	return ast.WriteClusters(f, repo, cls)
 }
 
 func (m *MemberScorer) Execute() error {
 	m.State.MemberScores = ast.ComputeMemberScores(m.State.CollapsedCluster)
-	log.Info("member scores computed", slog.Int("count", len(m.State.MemberScores)))
+	slog.Info("member scores computed", slog.Int("count", len(m.State.MemberScores)))
 	return nil
 }
 
@@ -259,15 +258,15 @@ func (m *MemberScoreWriter) Execute() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
 	for _, ms := range m.State.MemberScores {
 		if err := enc.Encode(ms); err != nil {
-			log.Error("unable to write member score", slog.String("path", tmp))
+			slog.Error("unable to write member score", slog.String("path", tmp))
 			return err
 		}
 	}
-	log.Info("member scores written", slog.String("path", tmp))
+	slog.Info("member scores written", slog.String("path", tmp))
 	return nil
 }
 
@@ -276,17 +275,17 @@ func (m *MemberScoreWriter) SkipInDryRun() bool { return true }
 func (m *MemberScorePersistor) Execute() error {
 	tmp := filepath.Join(os.TempDir(), "badger", m.State.RepositoryPath)
 	bDb := db.NewDb(tmp)
-	defer bDb.Close()
+	defer bDb.Close() //nolint:errcheck
 	for _, ms := range m.State.MemberScores {
 		if err := bDb.StoreMemberScore(ms.FunctionID, ms); err != nil {
-			log.Error("unable to save member score",
+			slog.Error("unable to save member score",
 				slog.String("function_id", ms.FunctionID),
 				slog.Any("error", err),
 			)
 			return err
 		}
 	}
-	log.Info("member scores persisted", slog.Int("count", len(m.State.MemberScores)))
+	slog.Info("member scores persisted", slog.Int("count", len(m.State.MemberScores)))
 	return nil
 }
 
@@ -294,25 +293,25 @@ func (m *MemberScorePersistor) SkipInDryRun() bool { return true }
 
 func (c *IdentifyCluster) Execute() error {
 	c.State.IdentifiedCluster = ast.IdentifyClusters(c.State.FunctionMetadata)
-	log.Info("identified clusters", slog.Int("count", len(c.State.IdentifiedCluster)))
+	slog.Info("identified clusters", slog.Int("count", len(c.State.IdentifiedCluster)))
 	return nil
 }
 
 func (c *IdentifyClusterPersistor) Execute() error {
 	tmp := filepath.Join(os.TempDir(), "badger", c.State.RepositoryPath)
 	bDb := db.NewDb(tmp)
-	defer bDb.Close()
+	defer bDb.Close() //nolint:errcheck
 
 	for _, cl := range c.State.IdentifiedCluster {
 		if err := bDb.StoreCluster(db.TierIdentified, cl.ShapeHash, cl); err != nil {
-			log.Error("unable to save identified cluster",
+			slog.Error("unable to save identified cluster",
 				slog.String("shape_hash", cl.ShapeHash),
 				slog.Any("error", err),
 			)
 			return err
 		}
 	}
-	log.Info("identified clusters persisted", slog.Int("count", len(c.State.IdentifiedCluster)))
+	slog.Info("identified clusters persisted", slog.Int("count", len(c.State.IdentifiedCluster)))
 	return nil
 }
 
@@ -327,15 +326,15 @@ func (w *IdentifyClusterWriter) Execute() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
 	for _, cl := range w.State.IdentifiedCluster {
 		if err := enc.Encode(cl); err != nil {
-			log.Error("unable to write identified cluster", slog.String("path", tmp))
+			slog.Error("unable to write identified cluster", slog.String("path", tmp))
 			return err
 		}
 	}
-	log.Info("identified clusters written", slog.String("path", tmp))
+	slog.Info("identified clusters written", slog.String("path", tmp))
 	return nil
 }
 
@@ -354,12 +353,12 @@ func (b *Beats) run(repo string) error {
 	for _, cmd := range getCommands(s) {
 		if b.IsDryRun {
 			if c, ok := cmd.(Skippable); ok && c.SkipInDryRun() {
-				log.Info("skipping (dry-run)")
+				slog.Info("skipping (dry-run)")
 				continue
 			}
 		}
 		if err := cmd.Execute(); err != nil {
-			log.Error("stage halted...", slog.Any("error", err))
+			slog.Error("stage halted...", slog.Any("error", err))
 			return err
 		}
 	}
@@ -386,6 +385,7 @@ func getCommands(s *State) []Command {
 	}
 }
 
+//nolint:unused
 func (b *Beats) query() error {
 
 	// TODO not yet...

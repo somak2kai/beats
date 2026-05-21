@@ -175,8 +175,7 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		clusterMembers[i] = []int{i}
 	}
 
-	var findRoot func(int) int
-	findRoot = func(x int) int {
+	findRoot := func(x int) int {
 		for parent[x] != x {
 			parent[x] = parent[parent[x]] // path compression
 			x = parent[x]
@@ -649,22 +648,23 @@ func WriteIndex(w io.Writer, repo string, clusters []ds.Cluster) error {
 		}
 	}
 
-	fmt.Fprintf(w, "# beats index — %s\n\n", repo)
-	fmt.Fprintf(w, "%d patterns\n\n", labelled)
-	fmt.Fprintf(w, "---\n\n")
+	fmt.Fprintf(w, "# beats index — %s\n\n", repo) //nolint:errcheck
+	fmt.Fprintf(w, "%d patterns\n\n", labelled)    //nolint:errcheck
+	fmt.Fprintf(w, "---\n\n")                      //nolint:errcheck
 
 	for _, c := range clusters {
 		if c.Label == "" {
 			continue
 		}
-		fmt.Fprintf(w, "## %s\n", c.Label)
+		fmt.Fprintf(w, "## %s\n", c.Label) //nolint:errcheck
+		//nolint:errcheck
 		fmt.Fprintf(w, "id:%s  size:%d  coherence:%.2f  shape:%s\n\n",
 			c.ShapeHash, c.Size, c.Coherence, seqString(c.TokenSeq))
 
 		for _, m := range c.Members {
-			fmt.Fprintf(w, "- %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line)
+			fmt.Fprintf(w, "- %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line) //nolint:errcheck
 		}
-		fmt.Fprintf(w, "\n")
+		fmt.Fprintf(w, "\n") //nolint:errcheck
 	}
 	return nil
 }
@@ -776,19 +776,19 @@ func seqString(seq []int) string {
 // labellable clusters (non-primitive, size >= 4, seq length >= 3).
 // Pass repo name and total corpus size for the header.
 func WriteClusters(w io.Writer, repo string, clusters []ds.Cluster) error {
-	fmt.Fprintf(w, "repo: %s\n", repo)
-	fmt.Fprintf(w, "labellable_clusters: %d\n", len(clusters))
-	fmt.Fprintf(w, "\n")
+	fmt.Fprintf(w, "repo: %s\n", repo)                         //nolint:errcheck
+	fmt.Fprintf(w, "labellable_clusters: %d\n", len(clusters)) //nolint:errcheck
+	fmt.Fprintf(w, "\n")                                       //nolint:errcheck
 
 	for i, cl := range clusters {
-		fmt.Fprintf(w, "---\n")
-		fmt.Fprintf(w, "cluster: %d\n", i+1)
-		fmt.Fprintf(w, "id: %s\n", cl.ShapeHash)
-		fmt.Fprintf(w, "size: %d\n", cl.Size)
-		fmt.Fprintf(w, "coherence: %.2f\n", cl.Coherence)
-		fmt.Fprintf(w, "shape: %s\n", seqString(cl.TokenSeq))
+		fmt.Fprintf(w, "---\n")                               //nolint:errcheck
+		fmt.Fprintf(w, "cluster: %d\n", i+1)                  //nolint:errcheck
+		fmt.Fprintf(w, "id: %s\n", cl.ShapeHash)              //nolint:errcheck
+		fmt.Fprintf(w, "size: %d\n", cl.Size)                 //nolint:errcheck
+		fmt.Fprintf(w, "coherence: %.2f\n", cl.Coherence)     //nolint:errcheck
+		fmt.Fprintf(w, "shape: %s\n", seqString(cl.TokenSeq)) //nolint:errcheck
 		for _, v := range cl.ShapeVariants {
-			fmt.Fprintf(w, "shape_variant: %s\n", seqString(v))
+			fmt.Fprintf(w, "shape_variant: %s\n", seqString(v)) //nolint:errcheck
 		}
 
 		p := cl.Profile
@@ -808,42 +808,47 @@ func WriteClusters(w io.Writer, repo string, clusters []ds.Cluster) error {
 			rates = append(rates, fmt.Sprintf("go=%.0f%%", p.GoroutineRate*100))
 		}
 		if len(rates) > 0 {
-			fmt.Fprintf(w, "rates: %s\n", strings.Join(rates, " "))
+			fmt.Fprintf(w, "rates: %s\n", strings.Join(rates, " ")) //nolint:errcheck
 		}
 
+		//nolint:errcheck
 		fmt.Fprintf(w, "cyclo: %d-%d (mean %.1f p75 %.0f p95 %.0f)\n",
 			p.CycloMin, p.CycloMax, p.CycloMean, p.CycloP75, p.CycloP95)
+		//nolint:errcheck
 		fmt.Fprintf(w, "nesting: p50 %.0f p75 %.0f p95 %.0f\n",
 			p.NestingP50, p.NestingP75, p.NestingP95)
+		//nolint:errcheck
 		fmt.Fprintf(w, "calls: p50 %.0f p75 %.0f p95 %.0f\n",
 			p.CallsP50, p.CallsP75, p.CallsP95)
 		if p.EarlyReturnsP50 > 0 || p.EarlyReturnsP75 > 0 {
+			//nolint:errcheck
 			fmt.Fprintf(w, "early_returns: p50 %.0f p75 %.0f p95 %.0f\n",
 				p.EarlyReturnsP50, p.EarlyReturnsP75, p.EarlyReturnsP95)
 		}
 		if p.DeferCountP50 > 0 || p.DeferCountP75 > 0 {
+			//nolint:errcheck
 			fmt.Fprintf(w, "defer_count: p50 %.0f p75 %.0f p95 %.0f\n",
 				p.DeferCountP50, p.DeferCountP75, p.DeferCountP95)
 		}
 
 		if len(p.TopImports) > 0 {
-			fmt.Fprintf(w, "imports: %s\n", strings.Join(p.TopImports, ", "))
+			fmt.Fprintf(w, "imports: %s\n", strings.Join(p.TopImports, ", ")) //nolint:errcheck
 		}
 		if len(p.TopCallTargets) > 0 {
-			fmt.Fprintf(w, "top_calls: %s\n", strings.Join(p.TopCallTargets, ", "))
+			fmt.Fprintf(w, "top_calls: %s\n", strings.Join(p.TopCallTargets, ", ")) //nolint:errcheck
 		}
 
 		// representatives — package.Name  file:line
 		if len(cl.Members) > 0 {
-			fmt.Fprintf(w, "representatives:\n")
+			fmt.Fprintf(w, "representatives:\n") //nolint:errcheck
 			reps := Representatives(cl, 3)
 			for _, m := range reps {
-				fmt.Fprintf(w, "  %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line)
+				fmt.Fprintf(w, "  %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line) //nolint:errcheck
 			}
 		}
 
-		fmt.Fprintf(w, "label: {}\n")
-		fmt.Fprintf(w, "\n")
+		fmt.Fprintf(w, "label: {}\n") //nolint:errcheck
+		fmt.Fprintf(w, "\n")          //nolint:errcheck
 	}
 
 	return nil

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	log "log/slog"
 	"os"
 )
 
@@ -42,10 +41,10 @@ func runInit(args []string) {
 
 	b := &Beats{IsDryRun: *isDryRun}
 	if err := b.run(*prj); err != nil {
-		log.Error("unable to create beats index", slog.String("repo", *prj), slog.Any("error", err))
+		slog.Error("unable to create beats index", slog.String("repo", *prj), slog.Any("error", err))
 		os.Exit(1)
 	}
-	log.Info("successfully created beats index and cluster", slog.String("repo", *prj))
+	slog.Info("successfully created beats index and cluster", slog.String("repo", *prj))
 }
 
 func runAnalyze(args []string) {
@@ -59,7 +58,7 @@ func runAnalyze(args []string) {
 	}
 
 	if err := RunAnalyze(*prj); err != nil {
-		log.Error("unable to run beats analyze", slog.String("repo", *prj), slog.Any("error", err))
+		slog.Error("unable to run beats analyze", slog.String("repo", *prj), slog.Any("error", err))
 		os.Exit(1)
 	}
 }

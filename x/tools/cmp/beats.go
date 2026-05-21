@@ -18,7 +18,7 @@ func loadClusters(path string) ([]ds.Cluster, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening cluster file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var clusters []ds.Cluster
 	sc := bufio.NewScanner(f)
@@ -54,7 +54,7 @@ func badgerPathForRepo(repoPath string) string {
 func loadClustersFromBadger(repoPath string) ([]ds.Cluster, error) {
 	dbPath := badgerPathForRepo(repoPath)
 	bdb := db.NewDb(dbPath)
-	defer bdb.Close()
+	defer bdb.Close() //nolint:errcheck
 	clusters, err := bdb.ScanClusters(db.TierIdentified)
 	if err != nil {
 		return nil, fmt.Errorf("scanning %s tier from %s: %w", db.TierIdentified, dbPath, err)

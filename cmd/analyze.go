@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
-	log "log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -57,7 +56,7 @@ type RepoReport struct {
 func RunAnalyze(repo string) error {
 	dbPath := filepath.Join(os.TempDir(), "badger", repo)
 	bDb := db.NewDb(dbPath)
-	defer bDb.Close()
+	defer bDb.Close() //nolint:errcheck
 
 	// prefer the single-pass identified tier; fall back to collapsed for indexes
 	// built before IdentifyClusterCommand was added to the pipeline.
@@ -77,12 +76,12 @@ func RunAnalyze(repo string) error {
 		return fmt.Errorf("no beats index found for %q — run 'beats init --repo %s' first", repo, repo)
 	}
 
-	log.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
+	slog.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
 	var corpusSize int
 	if err := bDb.Load("meta:corpus_size", &corpusSize); err != nil {
 		// non-fatal: index predates corpus_size storage; fall back to 0
-		log.Warn("corpus size not found in index (re-run beats init to populate)", slog.Any("error", err))
+		slog.Warn("corpus size not found in index (re-run beats init to populate)", slog.Any("error", err))
 	}
 
 	report := buildReport(repo, clusters, corpusSize)
@@ -97,13 +96,13 @@ func RunAnalyze(repo string) error {
 	if err != nil {
 		return fmt.Errorf("create report file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	if err := renderHTML(f, report); err != nil {
 		return fmt.Errorf("render html: %w", err)
 	}
 
-	log.Info("report written", slog.String("path", outPath))
+	slog.Info("report written", slog.String("path", outPath))
 	return nil
 }
 
