@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	TierRaw       = "raw"
-	TierCollapsed = "collapsed"
-	TierLabel     = "label"
+	TierRaw        = "raw"
+	TierCollapsed  = "collapsed"
+	TierLabel      = "label"
+	TierIdentified = "identified"
 )
 
 type BadgerDb struct {

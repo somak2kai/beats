@@ -11,6 +11,347 @@ import (
 	ds "github.com/somak2kai/beats/pkg/types"
 )
 
+// ── Single-pass agglomerative clustering ─────────────────────────────────────
+
+// identifyThreshold is the minimum combined similarity score for two functions
+// to be considered members of the same cluster.
+//
+// Score = 0.5×seqSim + 0.3×importJaccard + 0.2×callJaccard
+//
+// At 0.55 the gate sits between:
+//   - identical sequence + mismatched imports (~0.515) → reject
+//   - identical sequence + moderate import overlap (~0.65+) → accept
+const (
+	identifyThreshold = 0.55
+	identifyMinSize   = 2
+
+	// maxTrigranBucket caps how many functions a single trigram may appear in
+	// before it is treated as a structural stop-word and skipped during candidate
+	// pair generation. A trigram shared by 300+ functions (≈2.7% of an 11k
+	// corpus) carries no discriminating signal and generates O(300²)=45k pairs
+	// that are almost all rejected in the scoring step anyway.
+	maxTrigranBucket = 300
+)
+
+// IdentifyClusters builds clusters in a single agglomerative pass over all
+// functions. Unlike BuildClusters+CollapseToFamilies, import and call target
+// similarity are part of the grouping decision from the start — not a post-hoc
+// merge step — which prevents contaminated clusters from ever forming.
+//
+// Algorithm:
+//  1. Build a trigram map from each function's TokenSeqHash (Rabin-Karp sliding
+//     window hashes). Functions sharing a trigram are structural candidates.
+//  2. For each candidate pair, compute the combined score. Fast-reject pairs
+//     with seqSim < 0.40 before touching import/call sets.
+//  3. Complete-linkage agglomerative clustering at identifyThreshold: two groups
+//     merge only when every cross-group pair exceeds the threshold, preventing
+//     chaining artefacts.
+//  4. Drop clusters below identifyMinSize and structural stop-words (≥ 5% of
+//     corpus).
+//
+// Existing BuildClusters and CollapseToFamilies are preserved unchanged.
+func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
+	n := len(fns)
+	if n == 0 {
+		return nil
+	}
+	primitiveThreshold := float64(n) * 0.05
+
+	// ── Step 1: trigram map ───────────────────────────────────────────────────
+	// trigramMap[hash] = []index into fns
+	// Functions with token sequences shorter than minTokenSeqLen are excluded:
+	// they produce only a single degenerate hash that conflates every trivially
+	// similar function (e.g. all one-liner init() registrations) into the same
+	// bucket, yielding large high-coherence clusters with no structural signal.
+	// This mirrors the len(TokenSeq) < 4 guard in BuildClusters.
+	const minTokenSeqLen = 4
+	trigramMap := make(map[int64][]int, n)
+	for i, fn := range fns {
+		if len(fn.TokenSeq) < minTokenSeqLen {
+			continue
+		}
+		for _, h := range fn.TokenSeqHash {
+			trigramMap[h] = append(trigramMap[h], i)
+		}
+	}
+
+	// ── Step 2: candidate pairs ───────────────────────────────────────────────
+	// Count how many trigrams each (i,j) pair shares. Pairs with fewer shared
+	// trigrams than the adaptive minimum are discarded before scoring.
+	// Buckets larger than maxTrigranBucket are skipped — that trigram is a
+	// structural stop-word and processing it would generate O(n²) noise pairs.
+	type pairKey struct{ i, j int } // invariant: i < j
+	sharedCount := make(map[pairKey]int)
+	for _, bucket := range trigramMap {
+		if len(bucket) > maxTrigranBucket {
+			continue // stop-word trigram — too common to discriminate
+		}
+		for a := 0; a < len(bucket); a++ {
+			for b := a + 1; b < len(bucket); b++ {
+				i, j := bucket[a], bucket[b]
+				if i > j {
+					i, j = j, i
+				}
+				sharedCount[pairKey{i, j}]++
+			}
+		}
+	}
+
+	// ── Step 3: score candidate pairs ────────────────────────────────────────
+	// Pre-compute per-function data used repeatedly across many pair scorings.
+	// Without this, toStringSet allocates two new maps per pair, and seqSimilarity
+	// runs a full edit-distance on identical sequences that would return 1.0.
+	keys := make([]string, n) // seqKey per function — lets us skip edit distance for identical seqs
+	importSets := make([]map[string]bool, n)
+	callSets := make([]map[string]bool, n)
+	for i, fn := range fns {
+		keys[i] = seqKey(fn.TokenSeq)
+		importSets[i] = toStringSet(fn.DirectImports)
+		callSets[i] = toStringSet(fn.CallTargets)
+	}
+
+	type scoredPair struct {
+		i, j  int
+		score float64
+	}
+	var candidates []scoredPair
+	pairScores := make(map[pairKey]float64, len(sharedCount))
+
+	for pk, cnt := range sharedCount {
+		// adaptive minimum: require ≥2 shared trigrams when both functions have
+		// enough trigrams to be discriminating; 1 is sufficient for short seqs.
+		minShared := 1
+		if len(fns[pk.i].TokenSeqHash) >= 2 && len(fns[pk.j].TokenSeqHash) >= 2 {
+			minShared = 2
+		}
+		if cnt < minShared {
+			continue
+		}
+
+		// identical sequence → seqSim = 1.0, no edit distance needed
+		var seqS float64
+		if keys[pk.i] == keys[pk.j] {
+			seqS = 1.0
+		} else {
+			seqS = seqSimilarity(fns[pk.i].TokenSeq, fns[pk.j].TokenSeq)
+			if seqS < 0.40 {
+				continue // fast reject — structurally too different
+			}
+			// upper bound: even perfect import+call Jaccard gives 0.5×seqS + 0.5.
+			// if that ceiling is below threshold, skip the Jaccard work entirely.
+			if 0.5*seqS+0.5 < identifyThreshold {
+				continue
+			}
+		}
+
+		impS := jaccard(importSets[pk.i], importSets[pk.j])
+		callS := jaccard(callSets[pk.i], callSets[pk.j])
+		score := 0.5*seqS + 0.3*impS + 0.2*callS
+
+		// only pairs above threshold enter the sort and the complete-linkage
+		// lookup. Missing entries in pairScores are treated as 0 by the merge
+		// check, which is correct — if a pair was never a candidate it cannot
+		// bridge two clusters.
+		if score < identifyThreshold {
+			continue
+		}
+
+		candidates = append(candidates, scoredPair{pk.i, pk.j, score})
+		pairScores[pk] = score
+	}
+
+	// sort descending so we process highest-confidence merges first
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+
+	// ── Step 4: complete-linkage agglomerative clustering ────────────────────
+	parent := make([]int, n)
+	for i := range parent {
+		parent[i] = i
+	}
+	clusterMembers := make(map[int][]int, n)
+	for i := range fns {
+		clusterMembers[i] = []int{i}
+	}
+
+	var findRoot func(int) int
+	findRoot = func(x int) int {
+		for parent[x] != x {
+			parent[x] = parent[parent[x]] // path compression
+			x = parent[x]
+		}
+		return x
+	}
+
+	for _, cp := range candidates {
+		if cp.score < identifyThreshold {
+			break // sorted descending — everything below is under threshold
+		}
+
+		ri := findRoot(cp.i)
+		rj := findRoot(cp.j)
+		if ri == rj {
+			continue // already in the same cluster
+		}
+
+		membA := clusterMembers[ri]
+		membB := clusterMembers[rj]
+
+		// complete-linkage gate: every cross-cluster pair must exceed threshold.
+		// Missing pairs (never in candidates) are treated as score 0 — reject.
+		canMerge := true
+	outer:
+		for _, a := range membA {
+			for _, b := range membB {
+				i, j := a, b
+				if i > j {
+					i, j = j, i
+				}
+				s, ok := pairScores[pairKey{i, j}]
+				if !ok || s < identifyThreshold {
+					canMerge = false
+					break outer
+				}
+			}
+		}
+		if !canMerge {
+			continue
+		}
+
+		// merge smaller group into larger to keep clusterMembers lookups cheap
+		if len(membA) < len(membB) {
+			ri, rj = rj, ri
+		}
+		parent[rj] = ri
+		clusterMembers[ri] = append(clusterMembers[ri], clusterMembers[rj]...)
+		delete(clusterMembers, rj)
+	}
+
+	// ── Step 5: build cluster objects, drop singletons and stop-words ─────────
+	var clusters []ds.Cluster
+	for _, idxs := range clusterMembers {
+		if len(idxs) < identifyMinSize {
+			continue
+		}
+		if float64(len(idxs)) >= primitiveThreshold {
+			continue // structural stop-word — too common to carry signal
+		}
+
+		metas := make([]ds.FunctionMeta, len(idxs))
+		for k, idx := range idxs {
+			metas[k] = fns[idx]
+		}
+		if isTestingCluster(metas) {
+			continue
+		}
+		if isInitCluster(metas) {
+			continue
+		}
+
+		// representative token sequence: most frequent among members.
+		// Members may have slightly different sequences (merged via near-identity)
+		// so we pick the modal sequence rather than assuming they all match.
+		seqFreq := make(map[string]int)
+		seqForKey := make(map[string][]int)
+		for _, m := range metas {
+			k := seqKey(m.TokenSeq)
+			seqFreq[k]++
+			seqForKey[k] = m.TokenSeq
+		}
+		bestKey := ""
+		for k, cnt := range seqFreq {
+			if bestKey == "" || cnt > seqFreq[bestKey] {
+				bestKey = k
+			}
+		}
+
+		c := ds.Cluster{
+			SeqKey:    bestKey,
+			ShapeHash: shapeHash(bestKey),
+			TokenSeq:  seqForKey[bestKey],
+			Members:   metas,
+			Size:      len(metas),
+		}
+		c.Profile = computeProfile(metas)
+		c.Coherence = computeCoherence(metas)
+		c.CallCoherence = computeCallCoherence(metas)
+		clusters = append(clusters, c)
+	}
+
+	// disambiguate ShapeHash collisions: two groups with the same modal sequence
+	// get a numeric suffix so DB keys remain unique.
+	hashCount := make(map[string]int)
+	for i := range clusters {
+		h := clusters[i].ShapeHash
+		if hashCount[h] > 0 {
+			clusters[i].ShapeHash = fmt.Sprintf("%s-%d", h, hashCount[h])
+		}
+		hashCount[h]++
+	}
+
+	sort.Slice(clusters, func(i, j int) bool {
+		return clusters[i].Size > clusters[j].Size
+	})
+	return clusters
+}
+
+// toStringSet converts a string slice to a set map for Jaccard computation.
+func toStringSet(items []string) map[string]bool {
+	s := make(map[string]bool, len(items))
+	for _, item := range items {
+		s[item] = true
+	}
+	return s
+}
+
+// testingImports is the set of import paths that mark a function as belonging
+// to test infrastructure. A cluster whose members are majority test-imports is
+// noise in structural analysis and should be dropped.
+var testingImports = map[string]bool{
+	"testing":                                true,
+	"github.com/stretchr/testify/require":    true,
+	"github.com/stretchr/testify/assert":     true,
+	"github.com/stretchr/testify/suite":      true,
+	"github.com/stretchr/testify/mock":       true,
+}
+
+// isTestingCluster returns true when a majority of members import one or more
+// test infrastructure packages. "Majority" is defined as > 50% of members —
+// a loose threshold so that test-helper packages (e.g. storetest, searchtest)
+// that mix a few non-test imports still get caught.
+func isTestingCluster(members []ds.FunctionMeta) bool {
+	if len(members) == 0 {
+		return false
+	}
+	count := 0
+	for _, m := range members {
+		for _, imp := range m.DirectImports {
+			if testingImports[imp] {
+				count++
+				break // count this member once even if it has multiple test imports
+			}
+		}
+	}
+	return count > len(members)/2
+}
+
+// isInitCluster returns true when every member is a Go init() function.
+// init() is runtime-invoked and exists solely for side-effect registration
+// (model registration, provider registration, flag init, etc.). Structural
+// similarity across init() functions is a language artifact — all init()
+// bodies do registration — not an architectural signal worth surfacing.
+// Note: short init() bodies (< 4 tokens) are already dropped by the
+// minTokenSeqLen guard; this catches longer ones that share the same pattern.
+func isInitCluster(members []ds.FunctionMeta) bool {
+	for _, m := range members {
+		if m.Name != "init" {
+			return false
+		}
+	}
+	return len(members) > 0
+}
+
 // BuildClusters groups fns by identical token sequence, then computes
 // per-cluster profile and coherence. Returns clusters sorted by size desc.
 //

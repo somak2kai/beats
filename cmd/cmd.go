@@ -42,6 +42,11 @@ var (
 	_ Skippable = (*MemberScoreWriter)(nil)
 	_ Command   = (*MemberScorePersistor)(nil)
 	_ Skippable = (*MemberScorePersistor)(nil)
+	_ Command   = (*IdentifyCluster)(nil)
+	_ Command   = (*IdentifyClusterPersistor)(nil)
+	_ Skippable = (*IdentifyClusterPersistor)(nil)
+	_ Command   = (*IdentifyClusterWriter)(nil)
+	_ Skippable = (*IdentifyClusterWriter)(nil)
 )
 
 type Command interface{ Execute() error }
@@ -62,6 +67,9 @@ type ClusterPersistor struct{ State *State }
 type MemberScorer struct{ State *State }
 type MemberScoreWriter struct{ State *State }
 type MemberScorePersistor struct{ State *State }
+type IdentifyCluster struct{ State *State }
+type IdentifyClusterPersistor struct{ State *State }
+type IdentifyClusterWriter struct{ State *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -72,6 +80,7 @@ type State struct {
 	OriginalCluster   []ds.Cluster
 	CollapsedCluster  []ds.Cluster
 	LabelableCluster  []ds.Cluster
+	IdentifiedCluster []ds.Cluster
 	MemberScores      []ds.MemberScore
 	RepositoryPath    string
 	Index             ds.Index
@@ -379,6 +388,55 @@ func (m *MemberScorePersistor) Execute() error {
 
 func (m *MemberScorePersistor) SkipInDryRun() bool { return true }
 
+func (c *IdentifyCluster) Execute() error {
+	c.State.IdentifiedCluster = ast.IdentifyClusters(c.State.FunctionMetadata)
+	log.Info("identified clusters", slog.Int("count", len(c.State.IdentifiedCluster)))
+	return nil
+}
+
+func (c *IdentifyClusterPersistor) Execute() error {
+	tmp := filepath.Join(os.TempDir(), "badger", c.State.RepositoryPath)
+	bDb := db.NewDb(tmp)
+	defer bDb.Close()
+
+	for _, cl := range c.State.IdentifiedCluster {
+		if err := bDb.StoreCluster(db.TierIdentified, cl.ShapeHash, cl); err != nil {
+			log.Error("unable to save identified cluster",
+				slog.String("shape_hash", cl.ShapeHash),
+				slog.Any("error", err),
+			)
+			return err
+		}
+	}
+	log.Info("identified clusters persisted", slog.Int("count", len(c.State.IdentifiedCluster)))
+	return nil
+}
+
+func (c *IdentifyClusterPersistor) SkipInDryRun() bool { return true }
+
+func (w *IdentifyClusterWriter) Execute() error {
+	tmp := filepath.Join(os.TempDir(), "identifiedCluster", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "cluster.json")
+	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
+		return err
+	}
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, cl := range w.State.IdentifiedCluster {
+		if err := enc.Encode(cl); err != nil {
+			log.Error("unable to write identified cluster", slog.String("path", tmp))
+			return err
+		}
+	}
+	log.Info("identified clusters written", slog.String("path", tmp))
+	return nil
+}
+
+func (w *IdentifyClusterWriter) SkipInDryRun() bool { return true }
+
 func (b *Beats) run(repo string) error {
 
 	s := &State{
@@ -410,14 +468,18 @@ func getCommands(s *State) []Command {
 		&FileMetadata{State: s},
 		&FunctionMetadata{State: s},
 		&FunctionMetadataWriter{State: s},
+		&IdentifyCluster{State: s},
+		&IdentifyClusterPersistor{State: s},
+		&IdentifyClusterWriter{State: s},
 		&IndexCommand{State: s},
 		&IndexMetadataWriter{State: s},
 		&IndexPersistor{State: s},
-		&ClusterMetadata{State: s},
-		&CollapseClusterToFamily{State: s},
-		&ClusterWriter{State: s},
-		&LabelCluster{State: s},
-		&ClusterPersistor{State: s},
+		// TODO retest for noise reduction.(coherence shaky for common ngrams)
+		// &ClusterMetadata{State: s},
+		// &CollapseClusterToFamily{State: s},
+		// &ClusterWriter{State: s},
+		// &LabelCluster{State: s},
+		// &ClusterPersistor{State: s},
 		// TODO membership scoring is brittle at the moment.
 		// &MemberScorer{State: s},
 		// &MemberScoreWriter{State: s},
