@@ -59,15 +59,25 @@ func RunAnalyze(repo string) error {
 	bDb := db.NewDb(dbPath)
 	defer bDb.Close()
 
-	clusters, err := bDb.ScanClusters(db.TierCollapsed)
+	// prefer the single-pass identified tier; fall back to collapsed for indexes
+	// built before IdentifyClusterCommand was added to the pipeline.
+	tier := db.TierIdentified
+	clusters, err := bDb.ScanClusters(tier)
 	if err != nil {
-		return fmt.Errorf("scan clusters: %w", err)
+		return fmt.Errorf("scan clusters (%s): %w", tier, err)
+	}
+	if len(clusters) == 0 {
+		tier = db.TierCollapsed
+		clusters, err = bDb.ScanClusters(tier)
+		if err != nil {
+			return fmt.Errorf("scan clusters (%s): %w", tier, err)
+		}
 	}
 	if len(clusters) == 0 {
 		return fmt.Errorf("no beats index found for %q — run 'beats init --repo %s' first", repo, repo)
 	}
 
-	log.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", db.TierCollapsed))
+	log.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
 	var corpusSize int
 	if err := bDb.Load("meta:corpus_size", &corpusSize); err != nil {
@@ -224,6 +234,37 @@ func f1(v float64) string { return fmt.Sprintf("%.1f", v) }
 
 func joinComma(ss []string) string { return strings.Join(ss, ", ") }
 
+// quadrantCode returns the two-letter quadrant code for a cluster based on its
+// import and call coherence scores. Used as CSS class suffix and data attribute.
+func quadrantCode(imp, call float64) string {
+	hiImp := imp >= 0.60
+	hiCall := call >= 0.60
+	switch {
+	case hiImp && hiCall:
+		return "hh"
+	case hiImp && !hiCall:
+		return "hl"
+	case !hiImp && hiCall:
+		return "lh"
+	default:
+		return "ll"
+	}
+}
+
+// quadrantLabel returns the display label for a quadrant.
+func quadrantLabel(imp, call float64) string {
+	switch quadrantCode(imp, call) {
+	case "hh":
+		return "HH"
+	case "hl":
+		return "HL"
+	case "lh":
+		return "LH"
+	default:
+		return "LL"
+	}
+}
+
 func labelOrHash(cr ClusterRow) string {
 	if cr.Label != "" {
 		return cr.Label
@@ -245,13 +286,15 @@ func shortPath(p string) string {
 
 func renderHTML(w *os.File, report RepoReport) error {
 	funcMap := template.FuncMap{
-		"badgeClass":  coherenceBadgeClass,
-		"pct":         pct,
-		"f2":          f2,
-		"f1":          f1,
-		"joinComma":   joinComma,
-		"labelOrHash": labelOrHash,
-		"shortPath":   shortPath,
+		"badgeClass":     coherenceBadgeClass,
+		"pct":            pct,
+		"f2":             f2,
+		"f1":             f1,
+		"joinComma":      joinComma,
+		"labelOrHash":    labelOrHash,
+		"shortPath":      shortPath,
+		"quadrantCode":   quadrantCode,
+		"quadrantLabel":  quadrantLabel,
 	}
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
@@ -288,7 +331,7 @@ const reportTemplate = `<!DOCTYPE html>
   .container { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
 
   /* ── summary cards ── */
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; }
   .card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
   .card .val { font-size: 1.75rem; font-weight: 700; color: var(--text); line-height: 1.1; }
@@ -405,9 +448,27 @@ const reportTemplate = `<!DOCTYPE html>
   /* search state */
   tr.cl-row.search-hidden { display: none; }
   tr.cl-detail.search-hidden { display: none; }
+  tr.cl-row.quad-hidden { display: none; }
+  tr.cl-detail.quad-hidden { display: none; }
   table.members tr.member-hidden { display: none; }
   table.members tr.member-match td { background: rgba(129,140,248,.07); }
   .fn-name mark { background: rgba(129,140,248,.35); color: var(--text); border-radius: 2px; padding: 0 1px; }
+
+  /* ── quadrant pills (table column + filter bar) ── */
+  .quad-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: .05em; white-space: nowrap; }
+  .quad-hh { background: rgba(52,211,153,.15); color: var(--green);   border: 1px solid rgba(52,211,153,.30); }
+  .quad-lh { background: rgba(96,165,250,.15); color: var(--accent2); border: 1px solid rgba(96,165,250,.30); }
+  .quad-hl { background: rgba(251,191,36,.15); color: var(--yellow);  border: 1px solid rgba(251,191,36,.25); }
+  .quad-ll { background: rgba(248,113,113,.10); color: var(--red);    border: 1px solid rgba(248,113,113,.20); }
+
+  /* ── quadrant filter bar ── */
+  .quad-filter-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .quad-filter-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-right: 4px; }
+  .quad-filter-item { display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 4px 8px; border-radius: 6px; border: 1px solid transparent; transition: background .1s; user-select: none; }
+  .quad-filter-item:hover { background: var(--surface2); }
+  .quad-filter-item input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+  .quad-filter-item.inactive { opacity: 0.45; }
+  .quad-filter-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 </style>
 </head>
 <body>
@@ -437,11 +498,6 @@ const reportTemplate = `<!DOCTYPE html>
       <div class="lbl">Functions in Clusters</div>
       <div class="val">{{.FunctionsInClusters}}</div>
       <div class="sub">across all clusters</div>
-    </div>
-    <div class="card">
-      <div class="lbl">Functions in Codebase</div>
-      <div class="val">{{if .CorpusSize}}{{.CorpusSize}}{{else}}—{{end}}</div>
-      <div class="sub">{{if .CorpusSize}}{{pct .FunctionsInClusters .CorpusSize}} captured{{else}}re-run beats init{{end}}</div>
     </div>
     <div class="card">
       <div class="lbl">Mean Import Coh.</div>
@@ -482,8 +538,8 @@ const reportTemplate = `<!DOCTYPE html>
   <details class="legend">
     <summary>Metric Glossary</summary>
     <div class="legend-body">
-      <div class="lg-item"><span class="lg-term">Import Coh.</span><span class="lg-def">Mean pairwise Jaccard of DirectImports across members. High = every member touches the same package domain (e.g. all use "database/sql"). Measures <em>domain locality</em>.</span></div>
-      <div class="lg-item"><span class="lg-term">Call Coh.</span><span class="lg-def">Mean pairwise Jaccard of CallTargets across members. High = every member invokes the same external functions (e.g. all call RegisterTaskFatal). Measures <em>structural role</em>.</span></div>
+      <div class="lg-item"><span class="lg-term">Import Coherence (Coh.)</span><span class="lg-def">Mean pairwise Jaccard of DirectImports across members. High = every member touches the same package domain (e.g. all use "database/sql"). Measures <em>domain locality</em>.</span></div>
+      <div class="lg-item"><span class="lg-term">Call Coherence(Coh.)</span><span class="lg-def">Mean pairwise Jaccard of CallTargets across members. High = every member invokes the same external functions (e.g. all call RegisterTaskFatal). Measures <em>structural role</em>.</span></div>
       <div class="quadrant-wrap">
         <div class="quadrant-label">Coherence quadrant guide</div>
         <div class="quadrant-grid">
@@ -511,6 +567,34 @@ const reportTemplate = `<!DOCTYPE html>
     </div>
   </details>
 
+  <!-- quadrant filter bar -->
+  <div class="quad-filter-bar">
+    <span class="quad-filter-label">Show</span>
+    <label class="quad-filter-item" id="fi-hh">
+      <input type="checkbox" class="quad-cb" data-quad="hh" checked/>
+      <span class="quad-pill quad-hh">HH</span>
+      <span style="font-size:11px;color:var(--muted)">High Import · High Call</span>
+    </label>
+    <div class="quad-filter-divider"></div>
+    <label class="quad-filter-item" id="fi-lh">
+      <input type="checkbox" class="quad-cb" data-quad="lh" checked/>
+      <span class="quad-pill quad-lh">LH</span>
+      <span style="font-size:11px;color:var(--muted)">Low Import · High Call</span>
+    </label>
+    <div class="quad-filter-divider"></div>
+    <label class="quad-filter-item" id="fi-hl">
+      <input type="checkbox" class="quad-cb" data-quad="hl" checked/>
+      <span class="quad-pill quad-hl">HL</span>
+      <span style="font-size:11px;color:var(--muted)">High Import · Low Call</span>
+    </label>
+    <div class="quad-filter-divider"></div>
+    <label class="quad-filter-item" id="fi-ll">
+      <input type="checkbox" class="quad-cb" data-quad="ll" checked/>
+      <span class="quad-pill quad-ll">LL</span>
+      <span style="font-size:11px;color:var(--muted)">Low Import · Low Call</span>
+    </label>
+  </div>
+
   <!-- cluster table -->
   <div class="sec-bar">
     <div class="sec">Clusters — sorted by combined coherence ↓</div>
@@ -528,6 +612,7 @@ const reportTemplate = `<!DOCTYPE html>
   <table class="clusters" id="cl-table">
     <thead>
       <tr>
+        <th data-col="quadrant">Type</th>
         <th data-col="label">Label / Shape</th>
         <th data-col="size">Size</th>
         <th data-col="coherence">Import Coh.</th>
@@ -539,7 +624,8 @@ const reportTemplate = `<!DOCTYPE html>
     </thead>
     <tbody>
 {{range $i, $cl := .Clusters}}
-      <tr class="cl-row" data-idx="{{$i}}" onclick="toggleRow({{$i}})">
+      <tr class="cl-row" data-idx="{{$i}}" data-quadrant="{{quadrantCode $cl.Coherence $cl.CallCoherence}}" onclick="toggleRow({{$i}})">
+        <td style="width:52px;text-align:center"><span class="quad-pill quad-{{quadrantCode $cl.Coherence $cl.CallCoherence}}">{{quadrantLabel $cl.Coherence $cl.CallCoherence}}</span></td>
         <td>
           <span class="caret">▶</span>
           {{if $cl.Label}}<span class="cl-label">{{$cl.Label}}</span><br/><span class="cl-hash">{{$cl.ShapeHash}}</span>
@@ -557,7 +643,7 @@ const reportTemplate = `<!DOCTYPE html>
         <td class="imports-cell">{{joinComma $cl.TopImports}}</td>
       </tr>
       <tr class="cl-detail" id="detail-{{$i}}">
-        <td colspan="7">
+        <td colspan="8">
           <div class="detail-panel">
             <h4>{{$cl.Size}} member functions</h4>
             <table class="members">
@@ -600,7 +686,7 @@ function toggleRow(idx) {
 (function () {
   var state = { col: 'callcoherence', asc: false };
 
-  var colIndex = { label: 0, size: 1, coherence: 2, callcoherence: 3, cyclo95: 4, packages: 5, imports: 6 };
+  var colIndex = { quadrant: 0, label: 1, size: 2, coherence: 3, callcoherence: 4, cyclo95: 5, packages: 6, imports: 7 };
 
   document.querySelectorAll('#cl-table thead th').forEach(function (th) {
     th.addEventListener('click', function () {
@@ -780,6 +866,43 @@ function toggleRow(idx) {
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+})();
+
+// ── quadrant filter (checkboxes) ──────────────────────────────────────────
+(function () {
+  function activeQuads() {
+    var q = {};
+    document.querySelectorAll('.quad-cb').forEach(function (cb) {
+      if (cb.checked) q[cb.dataset.quad] = true;
+    });
+    return q;
+  }
+
+  function applyQuadFilter() {
+    var q = activeQuads();
+    document.querySelectorAll('tr.cl-row').forEach(function (row) {
+      var quad = row.dataset.quadrant;
+      var visible = !!q[quad];
+      row.classList.toggle('quad-hidden', !visible);
+      var det = document.getElementById('detail-' + row.dataset.idx);
+      if (det) {
+        det.classList.toggle('quad-hidden', !visible);
+        if (!visible) {
+          det.classList.remove('open');
+          row.classList.remove('open');
+        }
+      }
+    });
+    // update filter item opacity so unchecked ones look dimmed
+    document.querySelectorAll('.quad-filter-item').forEach(function (item) {
+      var cb = item.querySelector('.quad-cb');
+      item.classList.toggle('inactive', cb && !cb.checked);
+    });
+  }
+
+  document.querySelectorAll('.quad-cb').forEach(function (cb) {
+    cb.addEventListener('change', applyQuadFilter);
+  });
 })();
 </script>
 </body>
