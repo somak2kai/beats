@@ -22,7 +22,6 @@ var (
 	_ Skippable = (*DbCleaner)(nil)
 	_ Command   = (*FileMetadata)(nil)
 	_ Command   = (*FunctionMetadata)(nil)
-	_ Command   = (*ClusterMetadata)(nil)
 	_ Command   = (*IndexCommand)(nil)
 	_ Command   = (*FunctionMetadataWriter)(nil)
 	_ Skippable = (*FunctionMetadataWriter)(nil)
@@ -30,13 +29,7 @@ var (
 	_ Skippable = (*IndexMetadataWriter)(nil)
 	_ Command   = (*IndexPersistor)(nil)
 	_ Skippable = (*IndexPersistor)(nil)
-	_ Command   = (*CollapseClusterToFamily)(nil)
-	_ Command   = (*LabelCluster)(nil)
 	_ Command   = (*BeatsLabelWriter)(nil)
-	_ Command   = (*ClusterWriter)(nil)
-	_ Skippable = (*ClusterWriter)(nil)
-	_ Command   = (*ClusterPersistor)(nil)
-	_ Skippable = (*ClusterPersistor)(nil)
 	_ Command   = (*MemberScorer)(nil)
 	_ Command   = (*MemberScoreWriter)(nil)
 	_ Skippable = (*MemberScoreWriter)(nil)
@@ -145,20 +138,6 @@ func (i *IndexCommand) Execute() error {
 	return nil
 }
 
-func (c *ClusterMetadata) Execute() error {
-	c.State.OriginalCluster = ast.BuildClusters(c.State.FunctionMetadata)
-	return nil
-}
-
-func (c *CollapseClusterToFamily) Execute() error {
-	c.State.CollapsedCluster = ast.CollapseToFamilies(c.State.OriginalCluster)
-	return nil
-}
-func (l *LabelCluster) Execute() error {
-	l.State.LabelableCluster = ast.Labelable(l.State.CollapsedCluster, 0.60, 4)
-	return nil
-}
-
 func (w *FunctionMetadataWriter) Execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "funcMeta", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "func_meta.json")
@@ -205,81 +184,6 @@ func (w *IndexMetadataWriter) Execute() error {
 func (w *IndexMetadataWriter) SkipInDryRun() bool {
 	return true
 }
-
-func (c *ClusterWriter) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "cluster", uuid.NewString(), filepath.Base(c.State.RepositoryPath), "cluster.json")
-	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
-		return err
-	}
-	if err := c.dumpClusters(c.State.CollapsedCluster, tmp); err != nil {
-		log.Error("unable to write cluster ", slog.String("cluster_path", tmp))
-		return err
-	}
-	log.Info("collapsed cluster written", slog.String("path", tmp))
-	return nil
-}
-
-func (c *ClusterWriter) dumpClusters(cls []ds.Cluster, path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	for _, fn := range cls {
-		if err := enc.Encode(fn); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (w *ClusterWriter) SkipInDryRun() bool {
-	return true
-}
-
-func (c *ClusterPersistor) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "badger", c.State.RepositoryPath)
-	bDb := db.NewDb(tmp)
-	defer bDb.Close()
-
-	tiers := []struct {
-		name     string
-		clusters []ds.Cluster
-	}{
-		{db.TierRaw, c.State.OriginalCluster},
-		{db.TierCollapsed, c.State.CollapsedCluster},
-		{db.TierLabel, c.State.LabelableCluster},
-	}
-
-	for _, tier := range tiers {
-		for _, cl := range tier.clusters {
-			if err := bDb.StoreCluster(tier.name, cl.ShapeHash, cl); err != nil {
-				log.Error("unable to save cluster",
-					slog.String("tier", tier.name),
-					slog.String("shape_hash", cl.ShapeHash),
-					slog.Any("error", err),
-				)
-				return err
-			}
-		}
-		log.Info("clusters persisted",
-			slog.String("tier", tier.name),
-			slog.Int("count", len(tier.clusters)),
-		)
-	}
-
-	// persist total corpus size so analyze can show "functions in codebase" vs "functions in clusters"
-	corpusSize := len(c.State.FunctionMetadata)
-	if err := bDb.Save("meta:corpus_size", corpusSize); err != nil {
-		log.Error("unable to save corpus size", slog.Any("error", err))
-		return err
-	}
-	log.Info("corpus size persisted", slog.Int("corpus_size", corpusSize))
-	return nil
-}
-
-func (c *ClusterPersistor) SkipInDryRun() bool { return true }
 
 func (w *IndexPersistor) Execute() error {
 
@@ -474,12 +378,6 @@ func getCommands(s *State) []Command {
 		&IndexCommand{State: s},
 		&IndexMetadataWriter{State: s},
 		&IndexPersistor{State: s},
-		// TODO retest for noise reduction.(coherence shaky for common ngrams)
-		// &ClusterMetadata{State: s},
-		// &CollapseClusterToFamily{State: s},
-		// &ClusterWriter{State: s},
-		// &LabelCluster{State: s},
-		// &ClusterPersistor{State: s},
 		// TODO membership scoring is brittle at the moment.
 		// &MemberScorer{State: s},
 		// &MemberScoreWriter{State: s},
@@ -490,5 +388,6 @@ func getCommands(s *State) []Command {
 
 func (b *Beats) query() error {
 
+	// TODO not yet...
 	return nil
 }
