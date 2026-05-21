@@ -57,8 +57,6 @@ archives:
       - goos: windows
         format: zip
     files:
-      - BEATS.md
-      - goals.md
       - skills/**
 
 checksum:
