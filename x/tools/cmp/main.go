@@ -33,33 +33,53 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	ds "github.com/somak2kai/beats/pkg/types"
 )
 
 func main() {
 	scipFile    := flag.String("scip", "", "path to SCIP index file (index.scip)")
-	clusterFile := flag.String("clusters", "", "path to beats cluster JSONL file")
+	clusterFile := flag.String("clusters", "", "path to beats cluster JSONL file (use --badger instead for IdentifyCluster output)")
+	badgerPath  := flag.String("badger", "", "repo path to load TierIdentified clusters from beats BadgerDB (same value as --repo)")
 	repoRoot    := flag.String("repo", "", "absolute path to repo root")
 	minSize     := flag.Int("min-size", 4, "skip clusters smaller than this")
 	topN        := flag.Int("top", 0, "limit report to top N clusters by size (0 = all)")
+	showPaths   := flag.Bool("show-paths", false, "print 20 sample SCIP paths and first-cluster member paths, then exit (path alignment diagnostic)")
 	quorum      := flag.Float64("quorum", 0.6,
 		"fraction of consensus refs a corpus function must match to count as a SCIP query hit")
 	flag.Parse()
 
-	if *scipFile == "" || *clusterFile == "" || *repoRoot == "" {
-		fmt.Fprintln(os.Stderr, "usage: cmp --scip=index.scip --clusters=cluster.json --repo=/path/to/repo")
+	if *scipFile == "" || *repoRoot == "" || (*clusterFile == "" && *badgerPath == "") {
+		fmt.Fprintln(os.Stderr, "usage: cmp --scip=index.scip --repo=/path/to/repo (--clusters=cluster.json | --badger=/path/to/repo)")
+		fmt.Fprintln(os.Stderr, "       --badger       preferred: repo path — DB location resolved via os.TempDir() automatically")
+		fmt.Fprintln(os.Stderr, "       --clusters     legacy: load clusters from a JSONL file written by ClusterWriter")
 		fmt.Fprintln(os.Stderr, "       --quorum=0.6   consensus-ref match threshold (default 0.6)")
 		fmt.Fprintln(os.Stderr, "       --min-size=4   skip clusters smaller than N (default 4)")
 		fmt.Fprintln(os.Stderr, "       --top=0        show only top N clusters by size (0 = all)")
 		os.Exit(1)
 	}
 
-	// Load beats clusters
-	clusters, err := loadClusters(*clusterFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading clusters: %v\n", err)
-		os.Exit(1)
+	// Load beats clusters — prefer BadgerDB (TierIdentified) over flat JSONL file
+	var clusters []ds.Cluster
+	var clusterSource string
+	if *badgerPath != "" {
+		var err error
+		clusters, err = loadClustersFromBadger(*badgerPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading clusters from badger: %v\n", err)
+			os.Exit(1)
+		}
+		clusterSource = badgerPathForRepo(*badgerPath) + " (TierIdentified)"
+	} else {
+		var err error
+		clusters, err = loadClusters(*clusterFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading clusters: %v\n", err)
+			os.Exit(1)
+		}
+		clusterSource = *clusterFile
 	}
-	fmt.Fprintf(os.Stderr, "loaded %d beats clusters from %s\n", len(clusters), *clusterFile)
+	fmt.Fprintf(os.Stderr, "loaded %d beats clusters from %s\n", len(clusters), clusterSource)
 
 	// Load SCIP index
 	fmt.Fprintf(os.Stderr, "loading SCIP index %s …\n", *scipFile)
@@ -69,6 +89,28 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "SCIP index loaded: %d documents, %d symbols\n\n", idx.DocCount, idx.SymbolCount)
+
+	// Path alignment diagnostic — run with --show-paths to debug mismatches
+	if *showPaths {
+		fmt.Println("=== SCIP sample paths (first 20) ===")
+		for _, p := range idx.SamplePaths(20) {
+			fmt.Println(" ", p)
+		}
+		root := strings.TrimRight(*repoRoot, "/") + "/"
+		fmt.Println("\n=== beats member paths from first cluster (stripped with --repo) ===")
+		if len(clusters) > 0 {
+			for i, m := range clusters[0].Members {
+				if i >= 10 {
+					fmt.Printf("  … (%d more)\n", len(clusters[0].Members)-10)
+					break
+				}
+				rel := strings.TrimPrefix(m.FileMeta.Path, root)
+				inSCIP := idx.HasDocument(rel)
+				fmt.Printf("  raw:     %s\n  rel:     %s\n  in SCIP: %v\n\n", m.FileMeta.Path, rel, inSCIP)
+			}
+		}
+		os.Exit(0)
+	}
 
 	// Build global corpus map: FunctionKey → SCIP outbound refs
 	// This covers every function beats knows about, across all clusters.
@@ -94,7 +136,7 @@ func main() {
 		results = results[:*topN]
 	}
 
-	printReport(results, *clusterFile, idx, *quorum)
+	printReport(results, clusterSource, idx, *quorum)
 }
 
 func printReport(results []ClusterResult, clusterFile string, idx *SCIPIndex, quorum float64) {

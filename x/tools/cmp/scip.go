@@ -105,6 +105,20 @@ func (idx *SCIPIndex) HasDocument(relPath string) bool {
 	return ok
 }
 
+// SamplePaths returns up to n relative paths from the index (arbitrary order).
+// Useful for diagnosing path-alignment between beats and SCIP.
+func (idx *SCIPIndex) SamplePaths(n int) []string {
+	out := make([]string, 0, n)
+	for p := range idx.docs {
+		out = append(out, p)
+		if len(out) >= n {
+			break
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // FunctionKey uniquely identifies a function in the corpus by its location.
 type FunctionKey struct {
 	RelPath   string
