@@ -7,11 +7,16 @@ import (
 	"os"
 )
 
+// Version is set at build time via -ldflags "-X main.Version=<tag>".
+// Falls back to "dev" when built with plain `go build`.
+var Version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: beats <command> [flags]")
 		fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
 		fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
+		fmt.Fprintln(os.Stderr, "  beats version")
 		os.Exit(1)
 	}
 
@@ -20,10 +25,13 @@ func main() {
 		runInit(os.Args[2:])
 	case "analyze":
 		runAnalyze(os.Args[2:])
+	case "version", "--version", "-v":
+		fmt.Printf("beats %s\n", Version)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
 		fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
 		fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
+		fmt.Fprintln(os.Stderr, "  beats version")
 		os.Exit(1)
 	}
 }

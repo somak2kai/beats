@@ -23,7 +23,7 @@ builds:
       - goos: windows
         goarch: arm64
     ldflags:
-      - -s -w
+      - -s -w -X main.Version={{.Version}}
 
   - id: beats-cmp
     binary: beats-cmp
@@ -98,7 +98,7 @@ brews:
     install: |
       bin.install "beats"
     test: |
-      system "#{bin}/beats", "--help"
+      system "#{bin}/beats", "version"
 
 release:
   github:
