@@ -222,16 +222,16 @@ What it covers:
 <i>Feel the code, it's all over me</i><br>
 <i>Don't be shy, let the clusters speak</i><br>
 <i>Get the vibe, every pattern lit tonight</i><br>
-<i>(Beats we never miss, beats we never miss) no lie</i><br>
+<i>(Beats we never miss, beats we never miss) no lie</i><br><br>
 <i>Hypnotized, pull another clone</i><br>
 <i>It's alright, I know what you want</i><br>
 <i>Run init, gonna index it tonight</i><br>
-<i>(Beats we never miss, beats we never miss) no lie</i><br>
+<i>(Beats we never miss, beats we never miss) no lie</i><br><br>
 <i>No lie (yeah beats, never miss)</i><br>
 <i>See the shape, it's all over your repo</i><br>
 <i>Don't be shy, HH coherence clean</i><br>
 <i>Get the vibe, every cluster tight tonight</i><br>
-<i>(Beats we never miss, beats we never miss) no lie</i><br>
+<i>(Beats we never miss, beats we never miss) no lie</i><br><br>
 <i>Hypnotized by the fingerprint</i><br>
 <i>It's alright, the structure don't lie</i><br>
 <i>Run analyze, gonna cluster it tonight</i><br>
