@@ -217,26 +217,26 @@ What it covers:
 <summary><strong>Cuz I couldnt help myself</strong></summary>
 <br>
 
-<i>
-No lie (yeah beats, never miss)
-Feel the code, it's all over me
-Don't be shy, let the clusters speak
-Get the vibe, every pattern lit tonight
-(Beats we never miss, beats we never miss) no lie
-Hypnotized, pull another clone
-It's alright, I know what you want
-Run init, gonna index it tonight
-(Beats we never miss, beats we never miss) no lie
-No lie (yeah beats, never miss)
-See the shape, it's all over your repo
-Don't be shy, HH coherence clean
-Get the vibe, every cluster tight tonight
-(Beats we never miss, beats we never miss) no lie
-Hypnotized by the fingerprint
-It's alright, the structure don't lie
-Run analyze, gonna cluster it tonight
-(Beats we never miss, beats we never miss) no lie
-</i>
+
+<i>No lie (yeah beats, never miss)</i>
+<i>Feel the code, it's all over me</i>
+<i>Don't be shy, let the clusters speak</i>
+<i>Get the vibe, every pattern lit tonight</i>
+<i>(Beats we never miss, beats we never miss) no lie</i>
+<i>Hypnotized, pull another clone</i>
+<i>It's alright, I know what you want</i>
+<i>Run init, gonna index it tonight</i>
+<i>(Beats we never miss, beats we never miss) no lie</i>
+<i>No lie (yeah beats, never miss)</i>
+<i>See the shape, it's all over your repo</i>
+<i>Don't be shy, HH coherence clean</i>
+<i>Get the vibe, every cluster tight tonight</i>
+<i>(Beats we never miss, beats we never miss) no lie</i>
+<i>Hypnotized by the fingerprint</i>
+<i>It's alright, the structure don't lie</i>
+<i>Run analyze, gonna cluster it tonight</i>
+<i>(Beats we never miss, beats we never miss) no lie</i>
+
 
 ![No lie](docs/nolie.png)
 </details>
