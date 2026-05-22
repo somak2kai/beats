@@ -5,31 +5,35 @@
 
 ---
 
+<p align="center">
+  <img src="docs/beats-banner.png" alt="beats" width="480"/>
+</p>
+
 # beats
 
 > Measure the structural fingerprint of a Go codebase.
 
-beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, and domain vocabulary. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
+beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, domain vocabulary or semantic meaning. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
 
 ---
 
 ## What is beats?
 
-beats identifies recurring structural patterns across an entire Go codebase without reading a single comment, variable name, or import alias. It answers one question: *do these functions share the same shape?*
+beats identifies recurring structural patterns across an entire Go codebase to answer one question: *does the golang code across the repository coalesce to form a structural pattern and if so, how can we identify and evaluate the same?*
 
-**Structural fingerprint** is defined as follows.
+Beats define **Structural fingerprint** as follows.
 
 For each function, beats computes three features:
 
-1. **Token sequence** — an ordered list of AST mnemonics representing the structural skeleton of the function body. Each token is a normalised AST node: `CALL` for a function call, `ASSIGN` for a variable assignment, `RETURN` for a return statement (with arity), `IF`, `FOR`, `RANGE`, and so on. No names, no literals — only structure.
+1. **Token sequence** — an ordered list of AST mnemonics representing the structural skeleton of the function body. Each token is a normalised AST node, for example : `CALL` for a function call, `ASSIGN` for a variable assignment, `RETURN` for a return statement (with arity), `IF`, `FOR`, `RANGE`, and so on. No names, no literals — only structure.
 
-2. **Call targets (fan-out)** — the set of external functions invoked within the function body. Two functions that both call `db.QueryRow`, `rows.Scan`, and `rows.Close` share the same call vocabulary regardless of what they are named or what package they live in.
+2. **Call targets (fan-out)** — the set of external functions invoked within the function body.
 
 3. **Direct imports** — the set of packages actually used within the function (not just imported by the file). This captures the dependency shape at the function level, not the file level.
 
 No attempt is made to understand *what* a call target does or *what* an import statement provides. That would reintroduce vocabulary dependence and defeat the purpose.
 
-These three features — along with some additional metadata — form a **FunctionMetadata** record. beats collects FunctionMetadata across the entire codebase and clusters them using a weighted similarity function:
+These three features — along with some additional metadata — form a **FunctionMetadata** record. Beats collects FunctionMetadata across the entire codebase and clusters them using a weighted similarity function:
 
 | Feature | Weight |
 |---|---|
@@ -44,7 +48,6 @@ The output is *N* clusters, each with a **coherence value** — a measure of how
 | **High Import Cohesion** | Tight domain-local pattern — shares both package context and call vocabulary. Most actionable. | Domain-cohesive, structurally diverse — shared package domain, divergent calls. May benefit from splitting. |
 | **Low Import Cohesion** | Cross-cutting structural pattern — different domains, same structural role (e.g. cron registration, adapters). | Likely noise — coincidental structural similarity rather than convention. Treat with scepticism. |
 
-beats is a **measurement tool, not a decision tool**. It gives you the map; navigation is yours.
 
 ---
 
@@ -56,6 +59,19 @@ beats is a **measurement tool, not a decision tool**. It gives you the map; navi
 
 - Go 1.21 or later
 - Git
+
+### Install via Homebrew (macOS / Linux)
+
+```bash
+brew tap somak2kai/beats
+brew install beats
+```
+
+Upgrade to the latest release at any time:
+
+```bash
+brew upgrade beats
+```
 
 ### Install from source
 
@@ -85,27 +101,6 @@ go run ./cmd/ <command> [flags]
 beats --version
 ```
 
-### Analyser (optional)
-
-The Python report analyser lives in [`analyzer/`](analyzer/). It parses the HTML report beats generates and produces a structured terminal summary.
-
-```bash
-cd analyzer
-pip3 install -r requirements.txt
-```
-
-Or from the repo root:
-
-```bash
-pip3 install -r requirements.txt
-```
-
-> **Note:** On macOS with a system-managed Python, add `--break-system-packages` or use a virtual environment:
-> ```bash
-> python3 -m venv .venv && source .venv/bin/activate
-> pip install -r requirements.txt
-> ```
-
 </details>
 
 ---
@@ -120,7 +115,7 @@ beats has two main commands: `init` to index a repository and `analyze` to clust
 
 ### `beats init` — index a repository
 
-Walks a Go codebase and writes FunctionMetadata records into a local Badger store inside `<repo>/.beats/`.
+Walks a Go codebase and writes FunctionMetadata records into a local Badger store.
 
 ```bash
 beats init --repo=<path-to-go-repository>
@@ -132,10 +127,8 @@ beats init --repo=<path-to-go-repository>
 beats init --repo=/home/user/projects/myservice
 ```
 
-This produces a `.beats/` directory at the root of the target repository containing the function index. The index is deterministic — re-running `init` on the same codebase produces the same output.
-
 **What gets indexed:**
-- All Go source files under the repository root (excluding `vendor/` and test files by default)
+- All Go source files under the repository root (excluding `vendor/` and test files by default, auto generated files such as pb.go)
 - For each exported and unexported function: token sequence, call targets, direct imports, file path, line number, package name
 
 ---
@@ -163,24 +156,6 @@ open /home/user/projects/myservice/.beats/report.html
 The report shows all clusters sorted by combined coherence, with per-cluster member lists, top imports, Cyclo P95, package distribution, and a coherence quadrant breakdown.
 
 ---
-
-### `analyze_report.py` — terminal analysis of the HTML report
-
-For a quick structured summary in the terminal without opening a browser:
-
-```bash
-python analyze_report.py <path-to-report.html>
-python analyze_report.py <path-to-report.html> --json
-python analyze_report.py <path-to-report.html> --top 20
-```
-
-**Example:**
-
-```bash
-beats init    --repo=/home/user/projects/myservice
-beats analyze --repo=/home/user/projects/myservice
-python analyze_report.py /home/user/projects/myservice/.beats/report.html
-```
 
 </details>
 
