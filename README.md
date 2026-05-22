@@ -14,6 +14,11 @@
 > Measure the structural fingerprint of a Go codebase.
 
 beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, domain vocabulary or semantic meaning. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
+<br>
+
+> Why beats
+
+Well the original idea was to evaluate congnitive load of a piece of code. I generally believe, cognitive load in a codebase isn't caused by complexity alone, it's caused by unexplained structural variance. When every function that does X looks different, your brain can't build a model. Beats finds where the variance is and where it isn't.
 
 ---
 
