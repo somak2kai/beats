@@ -1,0 +1,5 @@
+# beats analyze_report.py dependencies
+beautifulsoup4>=4.12.0
+
+# optional — enables coloured terminal output; plain-text fallback is used if not installed
+rich>=13.7.0
