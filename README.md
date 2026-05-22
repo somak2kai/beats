@@ -1,3 +1,250 @@
 [![CI](https://github.com/somak2kai/beats/actions/workflows/ci.yml/badge.svg)](https://github.com/somak2kai/beats/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/somak2kai/beats)](https://goreportcard.com/report/github.com/somak2kai/beats)
 [![GitHub release](https://img.shields.io/github/v/release/somak2kai/beats?sort=semver)](https://github.com/somak2kai/beats/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+# beats
+
+> Measure the structural fingerprint of a Go codebase.
+
+beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, and domain vocabulary. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
+
+---
+
+## What is beats?
+
+beats identifies recurring structural patterns across an entire Go codebase without reading a single comment, variable name, or import alias. It answers one question: *do these functions share the same shape?*
+
+**Structural fingerprint** is defined as follows.
+
+For each function, beats computes three features:
+
+1. **Token sequence** — an ordered list of AST mnemonics representing the structural skeleton of the function body. Each token is a normalised AST node: `CALL` for a function call, `ASSIGN` for a variable assignment, `RETURN` for a return statement (with arity), `IF`, `FOR`, `RANGE`, and so on. No names, no literals — only structure.
+
+2. **Call targets (fan-out)** — the set of external functions invoked within the function body. Two functions that both call `db.QueryRow`, `rows.Scan`, and `rows.Close` share the same call vocabulary regardless of what they are named or what package they live in.
+
+3. **Direct imports** — the set of packages actually used within the function (not just imported by the file). This captures the dependency shape at the function level, not the file level.
+
+No attempt is made to understand *what* a call target does or *what* an import statement provides. That would reintroduce vocabulary dependence and defeat the purpose.
+
+These three features — along with some additional metadata — form a **FunctionMetadata** record. beats collects FunctionMetadata across the entire codebase and clusters them using a weighted similarity function:
+
+| Feature | Weight |
+|---|---|
+| Token sequence similarity | 50% |
+| Jaccard similarity of import sets | 30% |
+| Jaccard similarity of call target sets | 20% |
+
+The output is *N* clusters, each with a **coherence value** — a measure of how tightly packed the function metadata within it are. Coherence is broken into two axes:
+
+| | **High Call Cohesion** | **Low Call Cohesion** |
+|---|---|---|
+| **High Import Cohesion** | Tight domain-local pattern — shares both package context and call vocabulary. Most actionable. | Domain-cohesive, structurally diverse — shared package domain, divergent calls. May benefit from splitting. |
+| **Low Import Cohesion** | Cross-cutting structural pattern — different domains, same structural role (e.g. cron registration, adapters). | Likely noise — coincidental structural similarity rather than convention. Treat with scepticism. |
+
+beats is a **measurement tool, not a decision tool**. It gives you the map; navigation is yours.
+
+---
+
+<details>
+<summary><strong>📦 Installation</strong></summary>
+<br>
+
+### Prerequisites
+
+- Go 1.21 or later
+- Git
+
+### Install from source
+
+Clone the repository and build the CLI:
+
+```bash
+git clone https://github.com/somak2kai/beats.git
+cd beats
+go build -o beats ./cmd/
+```
+
+Move the binary somewhere on your `$PATH`:
+
+```bash
+mv beats /usr/local/bin/
+```
+
+Or run directly without installing:
+
+```bash
+go run ./cmd/ <command> [flags]
+```
+
+### Verify
+
+```bash
+beats --version
+```
+
+### Analyser (optional)
+
+The Python report analyser lives in [`analyzer/`](analyzer/). It parses the HTML report beats generates and produces a structured terminal summary.
+
+```bash
+cd analyzer
+pip3 install -r requirements.txt
+```
+
+Or from the repo root:
+
+```bash
+pip3 install -r requirements.txt
+```
+
+> **Note:** On macOS with a system-managed Python, add `--break-system-packages` or use a virtual environment:
+> ```bash
+> python3 -m venv .venv && source .venv/bin/activate
+> pip install -r requirements.txt
+> ```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚀 Usage</strong></summary>
+<br>
+
+beats has two main commands: `init` to index a repository and `analyze` to cluster and report on it.
+
+---
+
+### `beats init` — index a repository
+
+Walks a Go codebase and writes FunctionMetadata records into a local Badger store inside `<repo>/.beats/`.
+
+```bash
+beats init --repo=<path-to-go-repository>
+```
+
+**Example:**
+
+```bash
+beats init --repo=/home/user/projects/myservice
+```
+
+This produces a `.beats/` directory at the root of the target repository containing the function index. The index is deterministic — re-running `init` on the same codebase produces the same output.
+
+**What gets indexed:**
+- All Go source files under the repository root (excluding `vendor/` and test files by default)
+- For each exported and unexported function: token sequence, call targets, direct imports, file path, line number, package name
+
+---
+
+### `beats analyze` — cluster and report
+
+Reads the function index written by `init`, runs the clustering algorithm, and produces an HTML report at `<repo>/.beats/report.html`.
+
+```bash
+beats analyze --repo=<path-to-go-repository>
+```
+
+**Example:**
+
+```bash
+beats analyze --repo=/home/user/projects/myservice
+```
+
+Open the report:
+
+```bash
+open /home/user/projects/myservice/.beats/report.html
+```
+
+The report shows all clusters sorted by combined coherence, with per-cluster member lists, top imports, Cyclo P95, package distribution, and a coherence quadrant breakdown.
+
+---
+
+### `analyze_report.py` — terminal analysis of the HTML report
+
+For a quick structured summary in the terminal without opening a browser:
+
+```bash
+python analyze_report.py <path-to-report.html>
+python analyze_report.py <path-to-report.html> --json
+python analyze_report.py <path-to-report.html> --top 20
+```
+
+**Example:**
+
+```bash
+beats init    --repo=/home/user/projects/myservice
+beats analyze --repo=/home/user/projects/myservice
+python analyze_report.py /home/user/projects/myservice/.beats/report.html
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>📄 License</strong></summary>
+<br>
+
+MIT License
+
+Copyright (c) 2026 somak2kai
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+</details>
+
+---
+
+<details>
+<summary><strong>📊 Report Analyser</strong></summary>
+<br>
+
+The `analyzer/` package contains a Python script for parsing and summarising beats HTML reports in the terminal.
+
+→ **[analyzer/README.md](analyzer/README.md)**
+
+What it covers:
+- How to run `analyze_report.py` against any beats report
+- Coherence quadrant reference table
+- Sample output from a real analysis run (Gitea, ~500 clusters)
+
+</details>
+
+---
+
+<details>
+<summary><strong>🔬 SCIP Validation Tool</strong></summary>
+<br>
+
+The `x/tools/cmp/` package contains a comparison tool that validates beats clusters against [SCIP](https://github.com/sourcegraph/scip) (Sourcegraph Code Intelligence Protocol) reference data. It computes precision, recall, and F1 per cluster to measure how well the structural fingerprint aligns with semantic reference graphs.
+
+→ **[x/tools/cmp/README.md](x/tools/cmp/README.md)**
+
+What it covers:
+- Installing and running `scip-go` on a repository
+- Running the beats vs SCIP comparison
+- How to interpret recall, precision, and F1 in the beats context
+- Why low precision is expected (and desirable) behaviour
+
+</details>
