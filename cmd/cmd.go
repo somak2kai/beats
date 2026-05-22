@@ -17,51 +17,49 @@ import (
 )
 
 var (
-	_ Command   = (*DbCleaner)(nil)
-	_ Skippable = (*DbCleaner)(nil)
-	_ Command   = (*FileMetadata)(nil)
-	_ Command   = (*FunctionMetadata)(nil)
-	_ Command   = (*IndexCommand)(nil)
-	_ Command   = (*FunctionMetadataWriter)(nil)
-	_ Skippable = (*FunctionMetadataWriter)(nil)
-	_ Command   = (*IndexMetadataWriter)(nil)
-	_ Skippable = (*IndexMetadataWriter)(nil)
-	_ Command   = (*IndexPersistor)(nil)
-	_ Skippable = (*IndexPersistor)(nil)
-	_ Command   = (*BeatsLabelWriter)(nil)
-	_ Command   = (*MemberScorer)(nil)
-	_ Command   = (*MemberScoreWriter)(nil)
-	_ Skippable = (*MemberScoreWriter)(nil)
-	_ Command   = (*MemberScorePersistor)(nil)
-	_ Skippable = (*MemberScorePersistor)(nil)
-	_ Command   = (*IdentifyCluster)(nil)
-	_ Command   = (*IdentifyClusterPersistor)(nil)
-	_ Skippable = (*IdentifyClusterPersistor)(nil)
-	_ Command   = (*IdentifyClusterWriter)(nil)
-	_ Skippable = (*IdentifyClusterWriter)(nil)
+	_ command   = (*dbCleaner)(nil)
+	_ skippable = (*dbCleaner)(nil)
+	_ command   = (*fileMetadata)(nil)
+	_ command   = (*functionMetadata)(nil)
+	_ command   = (*indexCommand)(nil)
+	_ command   = (*functionMetadataWriter)(nil)
+	_ skippable = (*functionMetadataWriter)(nil)
+	_ command   = (*indexMetadataWriter)(nil)
+	_ skippable = (*indexMetadataWriter)(nil)
+	_ command   = (*indexPersistor)(nil)
+	_ skippable = (*indexPersistor)(nil)
+	_ command   = (*beatsLabelWriter)(nil)
+	_ command   = (*memberScorer)(nil)
+	_ command   = (*memberScoreWriter)(nil)
+	_ skippable = (*memberScoreWriter)(nil)
+	_ command   = (*memberScorePersistor)(nil)
+	_ skippable = (*memberScorePersistor)(nil)
+	_ command   = (*identifyCluster)(nil)
+	_ command   = (*identifyClusterPersistor)(nil)
+	_ skippable = (*identifyClusterPersistor)(nil)
+	_ command   = (*identifyClusterWriter)(nil)
+	_ skippable = (*identifyClusterWriter)(nil)
+	_ command   = (*analyzer)(nil)
+	_ skippable = (*analyzer)(nil)
 )
 
-type Command interface{ Execute() error }
-type Skippable interface{ SkipInDryRun() bool }
-type DbCleaner struct{ State *State }
-type FileMetadata struct{ State *State }
-type FunctionMetadata struct{ State *State }
-type IndexCommand struct{ State *State }
-type ClusterMetadata struct{ State *State }
-type FunctionMetadataWriter struct{ State *State }
-type IndexMetadataWriter struct{ State *State }
-type IndexPersistor struct{ State *State }
-type CollapseClusterToFamily struct{ State *State }
-type LabelCluster struct{ State *State }
-type BeatsLabelWriter struct{ State *State }
-type ClusterWriter struct{ State *State }
-type ClusterPersistor struct{ State *State }
-type MemberScorer struct{ State *State }
-type MemberScoreWriter struct{ State *State }
-type MemberScorePersistor struct{ State *State }
-type IdentifyCluster struct{ State *State }
-type IdentifyClusterPersistor struct{ State *State }
-type IdentifyClusterWriter struct{ State *State }
+type command interface{ execute() error }
+type skippable interface{ skipInDryRun() bool }
+type dbCleaner struct{ state *State }
+type fileMetadata struct{ state *State }
+type functionMetadata struct{ state *State }
+type indexCommand struct{ state *State }
+type functionMetadataWriter struct{ state *State }
+type indexMetadataWriter struct{ state *State }
+type indexPersistor struct{ state *State }
+type beatsLabelWriter struct{ state *State }
+type memberScorer struct{ state *State }
+type memberScoreWriter struct{ state *State }
+type memberScorePersistor struct{ state *State }
+type identifyCluster struct{ state *State }
+type identifyClusterPersistor struct{ state *State }
+type identifyClusterWriter struct{ state *State }
+type analyzer struct{ state *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -78,12 +76,12 @@ type State struct {
 	Index             ds.Index
 }
 
-// DbCleaner removes the BadgerDB directory for the repository before the
+// dbCleaner removes the BadgerDB directory for the repository before the
 // pipeline writes anything. Without this, re-running beats init accumulates
 // stale keys from previous runs — old shape hashes coexist with new ones and
 // ScanClusters returns both, inflating all counts.
-func (d *DbCleaner) Execute() error {
-	dbPath := filepath.Join(os.TempDir(), "badger", d.State.RepositoryPath)
+func (d *dbCleaner) execute() error {
+	dbPath := filepath.Join(os.TempDir(), "badger", d.state.RepositoryPath)
 	if err := os.RemoveAll(dbPath); err != nil {
 		slog.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
 		return err
@@ -92,24 +90,24 @@ func (d *DbCleaner) Execute() error {
 	return nil
 }
 
-func (d *DbCleaner) SkipInDryRun() bool { return true }
+func (d *dbCleaner) skipInDryRun() bool { return true }
 
-func (f *FileMetadata) Execute() error {
-	files, err := util.GetFileMetadata(f.State.RepositoryPath)
+func (f *fileMetadata) execute() error {
+	files, err := util.GetFileMetadata(f.state.RepositoryPath)
 	if err != nil {
 		slog.Error("failed to get file metadata", slog.Any("error", err))
 		return err
 	}
-	f.State.PkgToFileMetadata = files
+	f.state.PkgToFileMetadata = files
 	return nil
 }
 
-func (f *FunctionMetadata) Execute() error {
+func (f *functionMetadata) execute() error {
 
 	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
-	for _, val := range f.State.PkgToFileMetadata {
+	for _, val := range f.state.PkgToFileMetadata {
 		for _, m := range val {
 			m := m
 			g.Go(func() error {
@@ -119,7 +117,7 @@ func (f *FunctionMetadata) Execute() error {
 				}
 				mu.Lock()
 				defer mu.Unlock()
-				f.State.FunctionMetadata = append(f.State.FunctionMetadata, meta...)
+				f.state.FunctionMetadata = append(f.state.FunctionMetadata, meta...)
 				return nil
 			})
 		}
@@ -132,14 +130,14 @@ func (f *FunctionMetadata) Execute() error {
 	return nil
 }
 
-func (i *IndexCommand) Execute() error {
-	i.State.Index = ds.PopulateIndex(i.State.FunctionMetadata)
+func (i *indexCommand) execute() error {
+	i.state.Index = ds.PopulateIndex(i.state.FunctionMetadata)
 	return nil
 }
 
-func (w *FunctionMetadataWriter) Execute() error {
+func (w *functionMetadataWriter) execute() error {
 
-	tmp := filepath.Join(os.TempDir(), "funcMeta", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "func_meta.json")
+	tmp := filepath.Join(os.TempDir(), "funcMeta", uuid.NewString(), filepath.Base(w.state.RepositoryPath), "func_meta.json")
 	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
 		return err
 	}
@@ -149,7 +147,7 @@ func (w *FunctionMetadataWriter) Execute() error {
 	}
 	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
-	for _, fn := range w.State.FunctionMetadata {
+	for _, fn := range w.state.FunctionMetadata {
 		if err := enc.Encode(fn); err != nil {
 			slog.Error("unable to write function metadata", slog.String("function_metadata_path", tmp))
 			return err
@@ -158,13 +156,13 @@ func (w *FunctionMetadataWriter) Execute() error {
 	slog.Info("function metadata written", slog.String("function_metadata_path", tmp))
 	return nil
 }
-func (w *FunctionMetadataWriter) SkipInDryRun() bool {
+func (w *functionMetadataWriter) skipInDryRun() bool {
 	return true
 }
 
-func (w *IndexMetadataWriter) Execute() error {
+func (w *indexMetadataWriter) execute() error {
 
-	tmp := filepath.Join(os.TempDir(), "indexMeta", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "index.json")
+	tmp := filepath.Join(os.TempDir(), "indexMeta", uuid.NewString(), filepath.Base(w.state.RepositoryPath), "index.json")
 	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
 		return err
 	}
@@ -173,37 +171,37 @@ func (w *IndexMetadataWriter) Execute() error {
 		return err
 	}
 	defer f.Close() //nolint:errcheck
-	if err := json.NewEncoder(f).Encode(w.State.Index); err != nil {
+	if err := json.NewEncoder(f).Encode(w.state.Index); err != nil {
 		slog.Error("unable to write index metadata", slog.String("index_metadata_path", tmp))
 		return err
 	}
 	slog.Info("index metadata written", slog.String("index_metadata_path", tmp))
 	return nil
 }
-func (w *IndexMetadataWriter) SkipInDryRun() bool {
+func (w *indexMetadataWriter) skipInDryRun() bool {
 	return true
 }
 
-func (w *IndexPersistor) Execute() error {
+func (w *indexPersistor) execute() error {
 
-	tmp := filepath.Join(os.TempDir(), "badger", w.State.RepositoryPath)
+	tmp := filepath.Join(os.TempDir(), "badger", w.state.RepositoryPath)
 	bDb := db.NewDb(tmp)
 	defer bDb.Close() //nolint:errcheck
-	for k, v := range w.State.Index.Postings {
+	for k, v := range w.state.Index.Postings {
 		if err := bDb.StorePostings(k, v); err != nil {
 			slog.Error("unable to save inverted index", slog.Any("error", err))
 			return err
 		}
 	}
 
-	for k, v := range w.State.Index.DocFreq {
+	for k, v := range w.state.Index.DocFreq {
 		if err := bDb.StoreDocFreq(k, v); err != nil {
 			slog.Error("unable to save document frequency", slog.Any("error", err))
 			return err
 		}
 	}
 
-	for k, v := range w.State.Index.FuncMeta {
+	for k, v := range w.state.Index.FuncMeta {
 		if err := bDb.StoreFunctionMeta(k, v); err != nil {
 			slog.Error("unable to save function metadata", slog.Any("error", err))
 			return err
@@ -211,22 +209,22 @@ func (w *IndexPersistor) Execute() error {
 	}
 	return nil
 }
-func (w *IndexPersistor) SkipInDryRun() bool {
+func (w *indexPersistor) skipInDryRun() bool {
 	return true
 }
 
-func (b *BeatsLabelWriter) Execute() error {
+func (b *beatsLabelWriter) execute() error {
 
-	beatsDir := filepath.Join(b.State.RepositoryPath, ".beats")
+	beatsDir := filepath.Join(b.state.RepositoryPath, ".beats")
 	if err := os.MkdirAll(beatsDir, 0755); err != nil {
 		slog.Error("unable to create .beats directory", slog.Any("error", err))
 		return err
 	}
 
-	base := filepath.Base(b.State.RepositoryPath)
+	base := filepath.Base(b.state.RepositoryPath)
 	labelFile := filepath.Join(beatsDir, "beats_label_"+base+".md")
 
-	if err := b.createClusterLabels(b.State.LabelableCluster, labelFile, base); err != nil {
+	if err := b.createClusterLabels(b.state.LabelableCluster, labelFile, base); err != nil {
 		slog.Error("unable to create cluster labels ", slog.Any("error", err))
 		return err
 	}
@@ -234,7 +232,7 @@ func (b *BeatsLabelWriter) Execute() error {
 	return nil
 }
 
-func (b *BeatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo string) error {
+func (b *beatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -243,14 +241,14 @@ func (b *BeatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo stri
 	return ast.WriteClusters(f, repo, cls)
 }
 
-func (m *MemberScorer) Execute() error {
-	m.State.MemberScores = ast.ComputeMemberScores(m.State.CollapsedCluster)
-	slog.Info("member scores computed", slog.Int("count", len(m.State.MemberScores)))
+func (m *memberScorer) execute() error {
+	m.state.MemberScores = ast.ComputeMemberScores(m.state.CollapsedCluster)
+	slog.Info("member scores computed", slog.Int("count", len(m.state.MemberScores)))
 	return nil
 }
 
-func (m *MemberScoreWriter) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "memberScore", uuid.NewString(), filepath.Base(m.State.RepositoryPath), "member_score.json")
+func (m *memberScoreWriter) execute() error {
+	tmp := filepath.Join(os.TempDir(), "memberScore", uuid.NewString(), filepath.Base(m.state.RepositoryPath), "member_score.json")
 	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
 		return err
 	}
@@ -260,7 +258,7 @@ func (m *MemberScoreWriter) Execute() error {
 	}
 	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
-	for _, ms := range m.State.MemberScores {
+	for _, ms := range m.state.MemberScores {
 		if err := enc.Encode(ms); err != nil {
 			slog.Error("unable to write member score", slog.String("path", tmp))
 			return err
@@ -270,13 +268,13 @@ func (m *MemberScoreWriter) Execute() error {
 	return nil
 }
 
-func (m *MemberScoreWriter) SkipInDryRun() bool { return true }
+func (m *memberScoreWriter) skipInDryRun() bool { return true }
 
-func (m *MemberScorePersistor) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "badger", m.State.RepositoryPath)
+func (m *memberScorePersistor) execute() error {
+	tmp := filepath.Join(os.TempDir(), "badger", m.state.RepositoryPath)
 	bDb := db.NewDb(tmp)
 	defer bDb.Close() //nolint:errcheck
-	for _, ms := range m.State.MemberScores {
+	for _, ms := range m.state.MemberScores {
 		if err := bDb.StoreMemberScore(ms.FunctionID, ms); err != nil {
 			slog.Error("unable to save member score",
 				slog.String("function_id", ms.FunctionID),
@@ -285,24 +283,30 @@ func (m *MemberScorePersistor) Execute() error {
 			return err
 		}
 	}
-	slog.Info("member scores persisted", slog.Int("count", len(m.State.MemberScores)))
+	slog.Info("member scores persisted", slog.Int("count", len(m.state.MemberScores)))
 	return nil
 }
 
-func (m *MemberScorePersistor) SkipInDryRun() bool { return true }
+func (m *memberScorePersistor) skipInDryRun() bool { return true }
 
-func (c *IdentifyCluster) Execute() error {
-	c.State.IdentifiedCluster = ast.IdentifyClusters(c.State.FunctionMetadata)
-	slog.Info("identified clusters", slog.Int("count", len(c.State.IdentifiedCluster)))
+func (a *analyzer) execute() error {
+	return runAnalyze(a.state.RepositoryPath)
+}
+
+func (m *analyzer) skipInDryRun() bool { return true }
+
+func (c *identifyCluster) execute() error {
+	c.state.IdentifiedCluster = ast.IdentifyClusters(c.state.FunctionMetadata)
+	slog.Info("identified clusters", slog.Int("count", len(c.state.IdentifiedCluster)))
 	return nil
 }
 
-func (c *IdentifyClusterPersistor) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "badger", c.State.RepositoryPath)
+func (c *identifyClusterPersistor) execute() error {
+	tmp := filepath.Join(os.TempDir(), "badger", c.state.RepositoryPath)
 	bDb := db.NewDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
-	for _, cl := range c.State.IdentifiedCluster {
+	for _, cl := range c.state.IdentifiedCluster {
 		if err := bDb.StoreCluster(db.TierIdentified, cl.ShapeHash, cl); err != nil {
 			slog.Error("unable to save identified cluster",
 				slog.String("shape_hash", cl.ShapeHash),
@@ -311,14 +315,14 @@ func (c *IdentifyClusterPersistor) Execute() error {
 			return err
 		}
 	}
-	slog.Info("identified clusters persisted", slog.Int("count", len(c.State.IdentifiedCluster)))
+	slog.Info("identified clusters persisted", slog.Int("count", len(c.state.IdentifiedCluster)))
 	return nil
 }
 
-func (c *IdentifyClusterPersistor) SkipInDryRun() bool { return true }
+func (c *identifyClusterPersistor) skipInDryRun() bool { return true }
 
-func (w *IdentifyClusterWriter) Execute() error {
-	tmp := filepath.Join(os.TempDir(), "identifiedCluster", uuid.NewString(), filepath.Base(w.State.RepositoryPath), "cluster.json")
+func (w *identifyClusterWriter) execute() error {
+	tmp := filepath.Join(os.TempDir(), "identifiedCluster", uuid.NewString(), filepath.Base(w.state.RepositoryPath), "cluster.json")
 	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
 		return err
 	}
@@ -328,7 +332,7 @@ func (w *IdentifyClusterWriter) Execute() error {
 	}
 	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
-	for _, cl := range w.State.IdentifiedCluster {
+	for _, cl := range w.state.IdentifiedCluster {
 		if err := enc.Encode(cl); err != nil {
 			slog.Error("unable to write identified cluster", slog.String("path", tmp))
 			return err
@@ -338,7 +342,7 @@ func (w *IdentifyClusterWriter) Execute() error {
 	return nil
 }
 
-func (w *IdentifyClusterWriter) SkipInDryRun() bool { return true }
+func (w *identifyClusterWriter) skipInDryRun() bool { return true }
 
 func (b *Beats) run(repo string) error {
 
@@ -352,12 +356,12 @@ func (b *Beats) run(repo string) error {
 	}
 	for _, cmd := range getCommands(s) {
 		if b.IsDryRun {
-			if c, ok := cmd.(Skippable); ok && c.SkipInDryRun() {
+			if c, ok := cmd.(skippable); ok && c.skipInDryRun() {
 				slog.Info("skipping (dry-run)")
 				continue
 			}
 		}
-		if err := cmd.Execute(); err != nil {
+		if err := cmd.execute(); err != nil {
 			slog.Error("stage halted...", slog.Any("error", err))
 			return err
 		}
@@ -365,23 +369,24 @@ func (b *Beats) run(repo string) error {
 	return nil
 }
 
-func getCommands(s *State) []Command {
-	return []Command{
-		&DbCleaner{State: s},
-		&FileMetadata{State: s},
-		&FunctionMetadata{State: s},
-		&FunctionMetadataWriter{State: s},
-		&IdentifyCluster{State: s},
-		&IdentifyClusterPersistor{State: s},
-		&IdentifyClusterWriter{State: s},
-		&IndexCommand{State: s},
-		&IndexMetadataWriter{State: s},
-		&IndexPersistor{State: s},
+func getCommands(s *State) []command {
+	return []command{
+		&dbCleaner{state: s},
+		&fileMetadata{state: s},
+		&functionMetadata{state: s},
+		&functionMetadataWriter{state: s},
+		&identifyCluster{state: s},
+		&identifyClusterPersistor{state: s},
+		&identifyClusterWriter{state: s},
+		&indexCommand{state: s},
+		&indexMetadataWriter{state: s},
+		&indexPersistor{state: s},
 		// TODO membership scoring is brittle at the moment.
-		// &MemberScorer{State: s},
-		// &MemberScoreWriter{State: s},
-		// &MemberScorePersistor{State: s},
-		&BeatsLabelWriter{State: s},
+		// &memberScorer{state: s},
+		// &memberScoreWriter{state: s},
+		// &memberScorePersistor{state: s},
+		// &beatsLabelWriter{state: s},
+		&analyzer{state: s},
 	}
 }
 

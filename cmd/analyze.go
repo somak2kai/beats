@@ -53,7 +53,7 @@ type RepoReport struct {
 
 // ── entry point ───────────────────────────────────────────────────────────────
 
-func RunAnalyze(repo string) error {
+func runAnalyze(repo string) error {
 	dbPath := filepath.Join(os.TempDir(), "badger", repo)
 	bDb := db.NewDb(dbPath)
 	defer bDb.Close() //nolint:errcheck

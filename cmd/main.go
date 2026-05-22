@@ -7,15 +7,13 @@ import (
 	"os"
 )
 
-// Version is set at build time via -ldflags "-X main.Version=<tag>".
-// Falls back to "dev" when built with plain `go build`.
+// default
 var Version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: beats <command> [flags]")
 		fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
-		fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
 		fmt.Fprintln(os.Stderr, "  beats version")
 		os.Exit(1)
 	}
@@ -23,8 +21,6 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		runInit(os.Args[2:])
-	case "analyze":
-		runAnalyze(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("beats %s\n", Version)
 	default:
@@ -53,20 +49,4 @@ func runInit(args []string) {
 		os.Exit(1)
 	}
 	slog.Info("successfully created beats index and cluster", slog.String("repo", *prj))
-}
-
-func runAnalyze(args []string) {
-	fs := flag.NewFlagSet("analyze", flag.ExitOnError)
-	prj := fs.String("repo", "", "Path to the repository to analyze")
-	_ = fs.Parse(args)
-
-	if *prj == "" {
-		fmt.Fprintln(os.Stderr, "beats analyze: --repo is required")
-		os.Exit(1)
-	}
-
-	if err := RunAnalyze(*prj); err != nil {
-		slog.Error("unable to run beats analyze", slog.String("repo", *prj), slog.Any("error", err))
-		os.Exit(1)
-	}
 }

@@ -109,7 +109,7 @@ beats --version
 <summary><strong>🚀 Usage</strong></summary>
 <br>
 
-beats has two main commands: `init` to index a repository and `analyze` to cluster and report on it.
+beats has one main commands: `init` to index a repository , to create clusters and report on it.
 
 ---
 
@@ -130,22 +130,9 @@ beats init --repo=/home/user/projects/myservice
 **What gets indexed:**
 - All Go source files under the repository root (excluding `vendor/` and test files by default, auto generated files such as pb.go)
 - For each exported and unexported function: token sequence, call targets, direct imports, file path, line number, package name
+- runs the clustering algorithm, and produces an HTML report at `<repo>/.beats/report.html`.
 
 ---
-
-### `beats analyze` — cluster and report
-
-Reads the function index written by `init`, runs the clustering algorithm, and produces an HTML report at `<repo>/.beats/report.html`.
-
-```bash
-beats analyze --repo=<path-to-go-repository>
-```
-
-**Example:**
-
-```bash
-beats analyze --repo=/home/user/projects/myservice
-```
 
 Open the report:
 
