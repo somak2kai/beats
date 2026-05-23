@@ -31,10 +31,13 @@ const (
 	// corpus) carries no discriminating signal and generates O(300²)=45k pairs
 	// that are almost all rejected in the scoring step anyway.
 	maxTrigranBucket = 300
+	// anything below this many number of token sequences for a function,
+	// we wont have enough data to make a judicious clustering.
+	minTokenSeqLen = 4
 )
 
 // IdentifyClusters builds clusters in a single agglomerative pass over all
-// functions. Unlike BuildClusters+CollapseToFamilies, import and call target
+// functions. Import and call target
 // similarity are part of the grouping decision from the start — not a post-hoc
 // merge step — which prevents contaminated clusters from ever forming.
 //
@@ -51,21 +54,17 @@ const (
 //
 // Existing BuildClusters and CollapseToFamilies are preserved unchanged.
 func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
-	n := len(fns)
-	if n == 0 {
+	totalFuncs := len(fns)
+	if totalFuncs == 0 {
 		return nil
 	}
-	primitiveThreshold := float64(n) * 0.05
+	primitiveThreshold := float64(totalFuncs) * 0.05
 
-	// ── Step 1: trigram map ───────────────────────────────────────────────────
+	// Step 1: trigram map
+	// functions sharing similar hash token sequences are put in a map.
 	// trigramMap[hash] = []index into fns
-	// Functions with token sequences shorter than minTokenSeqLen are excluded:
-	// they produce only a single degenerate hash that conflates every trivially
-	// similar function (e.g. all one-liner init() registrations) into the same
-	// bucket, yielding large high-coherence clusters with no structural signal.
-	// This mirrors the len(TokenSeq) < 4 guard in BuildClusters.
-	const minTokenSeqLen = 4
-	trigramMap := make(map[int64][]int, n)
+
+	trigramMap := make(map[int64][]int, totalFuncs)
 	for i, fn := range fns {
 		if len(fn.TokenSeq) < minTokenSeqLen {
 			continue
@@ -75,35 +74,33 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		}
 	}
 
-	// ── Step 2: candidate pairs ───────────────────────────────────────────────
+	// Step 2: find candidate pairs
 	// Count how many trigrams each (i,j) pair shares. Pairs with fewer shared
 	// trigrams than the adaptive minimum are discarded before scoring.
 	// Buckets larger than maxTrigranBucket are skipped — that trigram is a
 	// structural stop-word and processing it would generate O(n²) noise pairs.
-	type pairKey struct{ i, j int } // invariant: i < j
-	sharedCount := make(map[pairKey]int)
+
+	type pairKey struct {
+		i int // index of []FunctionMetadata
+		j int // index of []FunctionMetadata
+	}
+	totalPairs := make(map[pairKey]int)
 	for _, bucket := range trigramMap {
 		if len(bucket) > maxTrigranBucket {
 			continue // stop-word trigram — too common to discriminate
 		}
-		for a := 0; a < len(bucket); a++ {
+		for a := range bucket {
 			for b := a + 1; b < len(bucket); b++ {
-				i, j := bucket[a], bucket[b]
-				if i > j {
-					i, j = j, i
-				}
-				sharedCount[pairKey{i, j}]++
+				totalPairs[pairKey{bucket[a], bucket[b]}]++
 			}
 		}
 	}
 
-	// ── Step 3: score candidate pairs ────────────────────────────────────────
-	// Pre-compute per-function data used repeatedly across many pair scorings.
-	// Without this, toStringSet allocates two new maps per pair, and seqSimilarity
-	// runs a full edit-distance on identical sequences that would return 1.0.
-	keys := make([]string, n) // seqKey per function — lets us skip edit distance for identical seqs
-	importSets := make([]map[string]bool, n)
-	callSets := make([]map[string]bool, n)
+	// Step 3: scoring candidate pairs based on weighted token sequences and jaccard similarity on
+	// imports and call targets
+	keys := make([]string, totalFuncs) // seqKey per function — lets us skip edit distance for identical seqs
+	importSets := make([]map[string]bool, totalFuncs)
+	callSets := make([]map[string]bool, totalFuncs)
 	for i, fn := range fns {
 		keys[i] = seqKey(fn.TokenSeq)
 		importSets[i] = toStringSet(fn.DirectImports)
@@ -111,13 +108,13 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 	}
 
 	type scoredPair struct {
-		i, j  int
-		score float64
+		i, j  int     // index of []FunctionMetadata
+		score float64 // indicates scoring of belonging in same cluster for the function metadata pair.
 	}
 	var candidates []scoredPair
-	pairScores := make(map[pairKey]float64, len(sharedCount))
+	pairScores := make(map[pairKey]float64, len(totalPairs))
 
-	for pk, cnt := range sharedCount {
+	for pk, cnt := range totalPairs {
 		// adaptive minimum: require ≥2 shared trigrams when both functions have
 		// enough trigrams to be discriminating; 1 is sufficient for short seqs.
 		minShared := 1
@@ -166,11 +163,11 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 	})
 
 	// ── Step 4: complete-linkage agglomerative clustering ────────────────────
-	parent := make([]int, n)
+	parent := make([]int, totalFuncs)
 	for i := range parent {
 		parent[i] = i
 	}
-	clusterMembers := make(map[int][]int, n)
+	clusterMembers := make(map[int][]int, totalFuncs)
 	for i := range fns {
 		clusterMembers[i] = []int{i}
 	}
@@ -198,12 +195,13 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		membB := clusterMembers[rj]
 
 		// complete-linkage gate: every cross-cluster pair must exceed threshold.
-		// Missing pairs (never in candidates) are treated as score 0 — reject.
+		// check if functions in clusterA needs to be merged with cluster B
 		canMerge := true
 	outer:
 		for _, a := range membA {
 			for _, b := range membB {
 				i, j := a, b
+				// this ensures we look up always (x,y) where x<y, since our pairScores are created in that order.
 				if i > j {
 					i, j = j, i
 				}
@@ -241,9 +239,13 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		for k, idx := range idxs {
 			metas[k] = fns[idx]
 		}
+		// ignore clusters formed due to scanning any test files.
 		if isTestingCluster(metas) {
 			continue
 		}
+		// init function in golang are ignored, typically come up with best coherence
+		// but hardly identifies any meaningful pattern. so we drop them.
+		// TODO might be users discretions.
 		if isInitCluster(metas) {
 			continue
 		}
