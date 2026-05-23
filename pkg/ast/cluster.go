@@ -36,10 +36,21 @@ const (
 	minTokenSeqLen = 4
 )
 
+// pairKey is a canonical ordered (i < j) pair of function indices into the fns slice.
+type pairKey struct {
+	i, j int
+}
+
+// scoredPair is a candidate pair with its combined similarity score.
+type scoredPair struct {
+	i, j  int
+	score float64 // indicates scoring of possibility of belonging in same cluster for the function metadata pair.
+}
+
 // IdentifyClusters builds clusters in a single agglomerative pass over all
-// functions. Import and call target
-// similarity are part of the grouping decision from the start — not a post-hoc
-// merge step — which prevents contaminated clusters from ever forming.
+// functions. Import and call target similarity are part of the grouping decision
+// from the start — not a post-hoc merge step — which prevents contaminated
+// clusters from ever forming.
 //
 // Algorithm:
 //  1. Build a trigram map from each function's TokenSeqHash (Rabin-Karp sliding
@@ -51,20 +62,24 @@ const (
 //     chaining artefacts.
 //  4. Drop clusters below identifyMinSize and structural stop-words (≥ 5% of
 //     corpus).
-//
-// Existing BuildClusters and CollapseToFamilies are preserved unchanged.
 func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
-	totalFuncs := len(fns)
-	if totalFuncs == 0 {
+	if len(fns) == 0 {
 		return nil
 	}
-	primitiveThreshold := float64(totalFuncs) * 0.05
+	primitiveThreshold := float64(len(fns)) * 0.05
 
-	// Step 1: trigram map
-	// functions sharing similar hash token sequences are put in a map.
-	// trigramMap[hash] = []index into fns
+	trigramMap := buildTrigramMap(fns)
+	sharedCounts := countSharedTrigrams(trigramMap)
+	candidates, pairScores := scorePairs(fns, sharedCounts)
+	clusterMembers := agglomerate(fns, candidates, pairScores)
+	return buildClusters(fns, clusterMembers, primitiveThreshold)
+}
 
-	trigramMap := make(map[int64][]int, totalFuncs)
+// buildTrigramMap maps each trigram hash to the indices of functions that contain it.
+// Functions with fewer than minTokenSeqLen tokens are excluded — not enough
+// structure to be discriminating.
+func buildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
+	trigramMap := make(map[int64][]int, len(fns))
 	for i, fn := range fns {
 		if len(fn.TokenSeq) < minTokenSeqLen {
 			continue
@@ -73,48 +88,48 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 			trigramMap[h] = append(trigramMap[h], i)
 		}
 	}
+	return trigramMap
+}
 
-	// Step 2: find candidate pairs
-	// Count how many trigrams each (i,j) pair shares. Pairs with fewer shared
-	// trigrams than the adaptive minimum are discarded before scoring.
-	// Buckets larger than maxTrigranBucket are skipped — that trigram is a
-	// structural stop-word and processing it would generate O(n²) noise pairs.
-
-	type pairKey struct {
-		i int // index of []FunctionMetadata
-		j int // index of []FunctionMetadata
-	}
-	totalPairs := make(map[pairKey]int)
+// countSharedTrigrams counts how many trigram hashes each (i,j) candidate pair
+// shares. Buckets larger than maxTrigranBucket are skipped — that trigram is a
+// structural stop-word and would generate O(n²) noise pairs.
+func countSharedTrigrams(trigramMap map[int64][]int) map[pairKey]int {
+	shared := make(map[pairKey]int)
 	for _, bucket := range trigramMap {
 		if len(bucket) > maxTrigranBucket {
 			continue // stop-word trigram — too common to discriminate
 		}
 		for a := range bucket {
 			for b := a + 1; b < len(bucket); b++ {
-				totalPairs[pairKey{bucket[a], bucket[b]}]++
+				shared[pairKey{bucket[a], bucket[b]}]++
 			}
 		}
 	}
+	return shared
+}
 
-	// Step 3: scoring candidate pairs based on weighted token sequences and jaccard similarity on
-	// imports and call targets
-	keys := make([]string, totalFuncs) // seqKey per function — lets us skip edit distance for identical seqs
-	importSets := make([]map[string]bool, totalFuncs)
-	callSets := make([]map[string]bool, totalFuncs)
+// scorePairs filters and scores candidate pairs using the three-term similarity
+// formula: 0.5×seqSim + 0.3×importJaccard + 0.2×callJaccard.
+//
+// Returns:
+//   - candidates: pairs above identifyThreshold, sorted descending by score
+//   - pairScores: lookup map used by the complete-linkage gate
+func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPair, map[pairKey]float64) {
+	// pre-compute per-function keys and sets once — reused across all pair lookups.
+	keys := make([]string, len(fns))
+	importSets := make([]map[string]bool, len(fns))
+	callSets := make([]map[string]bool, len(fns))
 	for i, fn := range fns {
 		keys[i] = seqKey(fn.TokenSeq)
 		importSets[i] = toStringSet(fn.DirectImports)
 		callSets[i] = toStringSet(fn.CallTargets)
 	}
 
-	type scoredPair struct {
-		i, j  int     // index of []FunctionMetadata
-		score float64 // indicates scoring of belonging in same cluster for the function metadata pair.
-	}
 	var candidates []scoredPair
-	pairScores := make(map[pairKey]float64, len(totalPairs))
+	pairScores := make(map[pairKey]float64, len(sharedCounts))
 
-	for pk, cnt := range totalPairs {
+	for pk, cnt := range sharedCounts {
 		// adaptive minimum: require ≥2 shared trigrams when both functions have
 		// enough trigrams to be discriminating; 1 is sufficient for short seqs.
 		minShared := 1
@@ -125,7 +140,7 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 			continue
 		}
 
-		// identical sequence → seqSim = 1.0, no edit distance needed
+		// identical sequence → seqSim = 1.0, no edit distance needed.
 		var seqS float64
 		if keys[pk.i] == keys[pk.j] {
 			seqS = 1.0
@@ -145,10 +160,6 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		callS := jaccard(callSets[pk.i], callSets[pk.j])
 		score := 0.5*seqS + 0.3*impS + 0.2*callS
 
-		// only pairs above threshold enter the sort and the complete-linkage
-		// lookup. Missing entries in pairScores are treated as 0 by the merge
-		// check, which is correct — if a pair was never a candidate it cannot
-		// bridge two clusters.
 		if score < identifyThreshold {
 			continue
 		}
@@ -157,17 +168,23 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		pairScores[pk] = score
 	}
 
-	// sort descending so we process highest-confidence merges first
+	// sort descending so we process highest-confidence merges first.
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].score > candidates[j].score
 	})
 
-	// ── Step 4: complete-linkage agglomerative clustering ────────────────────
-	parent := make([]int, totalFuncs)
+	return candidates, pairScores
+}
+
+// agglomerate runs complete-linkage agglomerative clustering over the scored
+// pairs using Union-Find for efficient membership tracking.
+// Returns clusterMembers: root index → all member indices in that cluster.
+func agglomerate(fns []ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64) map[int][]int {
+	parent := make([]int, len(fns))
 	for i := range parent {
 		parent[i] = i
 	}
-	clusterMembers := make(map[int][]int, totalFuncs)
+	clusterMembers := make(map[int][]int, len(fns))
 	for i := range fns {
 		clusterMembers[i] = []int{i}
 	}
@@ -191,33 +208,12 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 			continue // already in the same cluster
 		}
 
-		membA := clusterMembers[ri]
-		membB := clusterMembers[rj]
-
-		// complete-linkage gate: every cross-cluster pair must exceed threshold.
-		// check if functions in clusterA needs to be merged with cluster B
-		canMerge := true
-	outer:
-		for _, a := range membA {
-			for _, b := range membB {
-				i, j := a, b
-				// this ensures we look up always (x,y) where x<y, since our pairScores are created in that order.
-				if i > j {
-					i, j = j, i
-				}
-				s, ok := pairScores[pairKey{i, j}]
-				if !ok || s < identifyThreshold {
-					canMerge = false
-					break outer
-				}
-			}
-		}
-		if !canMerge {
+		if !completeLinkageCheck(clusterMembers[ri], clusterMembers[rj], pairScores) {
 			continue
 		}
 
-		// merge smaller group into larger to keep clusterMembers lookups cheap
-		if len(membA) < len(membB) {
+		// merge smaller group into larger to keep clusterMembers lookups cheap.
+		if len(clusterMembers[ri]) < len(clusterMembers[rj]) {
 			ri, rj = rj, ri
 		}
 		parent[rj] = ri
@@ -225,8 +221,34 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		delete(clusterMembers, rj)
 	}
 
-	// ── Step 5: build cluster objects, drop singletons and stop-words ─────────
+	return clusterMembers
+}
+
+// completeLinkageCheck returns true only when every cross-cluster pair (a, b)
+// has a recorded score above identifyThreshold. A missing pair is treated as
+// score 0 — if two functions were never candidates they cannot bridge clusters.
+func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64) bool {
+	for _, a := range membA {
+		for _, b := range membB {
+			i, j := a, b
+			if i > j {
+				i, j = j, i // normalise to (smaller, larger) to match pairScores key order
+			}
+			s, ok := pairScores[pairKey{i, j}]
+			if !ok || s < identifyThreshold {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// buildClusters converts raw cluster membership data into Cluster objects.
+// Filters out singletons, structural stop-words, test clusters, and init clusters.
+// Disambiguates ShapeHash collisions and sorts by size descending.
+func buildClusters(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64) []ds.Cluster {
 	var clusters []ds.Cluster
+
 	for _, idxs := range clusterMembers {
 		if len(idxs) < identifyMinSize {
 			continue
@@ -239,49 +261,60 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		for k, idx := range idxs {
 			metas[k] = fns[idx]
 		}
+
 		// ignore clusters formed due to scanning any test files.
-		if isTestingCluster(metas) {
-			continue
-		}
 		// init function in golang are ignored, typically come up with best coherence
 		// but hardly identifies any meaningful pattern. so we drop them.
 		// TODO might be users discretions.
-		if isInitCluster(metas) {
+		if isTestingCluster(metas) || isInitCluster(metas) {
 			continue
 		}
 
-		// representative token sequence: most frequent among members.
-		// Members may have slightly different sequences (merged via near-identity)
-		// so we pick the modal sequence rather than assuming they all match.
-		seqFreq := make(map[string]int)
-		seqForKey := make(map[string][]int)
-		for _, m := range metas {
-			k := seqKey(m.TokenSeq)
-			seqFreq[k]++
-			seqForKey[k] = m.TokenSeq
-		}
-		bestKey := ""
-		for k, cnt := range seqFreq {
-			if bestKey == "" || cnt > seqFreq[bestKey] {
-				bestKey = k
-			}
-		}
-
-		c := ds.Cluster{
-			SeqKey:    bestKey,
-			ShapeHash: shapeHash(bestKey),
-			TokenSeq:  seqForKey[bestKey],
-			Members:   metas,
-			Size:      len(metas),
-		}
-		c.Profile = computeProfile(metas)
-		c.Coherence = computeCoherence(metas)
-		c.CallCoherence = computeCallCoherence(metas)
-		clusters = append(clusters, c)
+		clusters = append(clusters, assembleCluster(metas))
 	}
 
-	// disambiguate ShapeHash collisions: two groups with the same modal sequence
-	// get a numeric suffix so DB keys remain unique.
+	disambiguateShapeHashes(clusters)
+
+	sort.Slice(clusters, func(i, j int) bool {
+		return clusters[i].Size > clusters[j].Size
+	})
+	return clusters
+}
+
+// assembleCluster builds a single Cluster value from its member FunctionMeta slice.
+// Picks the modal token sequence as the cluster representative — members may have
+// slightly different sequences when merged via near-identity.
+func assembleCluster(metas []ds.FunctionMeta) ds.Cluster {
+	seqFreq := make(map[string]int)
+	seqForKey := make(map[string][]int)
+	for _, m := range metas {
+		k := seqKey(m.TokenSeq)
+		seqFreq[k]++
+		seqForKey[k] = m.TokenSeq
+	}
+	bestKey := ""
+	for k, cnt := range seqFreq {
+		if bestKey == "" || cnt > seqFreq[bestKey] {
+			bestKey = k
+		}
+	}
+
+	c := ds.Cluster{
+		SeqKey:    bestKey,
+		ShapeHash: shapeHash(bestKey),
+		TokenSeq:  seqForKey[bestKey],
+		Members:   metas,
+		Size:      len(metas),
+	}
+	c.Profile = computeProfile(metas)
+	c.Coherence = computeCoherence(metas)
+	c.CallCoherence = computeCallCoherence(metas)
+	return c
+}
+
+// disambiguateShapeHashes appends a numeric suffix to ShapeHash when two clusters
+// share the same modal token sequence, keeping DB keys unique across runs.
+func disambiguateShapeHashes(clusters []ds.Cluster) {
 	hashCount := make(map[string]int)
 	for i := range clusters {
 		h := clusters[i].ShapeHash
@@ -290,11 +323,6 @@ func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
 		}
 		hashCount[h]++
 	}
-
-	sort.Slice(clusters, func(i, j int) bool {
-		return clusters[i].Size > clusters[j].Size
-	})
-	return clusters
 }
 
 // toStringSet converts a string slice to a set map for Jaccard computation.
