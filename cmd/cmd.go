@@ -29,11 +29,6 @@ var (
 	_ command   = (*indexPersistor)(nil)
 	_ skippable = (*indexPersistor)(nil)
 	_ command   = (*beatsLabelWriter)(nil)
-	_ command   = (*memberScorer)(nil)
-	_ command   = (*memberScoreWriter)(nil)
-	_ skippable = (*memberScoreWriter)(nil)
-	_ command   = (*memberScorePersistor)(nil)
-	_ skippable = (*memberScorePersistor)(nil)
 	_ command   = (*identifyCluster)(nil)
 	_ command   = (*identifyClusterPersistor)(nil)
 	_ skippable = (*identifyClusterPersistor)(nil)
@@ -240,55 +235,6 @@ func (b *beatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo stri
 	defer f.Close() //nolint:errcheck
 	return ast.WriteClusters(f, repo, cls)
 }
-
-func (m *memberScorer) execute() error {
-	m.state.MemberScores = ast.ComputeMemberScores(m.state.CollapsedCluster)
-	slog.Info("member scores computed", slog.Int("count", len(m.state.MemberScores)))
-	return nil
-}
-
-func (m *memberScoreWriter) execute() error {
-	tmp := filepath.Join(os.TempDir(), "memberScore", uuid.NewString(), filepath.Base(m.state.RepositoryPath), "member_score.json")
-	if err := os.MkdirAll(filepath.Dir(tmp), 0755); err != nil {
-		return err
-	}
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	defer f.Close() //nolint:errcheck
-	enc := json.NewEncoder(f)
-	for _, ms := range m.state.MemberScores {
-		if err := enc.Encode(ms); err != nil {
-			slog.Error("unable to write member score", slog.String("path", tmp))
-			return err
-		}
-	}
-	slog.Info("member scores written", slog.String("path", tmp))
-	return nil
-}
-
-func (m *memberScoreWriter) skipInDryRun() bool { return true }
-
-func (m *memberScorePersistor) execute() error {
-	tmp := filepath.Join(os.TempDir(), "badger", m.state.RepositoryPath)
-	bDb := db.NewDb(tmp)
-	defer bDb.Close() //nolint:errcheck
-	for _, ms := range m.state.MemberScores {
-		if err := bDb.StoreMemberScore(ms.FunctionID, ms); err != nil {
-			slog.Error("unable to save member score",
-				slog.String("function_id", ms.FunctionID),
-				slog.Any("error", err),
-			)
-			return err
-		}
-	}
-	slog.Info("member scores persisted", slog.Int("count", len(m.state.MemberScores)))
-	return nil
-}
-
-func (m *memberScorePersistor) skipInDryRun() bool { return true }
-
 func (a *analyzer) execute() error {
 	return runAnalyze(a.state.RepositoryPath)
 }
@@ -381,11 +327,6 @@ func getCommands(s *State) []command {
 		&indexCommand{state: s},
 		&indexMetadataWriter{state: s},
 		&indexPersistor{state: s},
-		// TODO membership scoring is brittle at the moment.
-		// &memberScorer{state: s},
-		// &memberScoreWriter{state: s},
-		// &memberScorePersistor{state: s},
-		// &beatsLabelWriter{state: s},
 		&analyzer{state: s},
 	}
 }
