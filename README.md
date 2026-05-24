@@ -2,6 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/somak2kai/beats)](https://goreportcard.com/report/github.com/somak2kai/beats)
 [![GitHub release](https://img.shields.io/github/v/release/somak2kai/beats?sort=semver)](https://github.com/somak2kai/beats/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Sample Reports](https://img.shields.io/badge/Sample%20Reports-→-4a7fc1)](https://somak2kai.github.io/beats/)
 
 ---
 
