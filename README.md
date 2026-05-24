@@ -15,6 +15,8 @@
 > Measure the structural fingerprint of a Go codebase.
 
 beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, domain vocabulary or semantic meaning. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
+
+📖 [Read the full story on Medium →](https://medium.com/@somaktukai/structural-fingerprint-for-golang-repositories-a-case-study-ae560bafec84)
 <br>
 
 > Why beats
