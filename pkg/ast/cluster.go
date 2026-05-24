@@ -53,11 +53,10 @@ type scoredPair struct {
 // clusters from ever forming.
 //
 // Algorithm:
-//  1. Build a trigram map from each function's TokenSeqHash (Rabin-Karp sliding
-//     window hashes). Functions sharing a trigram are structural candidates.
+//  1. Build a trigram map from each function's TokenSeqHash. Functions sharing a trigram are structural candidates.
 //  2. For each candidate pair, compute the combined score. Fast-reject pairs
 //     with seqSim < 0.40 before touching import/call sets.
-//  3. Complete-linkage agglomerative clustering at identifyThreshold: two groups
+//  3. Perform simple union find algoritm to define member and agglomerative clustering at identifyThreshold: two groups
 //     merge only when every cross-group pair exceeds the threshold, preventing
 //     chaining artefacts.
 //  4. Drop clusters below identifyMinSize and structural stop-words (≥ 5% of
@@ -82,6 +81,9 @@ func buildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
 	trigramMap := make(map[int64][]int, len(fns))
 	for i, fn := range fns {
 		if len(fn.TokenSeq) < minTokenSeqLen {
+			continue
+		}
+		if fn.GeneratedCode { // ignored auto generated code gen.
 			continue
 		}
 		for _, h := range fn.TokenSeqHash {

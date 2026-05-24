@@ -45,6 +45,7 @@ type FunctionMeta struct {
 	CallTargets   []string
 	Imports       []string // packages imported by the file this function lives in
 	DirectImports []string // packages this function actually references (subset)
+	GeneratedCode bool
 }
 
 type StructuralFeatures struct {

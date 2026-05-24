@@ -48,9 +48,6 @@ type functionMetadataWriter struct{ state *State }
 type indexMetadataWriter struct{ state *State }
 type indexPersistor struct{ state *State }
 type beatsLabelWriter struct{ state *State }
-type memberScorer struct{ state *State }
-type memberScoreWriter struct{ state *State }
-type memberScorePersistor struct{ state *State }
 type identifyCluster struct{ state *State }
 type identifyClusterPersistor struct{ state *State }
 type identifyClusterWriter struct{ state *State }

@@ -34,13 +34,14 @@ const (
 
 func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, f.Path, nil, parser.AllErrors)
+	file, err := parser.ParseFile(fset, f.Path, nil, parser.AllErrors|parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
 	imports := extractImports(file)
 	aliasMap := buildImportAliasMap(file)
+	isGeneratedCode := isGeneratedCode(file)
 
 	funcs := make([]ds.FunctionMeta, 0)
 
@@ -72,11 +73,23 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 			Imports:       imports,
 			CallTargets:   extractCallTargets(fn, aliasMap),
 			DirectImports: extractDirectImports(fn, aliasMap),
+			GeneratedCode: isGeneratedCode,
 		})
 		return true
 	})
 
 	return funcs, nil
+}
+
+func isGeneratedCode(file *ast.File) bool {
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, "// Code generated") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func extractImports(file *ast.File) []string {
