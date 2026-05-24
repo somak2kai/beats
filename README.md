@@ -19,6 +19,8 @@ beats clusters Go functions by the **skeleton of how they are written** — inde
 
 > Why beats
 
+Every codebase has a rhythm — recurring structural patterns that developers fall into without naming them. Beats finds that pulse. When the rhythm is steady, you have convention. When it's irregular, you have cognitive load.
+
 Well the original idea was to evaluate congnitive load of a piece of code. I generally believe, cognitive load in a codebase isn't caused by complexity alone, it's caused by unexplained structural variance. When every function that does X looks different, your brain can't build a model. Beats finds where the variance is and where it isn't.
 
 ### Reports from sample OSS repositories
