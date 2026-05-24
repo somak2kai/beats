@@ -69,7 +69,7 @@ The output is *N* clusters, each with a **coherence value** — a measure of how
 ### Install via Homebrew (macOS / Linux)
 
 ```bash
-brew tap somak2kai/beats
+brew tap somak2kai/tap
 brew install beats
 ```
 
