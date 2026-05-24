@@ -78,13 +78,7 @@ func runAnalyze(repo string) error {
 
 	slog.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
-	var corpusSize int
-	if err := bDb.Load("meta:corpus_size", &corpusSize); err != nil {
-		// non-fatal: index predates corpus_size storage; fall back to 0
-		slog.Warn("corpus size not found in index (re-run beats init to populate)", slog.Any("error", err))
-	}
-
-	report := buildReport(repo, clusters, corpusSize)
+	report := buildReport(repo, clusters)
 
 	beatsDir := filepath.Join(repo, ".beats")
 	if err := os.MkdirAll(beatsDir, 0755); err != nil {
@@ -147,7 +141,7 @@ func buildClusterRow(c ds.Cluster) ClusterRow {
 	}
 }
 
-func buildReport(repo string, clusters []ds.Cluster, corpusSize int) RepoReport {
+func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 	rows := make([]ClusterRow, 0, len(clusters))
 	var totalCoherence, totalCallCoherence float64
 	var functionsInClusters int
@@ -197,7 +191,6 @@ func buildReport(repo string, clusters []ds.Cluster, corpusSize int) RepoReport 
 		GeneratedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		TotalClusters:       n,
 		FunctionsInClusters: functionsInClusters,
-		CorpusSize:          corpusSize,
 		MeanCoherence:       meanCoherence,
 		MeanCallCoherence:   meanCallCoherence,
 		QuadHH:              quadHH,
