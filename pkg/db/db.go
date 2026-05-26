@@ -102,28 +102,6 @@ func gobEncode(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func gobDecode(data []byte, v any) error {
-	buf := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buf)
-	return dec.Decode(v)
-}
-
-// LoadCluster retrieves a single cluster by tier and shapeHash.
-func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
-	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
-	var c ds.Cluster
-	err := d.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return err
-		}
-		return item.Value(func(val []byte) error {
-			return gobDecode(val, &c)
-		})
-	})
-	return c, err
-}
-
 // ScanClusters returns all clusters stored under the given tier prefix.
 func (d *BadgerXDb) ScanClusters(tier string) ([]ds.Cluster, error) {
 	prefix := []byte(fmt.Sprintf("cluster:%s:", tier))
