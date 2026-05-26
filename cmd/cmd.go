@@ -177,7 +177,7 @@ func (w *indexMetadataWriter) skipInDryRun() bool {
 func (w *indexPersistor) execute() error {
 
 	tmp := filepath.Join(os.TempDir(), "badger", w.state.RepositoryPath)
-	bDb := db.NewDb(tmp)
+	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 	for k, v := range w.state.Index.Postings {
 		if err := bDb.StorePostings(k, v); err != nil {
@@ -246,7 +246,7 @@ func (c *identifyCluster) execute() error {
 
 func (c *identifyClusterPersistor) execute() error {
 	tmp := filepath.Join(os.TempDir(), "badger", c.state.RepositoryPath)
-	bDb := db.NewDb(tmp)
+	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
 	for _, cl := range c.state.IdentifiedCluster {

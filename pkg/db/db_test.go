@@ -174,53 +174,6 @@ func TestStoreCluster_DifferentTiersSameHash(t *testing.T) {
 	}
 }
 
-// ── StoreMemberScore / LoadMemberScore ────────────────────────────────────────
-
-func TestStoreLoadMemberScore_RoundTrip(t *testing.T) {
-	bdb := newTestDb(t)
-	ms := ds.MemberScore{
-		FunctionID: "fn-001",
-		Package:    "mypkg",
-		Name:       "MyFunc",
-		WinnerID:   "cluster-abc",
-		Entropy:    0.42,
-		Probs:      map[string]float64{"cluster-abc": 0.9, "cluster-xyz": 0.1},
-	}
-	if err := bdb.StoreMemberScore("fn-001", ms); err != nil {
-		t.Fatalf("StoreMemberScore: %v", err)
-	}
-	got, err := bdb.LoadMemberScore("fn-001")
-	if err != nil {
-		t.Fatalf("LoadMemberScore: %v", err)
-	}
-	if got.FunctionID != ms.FunctionID {
-		t.Errorf("FunctionID: want %q, got %q", ms.FunctionID, got.FunctionID)
-	}
-	if got.WinnerID != ms.WinnerID {
-		t.Errorf("WinnerID: want %q, got %q", ms.WinnerID, got.WinnerID)
-	}
-	if absF(got.Entropy-ms.Entropy) > 1e-9 {
-		t.Errorf("Entropy: want %f, got %f", ms.Entropy, got.Entropy)
-	}
-	if len(got.Probs) != len(ms.Probs) {
-		t.Errorf("Probs count: want %d, got %d", len(ms.Probs), len(got.Probs))
-	}
-}
-
-func TestLoadMemberScore_MissingKeyReturnsError(t *testing.T) {
-	bdb := newTestDb(t)
-	if _, err := bdb.LoadMemberScore("ghost"); err == nil {
-		t.Fatal("expected error for missing MemberScore key, got nil")
-	}
-}
-
-func absF(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // ── StorePostings ─────────────────────────────────────────────────────────────
 
 func TestStorePostings_NoError(t *testing.T) {

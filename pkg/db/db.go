@@ -8,6 +8,7 @@ import (
 	"log"
 
 	badger "github.com/dgraph-io/badger/v4"
+	badgerx "github.com/somak2kai/badgerx"
 	ds "github.com/somak2kai/beats/pkg/types"
 )
 
@@ -22,11 +23,15 @@ type BadgerDb struct {
 	db   *badger.DB
 	path string
 }
+type BadgerXDb struct {
+	db *badgerx.BadgerXDb
+}
 
 func NewDb(path string) *BadgerDb {
 	opts := badger.
 		DefaultOptions(path).
-		WithValueLogFileSize(128 << 20) // 128MB instead of default 2GB pre-allocation
+		WithValueLogFileSize(128 << 20). // 128MB instead of default 2GB pre-allocation
+		WithLoggingLevel(badger.ERROR)
 	db, err := badger.Open(opts)
 	if err != nil {
 		log.Fatal(err)
@@ -34,7 +39,23 @@ func NewDb(path string) *BadgerDb {
 	return &BadgerDb{db: db, path: path}
 }
 
+func NewBadgerXDb(path string) *BadgerXDb {
+	opts := badger.
+		DefaultOptions(path).
+		WithValueLogFileSize(128 << 20). // 128MB instead of default 2GB pre-allocation
+		WithLoggingLevel(badger.ERROR)
+	db, err := badger.Open(opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &BadgerXDb{badgerx.NewBadgerXDb(db, badgerx.WithCompressor(&badgerx.DefaultNoOpCompressor{}))}
+}
+
 func (d *BadgerDb) Close() error {
+	return d.db.Close()
+}
+
+func (d *BadgerXDb) Close() error {
 	return d.db.Close()
 }
 
@@ -69,6 +90,34 @@ func (d *BadgerDb) StoreFunctionMeta(id string, fn ds.FunctionMeta) error {
 	return d.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, val)
 	})
+}
+
+func (d *BadgerXDb) StoreFunctionMeta(id string, fn ds.FunctionMeta) error {
+	key := append([]byte("fncId:"), []byte(id)...)
+	return d.db.Update(key, fn)
+}
+
+func (d *BadgerXDb) StorePostings(hash int64, fnId []string) error {
+	key := append([]byte("post:"), int64ToBytes(hash)...)
+	return d.db.Update(key, fnId)
+}
+
+func (d *BadgerXDb) StoreDocFreq(hash int64, count int) error {
+	key := append([]byte("freq:"), int64ToBytes(hash)...)
+	return d.db.Update(key, count)
+}
+
+func (d *BadgerXDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
+	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
+	return d.db.Update([]byte(key), c)
+}
+
+// LoadCluster retrieves a single cluster by tier and shapeHash.
+func (d *BadgerXDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
+	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
+	var c ds.Cluster
+	err := d.db.View([]byte(key), c)
+	return c, err
 }
 
 func (d *BadgerDb) StorePostings(hash int64, fnId []string) error {
@@ -143,34 +192,6 @@ func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
 		})
 	})
 	return c, err
-}
-
-// StoreMemberScore persists a MemberScore under key score:<functionID>.
-func (d *BadgerDb) StoreMemberScore(id string, ms ds.MemberScore) error {
-	key := fmt.Sprintf("score:%s", id)
-	val, err := gobEncode(ms)
-	if err != nil {
-		return fmt.Errorf("encode member score %s: %w", id, err)
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(key), val)
-	})
-}
-
-// LoadMemberScore retrieves a MemberScore by functionID.
-func (d *BadgerDb) LoadMemberScore(id string) (ds.MemberScore, error) {
-	key := fmt.Sprintf("score:%s", id)
-	var ms ds.MemberScore
-	err := d.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return err
-		}
-		return item.Value(func(val []byte) error {
-			return gobDecode(val, &ms)
-		})
-	})
-	return ms, err
 }
 
 // ScanClusters returns all clusters stored under the given tier prefix.

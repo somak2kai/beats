@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/dgraph-io/badger/v4 v4.9.1
+	github.com/somak2kai/badgerx v0.1.1
 	github.com/sourcegraph/scip v0.5.2
 	golang.org/x/sync v0.20.0
 )
