@@ -53,7 +53,7 @@ func badgerPathForRepo(repoPath string) string {
 // stored under the TierIdentified prefix.
 func loadClustersFromBadger(repoPath string) ([]ds.Cluster, error) {
 	dbPath := badgerPathForRepo(repoPath)
-	bdb := db.NewDb(dbPath)
+	bdb := db.NewBadgerXDb(dbPath)
 	defer bdb.Close() //nolint:errcheck
 	clusters, err := bdb.ScanClusters(db.TierIdentified)
 	if err != nil {

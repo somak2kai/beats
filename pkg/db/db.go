@@ -59,39 +59,6 @@ func (d *BadgerXDb) Close() error {
 	return d.db.Close()
 }
 
-func (d *BadgerDb) Save(key string, v any) error {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(v); err != nil {
-		return err
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(key), buf.Bytes())
-	})
-}
-
-func (d *BadgerDb) Load(key string, dst any) error {
-	return d.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return err
-		}
-		return item.Value(func(val []byte) error {
-			return gobDecode(val, dst)
-		})
-	})
-}
-func (d *BadgerDb) StoreFunctionMeta(id string, fn ds.FunctionMeta) error {
-	key := append([]byte("fncId:"), []byte(id)...)
-	val, err := gobEncode(fn)
-	if err != nil {
-		log.Fatal("unable to save function meta", err)
-		return err
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, val)
-	})
-}
-
 func (d *BadgerXDb) StoreFunctionMeta(id string, fn ds.FunctionMeta) error {
 	key := append([]byte("fncId:"), []byte(id)...)
 	return d.db.Update(key, fn)
@@ -116,32 +83,8 @@ func (d *BadgerXDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
 func (d *BadgerXDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
 	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
 	var c ds.Cluster
-	err := d.db.View([]byte(key), c)
+	err := d.db.View([]byte(key), &c)
 	return c, err
-}
-
-func (d *BadgerDb) StorePostings(hash int64, fnId []string) error {
-	key := append([]byte("post:"), int64ToBytes(hash)...)
-	val, err := gobEncode(fnId)
-	if err != nil {
-		log.Fatal("unable to save document inverted index", err)
-		return err
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, val)
-	})
-}
-
-func (d *BadgerDb) StoreDocFreq(hash int64, count int) error {
-	key := append([]byte("freq:"), int64ToBytes(hash)...)
-	val, err := gobEncode(count)
-	if err != nil {
-		log.Fatal("unable to save document frequency", err)
-		return err
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, val)
-	})
 }
 
 func int64ToBytes(hash int64) []byte {
@@ -165,19 +108,6 @@ func gobDecode(data []byte, v any) error {
 	return dec.Decode(v)
 }
 
-// StoreCluster persists a cluster under the given tier prefix.
-// Key format: cluster:<tier>:<shapeHash>
-func (d *BadgerDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
-	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
-	val, err := gobEncode(c)
-	if err != nil {
-		return fmt.Errorf("encode cluster %s/%s: %w", tier, shapeHash, err)
-	}
-	return d.db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(key), val)
-	})
-}
-
 // LoadCluster retrieves a single cluster by tier and shapeHash.
 func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
 	key := fmt.Sprintf("cluster:%s:%s", tier, shapeHash)
@@ -195,23 +125,15 @@ func (d *BadgerDb) LoadCluster(tier, shapeHash string) (ds.Cluster, error) {
 }
 
 // ScanClusters returns all clusters stored under the given tier prefix.
-func (d *BadgerDb) ScanClusters(tier string) ([]ds.Cluster, error) {
+func (d *BadgerXDb) ScanClusters(tier string) ([]ds.Cluster, error) {
 	prefix := []byte(fmt.Sprintf("cluster:%s:", tier))
 	var clusters []ds.Cluster
-	err := d.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.Prefix = prefix
-		it := txn.NewIterator(opts)
-		defer it.Close()
-		for it.Rewind(); it.Valid(); it.Next() {
-			var c ds.Cluster
-			if err := it.Item().Value(func(val []byte) error {
-				return gobDecode(val, &c)
-			}); err != nil {
-				return err
-			}
-			clusters = append(clusters, c)
+	err := d.db.IterateView(prefix, badger.DefaultIteratorOptions, func(decode badgerx.DecodeFunc) error {
+		var c ds.Cluster
+		if err := decode(&c); err != nil {
+			return err
 		}
+		clusters = append(clusters, c)
 		return nil
 	})
 	return clusters, err

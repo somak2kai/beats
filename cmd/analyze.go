@@ -55,7 +55,7 @@ type RepoReport struct {
 
 func runAnalyze(repo string) error {
 	dbPath := filepath.Join(os.TempDir(), "badger", repo)
-	bDb := db.NewDb(dbPath)
+	bDb := db.NewBadgerXDb(dbPath)
 	defer bDb.Close() //nolint:errcheck
 
 	// prefer the single-pass identified tier; fall back to collapsed for indexes

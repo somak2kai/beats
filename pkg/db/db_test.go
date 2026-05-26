@@ -4,67 +4,22 @@ import (
 	"testing"
 
 	badger "github.com/dgraph-io/badger/v4"
+	badgerx "github.com/somak2kai/badgerx"
 	ds "github.com/somak2kai/beats/pkg/types"
 )
 
-// newTestDb opens a real BadgerDB in the test's temp directory and registers a
+// newTestDb opens a real BadgerXDb in the test's temp directory and registers a
 // cleanup to close it when the test finishes.
-func newTestDb(t *testing.T) *BadgerDb {
+func newTestDb(t *testing.T) *BadgerXDb {
 	t.Helper()
 	opts := badger.DefaultOptions(t.TempDir()).WithLogger(nil)
 	raw, err := badger.Open(opts)
 	if err != nil {
-		t.Fatalf("open test BadgerDB: %v", err)
+		t.Fatalf("open test BadgerXDb: %v", err)
 	}
-	t.Cleanup(func() { _ = raw.Close() })
-	return &BadgerDb{db: raw}
-}
-
-// ── Save / Load ───────────────────────────────────────────────────────────────
-
-func TestSaveLoad_RoundTrip(t *testing.T) {
-	type payload struct {
-		X int
-		S string
-	}
-	want := payload{X: 42, S: "hello"}
-	bdb := newTestDb(t)
-
-	if err := bdb.Save("mykey", want); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	var got payload
-	if err := bdb.Load("mykey", &got); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got != want {
-		t.Fatalf("round-trip mismatch: want %+v, got %+v", want, got)
-	}
-}
-
-func TestSaveLoad_OverwritesExistingKey(t *testing.T) {
-	bdb := newTestDb(t)
-	if err := bdb.Save("k", 1); err != nil {
-		t.Fatalf("Save first: %v", err)
-	}
-	if err := bdb.Save("k", 99); err != nil {
-		t.Fatalf("Save second: %v", err)
-	}
-	var got int
-	if err := bdb.Load("k", &got); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got != 99 {
-		t.Fatalf("expected 99 after overwrite, got %d", got)
-	}
-}
-
-func TestLoad_MissingKeyReturnsError(t *testing.T) {
-	bdb := newTestDb(t)
-	var v int
-	if err := bdb.Load("does-not-exist", &v); err == nil {
-		t.Fatal("expected error for missing key, got nil")
-	}
+	xdb := badgerx.NewBadgerXDb(raw, badgerx.WithCompressor(&badgerx.DefaultNoOpCompressor{}))
+	t.Cleanup(func() { _ = xdb.Close() })
+	return &BadgerXDb{db: xdb}
 }
 
 // ── StoreFunctionMeta ─────────────────────────────────────────────────────────
@@ -86,10 +41,10 @@ func TestStoreFunctionMeta_RoundTrip(t *testing.T) {
 		t.Fatalf("StoreFunctionMeta: %v", err)
 	}
 
-	// Load through the generic Load — key prefix matches StoreFunctionMeta's format.
 	var got ds.FunctionMeta
-	if err := bdb.Load("fncId:fn-001", &got); err != nil {
-		t.Fatalf("Load FunctionMeta: %v", err)
+	key := append([]byte("fncId:"), []byte("fn-001")...)
+	if err := bdb.db.View(key, &got); err != nil {
+		t.Fatalf("View FunctionMeta: %v", err)
 	}
 	if got.Name != fn.Name {
 		t.Errorf("Name: want %q, got %q", fn.Name, got.Name)
@@ -184,17 +139,16 @@ func TestStorePostings_NoError(t *testing.T) {
 	}
 }
 
-func TestStorePostings_RoundTripViaLoad(t *testing.T) {
+func TestStorePostings_RoundTrip(t *testing.T) {
 	bdb := newTestDb(t)
 	ids := []string{"fn-001", "fn-002"}
 	if err := bdb.StorePostings(99, ids); err != nil {
 		t.Fatalf("StorePostings: %v", err)
 	}
-	// Key format mirrors StorePostings: "post:" + big-endian int64 bytes.
-	key := string(append([]byte("post:"), int64ToBytes(99)...))
+	key := append([]byte("post:"), int64ToBytes(99)...)
 	var got []string
-	if err := bdb.Load(key, &got); err != nil {
-		t.Fatalf("Load postings: %v", err)
+	if err := bdb.db.View(key, &got); err != nil {
+		t.Fatalf("View postings: %v", err)
 	}
 	if len(got) != len(ids) {
 		t.Fatalf("expected %d posting ids, got %d", len(ids), len(got))
@@ -210,15 +164,15 @@ func TestStoreDocFreq_NoError(t *testing.T) {
 	}
 }
 
-func TestStoreDocFreq_RoundTripViaLoad(t *testing.T) {
+func TestStoreDocFreq_RoundTrip(t *testing.T) {
 	bdb := newTestDb(t)
 	if err := bdb.StoreDocFreq(88888, 17); err != nil {
 		t.Fatalf("StoreDocFreq: %v", err)
 	}
-	key := string(append([]byte("freq:"), int64ToBytes(88888)...))
+	key := append([]byte("freq:"), int64ToBytes(88888)...)
 	var got int
-	if err := bdb.Load(key, &got); err != nil {
-		t.Fatalf("Load docfreq: %v", err)
+	if err := bdb.db.View(key, &got); err != nil {
+		t.Fatalf("View docfreq: %v", err)
 	}
 	if got != 17 {
 		t.Fatalf("expected freq=17, got %d", got)
