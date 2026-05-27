@@ -1,9 +1,7 @@
 package db
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
 	"log"
 
@@ -91,15 +89,6 @@ func int64ToBytes(hash int64) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, uint64(hash))
 	return b
-}
-
-func gobEncode(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 // ScanClusters returns all clusters stored under the given tier prefix.
