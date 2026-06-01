@@ -151,19 +151,14 @@ func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPa
 			if seqS < 0.40 {
 				continue // fast reject — structurally too different
 			}
-			// upper bound: even perfect import+call Jaccard gives 0.5×seqS + 0.5.
-			// if that ceiling is below threshold, skip the Jaccard work entirely.
-			if 0.5*seqS+0.5 < identifyThreshold {
-				continue
-			}
 		}
 
 		impS := jaccard(importSets[pk.i], importSets[pk.j])
 		callS := jaccard(callSets[pk.i], callSets[pk.j])
-		score := 0.5*seqS + 0.3*impS + 0.2*callS
+		score := math.Cbrt(seqS * impS * callS)
 
 		if score < identifyThreshold {
-			continue
+			continue // pre-filter: no point passing to agglomerate if completeLinkageCheck would reject it anyway
 		}
 
 		candidates = append(candidates, scoredPair{pk.i, pk.j, score})
