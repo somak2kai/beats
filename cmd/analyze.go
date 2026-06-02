@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/somak2kai/beats/pkg/ast"
 	"github.com/somak2kai/beats/pkg/db"
 	ds "github.com/somak2kai/beats/pkg/types"
 )
@@ -17,23 +18,25 @@ import (
 // ── report data structures ────────────────────────────────────────────────────
 
 type MemberRow struct {
-	Package  string
-	Name     string
-	FilePath string // full path
-	Line     int
+	Package       string
+	Name          string
+	FilePath      string // full path
+	Line          int
+	PairwiseScore float64 // mean ∛(seqS×impS×callS) against all other cluster members
 }
 
 type ClusterRow struct {
-	ShapeHash     string
-	Label         string
-	Size          int
-	Coherence     float64 // mean pairwise Jaccard of DirectImports
-	CallCoherence float64 // mean pairwise Jaccard of CallTargets
-	CycloP95      float64
-	CycloMean     float64
-	TopImports    []string
-	Packages      []string    // unique package names, sorted
-	Members       []MemberRow // sorted by package then name
+	ShapeHash        string
+	Label            string
+	CommonShape      string  // human-readable LCS of all member token sequences
+	AvgPairwiseScore float64 // mean cbrt score across all member pairs
+	Size             int
+	Coherence        float64  // mean pairwise Jaccard of DirectImports
+	CallCoherence    float64  // mean pairwise Jaccard of CallTargets
+	CycloMean        float64
+	TopImports       []string
+	Packages         []string    // unique package names, sorted
+	Members          []MemberRow // sorted by descending pairwise score
 }
 
 type RepoReport struct {
@@ -44,11 +47,12 @@ type RepoReport struct {
 	CorpusSize          int          // total functions analysed (including those not in any cluster)
 	MeanCoherence       float64      // mean import Jaccard across clusters
 	MeanCallCoherence   float64      // mean call target Jaccard across clusters
+	MeanAvgScore        float64      // mean avg pairwise cbrt score across clusters
 	QuadHH              int          // import >= 0.60 AND call >= 0.60
 	QuadHL              int          // import >= 0.60 AND call <  0.60
 	QuadLH              int          // import <  0.60 AND call >= 0.60
 	QuadLL              int          // import <  0.60 AND call <  0.60
-	Clusters            []ClusterRow // sorted by combined coherence desc
+	Clusters            []ClusterRow // sorted by avg pairwise score desc
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────
@@ -103,22 +107,38 @@ func runAnalyze(repo string) error {
 // ── report builder ────────────────────────────────────────────────────────────
 
 func buildClusterRow(c ds.Cluster) ClusterRow {
+	// per-member pairwise scores — computed once, used for both sort and display
+	memberScores := ast.MemberPairwiseScores(c.Members)
+
+	// avg pairwise score = mean of per-member scores
+	var totalScore float64
+	for _, s := range memberScores {
+		totalScore += s
+	}
+	avgScore := 0.0
+	if len(memberScores) > 0 {
+		avgScore = totalScore / float64(len(memberScores))
+	}
+
+	// common token subsequence → human-readable shape
+	commonSeq := ast.CommonSubsequence(c.Members)
+	commonShape := ast.SeqString(commonSeq)
+
 	pkgSet := make(map[string]bool)
 	members := make([]MemberRow, 0, len(c.Members))
-	for _, m := range c.Members {
+	for i, m := range c.Members {
 		pkgSet[m.Package] = true
 		members = append(members, MemberRow{
-			Package:  m.Package,
-			Name:     m.Name,
-			FilePath: m.FileMeta.Path,
-			Line:     m.Start_line,
+			Package:       m.Package,
+			Name:          m.Name,
+			FilePath:      m.FileMeta.Path,
+			Line:          m.Start_line,
+			PairwiseScore: memberScores[i],
 		})
 	}
+	// sort members by pairwise score descending — most central members first
 	sort.Slice(members, func(i, j int) bool {
-		if members[i].Package != members[j].Package {
-			return members[i].Package < members[j].Package
-		}
-		return members[i].Name < members[j].Name
+		return members[i].PairwiseScore > members[j].PairwiseScore
 	})
 
 	pkgs := make([]string, 0, len(pkgSet))
@@ -128,22 +148,23 @@ func buildClusterRow(c ds.Cluster) ClusterRow {
 	sort.Strings(pkgs)
 
 	return ClusterRow{
-		ShapeHash:     c.ShapeHash,
-		Label:         c.Label,
-		Size:          c.Size,
-		Coherence:     c.Coherence,
-		CallCoherence: c.CallCoherence,
-		CycloP95:      c.Profile.CycloP95,
-		CycloMean:     c.Profile.CycloMean,
-		TopImports:    c.Profile.TopImports,
-		Packages:      pkgs,
-		Members:       members,
+		ShapeHash:        c.ShapeHash,
+		Label:            c.Label,
+		CommonShape:      commonShape,
+		AvgPairwiseScore: avgScore,
+		Size:             c.Size,
+		Coherence:        c.Coherence,
+		CallCoherence:    c.CallCoherence,
+		CycloMean:        c.Profile.CycloMean,
+		TopImports:       c.Profile.TopImports,
+		Packages:         pkgs,
+		Members:          members,
 	}
 }
 
 func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 	rows := make([]ClusterRow, 0, len(clusters))
-	var totalCoherence, totalCallCoherence float64
+	var totalCoherence, totalCallCoherence, totalAvgScore float64
 	var functionsInClusters int
 	var quadHH, quadHL, quadLH, quadLL int
 
@@ -152,6 +173,7 @@ func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 		rows = append(rows, row)
 		totalCoherence += c.Coherence
 		totalCallCoherence += c.CallCoherence
+		totalAvgScore += row.AvgPairwiseScore
 		functionsInClusters += c.Size
 
 		hiImport := c.Coherence >= 0.60
@@ -168,22 +190,21 @@ func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 		}
 	}
 
-	// default sort: combined coherence (import + call) descending, size as tiebreak.
-	// combined = (ImportJaccard + CallJaccard) / 2 — see glossary for quadrant meanings.
+	// sort by avg pairwise score descending — the most structurally coherent
+	// clusters (highest geometric mean across all member pairs) appear first.
 	sort.Slice(rows, func(i, j int) bool {
-		ci := (rows[i].Coherence + rows[i].CallCoherence) / 2
-		cj := (rows[j].Coherence + rows[j].CallCoherence) / 2
-		if ci != cj {
-			return ci > cj
+		if rows[i].AvgPairwiseScore != rows[j].AvgPairwiseScore {
+			return rows[i].AvgPairwiseScore > rows[j].AvgPairwiseScore
 		}
 		return rows[i].Size > rows[j].Size
 	})
 
 	n := len(clusters)
-	meanCoherence, meanCallCoherence := 0.0, 0.0
+	meanCoherence, meanCallCoherence, meanAvgScore := 0.0, 0.0, 0.0
 	if n > 0 {
 		meanCoherence = totalCoherence / float64(n)
 		meanCallCoherence = totalCallCoherence / float64(n)
+		meanAvgScore = totalAvgScore / float64(n)
 	}
 
 	return RepoReport{
@@ -193,6 +214,7 @@ func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 		FunctionsInClusters: functionsInClusters,
 		MeanCoherence:       meanCoherence,
 		MeanCallCoherence:   meanCallCoherence,
+		MeanAvgScore:        meanAvgScore,
 		QuadHH:              quadHH,
 		QuadHL:              quadHL,
 		QuadLH:              quadLH,
@@ -276,12 +298,52 @@ func shortPath(p string) string {
 
 // ── HTML renderer ─────────────────────────────────────────────────────────────
 
+// scoreBadgeClass returns a CSS class based on a 0–1 pairwise score.
+func scoreBadgeClass(s float64) string {
+	switch {
+	case s >= 0.75:
+		return "badge-green"
+	case s >= 0.55:
+		return "badge-yellow"
+	default:
+		return "badge-red"
+	}
+}
+
+// tokenChips renders a space-separated token string (e.g. "IF FOR RETURN")
+// as a sequence of styled chips with arrows, safe for direct HTML embedding.
+func tokenChips(shape string) template.HTML {
+	if shape == "" {
+		return template.HTML(`<span class="no-shape">no common tokens</span>`)
+	}
+	tokens := strings.Fields(shape)
+	var sb strings.Builder
+	sb.WriteString(`<span class="token-seq">`)
+	for i, t := range tokens {
+		if i > 0 {
+			sb.WriteString(`<span class="token-arrow">→</span>`)
+		}
+		sb.WriteString(`<span class="token-chip">`)
+		sb.WriteString(template.HTMLEscapeString(t))
+		sb.WriteString(`</span>`)
+	}
+	sb.WriteString(`</span>`)
+	return template.HTML(sb.String())
+}
+
+// scorePct converts a 0–1 score to an integer percentage for bar width.
+func scorePct(s float64) int { return int(s * 100) }
+
 func renderHTML(w *os.File, report RepoReport) error {
 	funcMap := template.FuncMap{
 		"badgeClass":    coherenceBadgeClass,
+		"scoreBadge":    scoreBadgeClass,
+		"tokenChips":    tokenChips,
+		"scorePct":      scorePct,
 		"pct":           pct,
 		"f2":            f2,
 		"f1":            f1,
+		"f3":            func(v float64) string { return fmt.Sprintf("%.3f", v) },
 		"joinComma":     joinComma,
 		"labelOrHash":   labelOrHash,
 		"shortPath":     shortPath,
@@ -302,165 +364,160 @@ const reportTemplate = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>beats analyze — {{.Repo}}</title>
+<title>beats — {{.Repo}}</title>
 <style>
   :root {
-    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --surface3: #191c2a;
-    --border: #2e3350; --text: #e0e4f0; --muted: #7a82a6; --muted2: #4a5070;
-    --green: #34d399; --yellow: #fbbf24; --red: #f87171;
-    --accent: #818cf8; --accent2: #60a5fa; --accent3: #c084fc;
+    --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --surface3:#191c2a;
+    --border:#2e3350; --text:#e0e4f0; --muted:#7a82a6; --muted2:#4a5070;
+    --green:#34d399; --yellow:#fbbf24; --red:#f87171;
+    --accent:#818cf8; --accent2:#60a5fa; --accent3:#c084fc;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.6;}
 
-  /* ── header ── */
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
-  .hdr-left h1 { font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
-  .hdr-left .repo { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .hdr-right { font-size: 11px; color: var(--muted2); text-align: right; }
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;}
+  .hdr-left h1{font-size:1.2rem;font-weight:700;color:var(--accent);letter-spacing:-.01em;}
+  .hdr-left .repo{font-size:12px;color:var(--muted);margin-top:2px;}
+  .hdr-right{font-size:11px;color:var(--muted2);text-align:right;}
 
-  /* ── layout ── */
-  .container { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+  .container{max-width:1340px;margin:0 auto;padding:24px 32px;}
 
-  /* ── summary cards ── */
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; }
-  .card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
-  .card .val { font-size: 1.75rem; font-weight: 700; color: var(--text); line-height: 1.1; }
-  .card .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  /* summary cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 16px;}
+  .card .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px;}
+  .card .val{font-size:1.6rem;font-weight:700;color:var(--text);line-height:1.1;}
+  .card .sub{font-size:11px;color:var(--muted);margin-top:3px;}
 
-  /* ── legend ── */
-  details.legend { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 24px; }
-  details.legend summary { padding: 12px 18px; cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
-  details.legend summary::before { content: '▶'; font-size: 9px; transition: transform .2s; }
-  details.legend[open] summary::before { transform: rotate(90deg); }
-  .legend-body { padding: 4px 18px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
-  .lg-item { display: flex; gap: 10px; }
-  .lg-term { min-width: 120px; font-weight: 600; color: var(--accent2); font-size: 12px; flex-shrink: 0; }
-  .lg-def { color: var(--muted); font-size: 12px; }
+  /* legend */
+  details.legend{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:20px;}
+  details.legend summary{padding:11px 16px;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;list-style:none;display:flex;align-items:center;gap:8px;}
+  details.legend summary::before{content:'▶';font-size:9px;transition:transform .2s;}
+  details.legend[open] summary::before{transform:rotate(90deg);}
+  .legend-body{padding:4px 16px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:9px;}
+  .lg-item{display:flex;gap:9px;}
+  .lg-term{min-width:110px;font-weight:600;color:var(--accent2);font-size:12px;flex-shrink:0;}
+  .lg-def{color:var(--muted);font-size:12px;}
+  .lg-def code{background:rgba(129,140,248,.12);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;}
 
-  /* ── coherence quadrant matrix ── */
-  .quadrant-wrap { grid-column: 1 / -1; margin: 4px 0 2px; }
-  .quadrant-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
-  .quadrant-grid { display: grid; grid-template-columns: 120px 1fr 1fr; grid-template-rows: auto auto auto; gap: 2px; font-size: 11px; }
-  .qg-corner { }
-  .qg-col-hdr { padding: 5px 10px; text-align: center; font-weight: 700; color: var(--muted); background: var(--surface2); border-radius: 4px 4px 0 0; }
-  .qg-row-hdr { padding: 5px 10px; display: flex; align-items: center; font-weight: 700; color: var(--muted); background: var(--surface2); border-radius: 4px 0 0 4px; }
-  .qg-cell { padding: 8px 12px; border-radius: 4px; }
-  .qg-hh { background: rgba(52,211,153,.10); border: 1px solid rgba(52,211,153,.25); }
-  .qg-lh { background: rgba(96,165,250,.10); border: 1px solid rgba(96,165,250,.25); }
-  .qg-hl { background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.20); }
-  .qg-ll { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.20); }
-  .qg-cell strong { display: block; margin-bottom: 2px; font-size: 11px; }
-  .qg-hh strong { color: var(--green); }
-  .qg-lh strong { color: var(--accent2); }
-  .qg-hl strong { color: var(--yellow); }
-  .qg-ll strong { color: var(--red); }
+  /* quadrant matrix */
+  .quadrant-wrap{grid-column:1/-1;margin:4px 0 2px;}
+  .quadrant-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;font-weight:600;}
+  .quadrant-grid{display:grid;grid-template-columns:110px 1fr 1fr;gap:2px;font-size:11px;}
+  .qg-col-hdr{padding:5px 10px;text-align:center;font-weight:700;color:var(--muted);background:var(--surface2);border-radius:4px 4px 0 0;}
+  .qg-row-hdr{padding:5px 10px;display:flex;align-items:center;font-weight:700;color:var(--muted);background:var(--surface2);border-radius:4px 0 0 4px;}
+  .qg-cell{padding:7px 11px;border-radius:4px;}
+  .qg-hh{background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.25);}
+  .qg-lh{background:rgba(96,165,250,.10);border:1px solid rgba(96,165,250,.25);}
+  .qg-hl{background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.20);}
+  .qg-ll{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.20);}
+  .qg-cell strong{display:block;margin-bottom:2px;font-size:11px;}
+  .qg-hh strong{color:var(--green);}.qg-lh strong{color:var(--accent2);}
+  .qg-hl strong{color:var(--yellow);}.qg-ll strong{color:var(--red);}
 
-  /* ── section heading ── */
-  .sec { font-size: .8rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .sec{font-size:.75rem;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+  .sec-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .sec-bar .sec{margin:0;border:none;padding:0;}
 
-  /* ── cluster table ── */
-  .tbl-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 260px); border: 1px solid var(--border); border-radius: 8px; }
-  table.clusters { width: 100%; border-collapse: collapse; }
-  table.clusters thead th {
-    text-align: left; padding: 9px 12px; font-size: 11px; text-transform: uppercase;
-    letter-spacing: .07em; color: var(--muted); background: var(--surface);
-    border-bottom: 2px solid var(--border); white-space: nowrap;
-    cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 10;
-    box-shadow: 0 1px 0 var(--border);
-  }
-  table.clusters thead th:hover { color: var(--text); }
-  table.clusters thead th.sorted-asc::after  { content: ' ▲'; color: var(--accent); }
-  table.clusters thead th.sorted-desc::after { content: ' ▼'; color: var(--accent); }
+  /* search */
+  .search-wrap{display:flex;align-items:center;gap:6px;}
+  .search-icon{color:var(--muted);font-size:16px;line-height:1;}
+  .search-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:13px;width:190px;outline:none;transition:border-color .15s;}
+  .search-input:focus{border-color:var(--accent);}
+  #file-search:focus{border-color:var(--accent2);}
+  .search-clear{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:3px 5px;border-radius:4px;display:none;}
+  .search-clear:hover{color:var(--text);background:var(--surface2);}
+  .search-divider{color:var(--muted2);font-size:11px;padding:0 2px;}
+  .search-count{font-size:11px;color:var(--muted);white-space:nowrap;min-width:80px;}
 
-  tr.cl-row { background: var(--surface); border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
-  tr.cl-row:hover { background: var(--surface2); }
-  tr.cl-row td { padding: 10px 12px; vertical-align: middle; }
+  /* quadrant filter */
+  .quad-filter-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:9px 13px;background:var(--surface);border:1px solid var(--border);border-radius:8px;}
+  .quad-filter-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-right:4px;}
+  .quad-filter-item{display:flex;align-items:center;gap:5px;cursor:pointer;padding:3px 7px;border-radius:6px;border:1px solid transparent;transition:background .1s;user-select:none;}
+  .quad-filter-item:hover{background:var(--surface2);}
+  .quad-filter-item input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:pointer;}
+  .quad-filter-item.inactive{opacity:0.4;}
+  .quad-filter-divider{width:1px;height:18px;background:var(--border);margin:0 3px;}
 
-  tr.cl-detail { display: none; background: var(--surface3); }
-  tr.cl-detail.open { display: table-row; }
-  tr.cl-detail td { padding: 0; border-bottom: 2px solid var(--border); }
+  /* quadrant pills */
+  .quad-pill{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em;white-space:nowrap;}
+  .quad-hh{background:rgba(52,211,153,.15);color:var(--green);border:1px solid rgba(52,211,153,.30);}
+  .quad-lh{background:rgba(96,165,250,.15);color:var(--accent2);border:1px solid rgba(96,165,250,.30);}
+  .quad-hl{background:rgba(251,191,36,.15);color:var(--yellow);border:1px solid rgba(251,191,36,.25);}
+  .quad-ll{background:rgba(248,113,113,.10);color:var(--red);border:1px solid rgba(248,113,113,.20);}
 
-  /* caret */
-  .caret { display: inline-block; font-size: 9px; color: var(--muted); margin-right: 6px; transition: transform .18s; }
-  tr.cl-row.open .caret { transform: rotate(90deg); }
+  /* cluster table */
+  .tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 240px);border:1px solid var(--border);border-radius:8px;}
+  table.clusters{width:100%;border-collapse:collapse;}
+  table.clusters thead th{text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:var(--surface);border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:10;box-shadow:0 1px 0 var(--border);}
+  table.clusters thead th:hover{color:var(--text);}
+  table.clusters thead th.sorted-asc::after{content:' ▲';color:var(--accent);}
+  table.clusters thead th.sorted-desc::after{content:' ▼';color:var(--accent);}
 
-  /* label / hash */
-  .cl-label { font-weight: 600; color: var(--text); font-size: 13px; }
-  .cl-hash { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; color: var(--accent); }
-  .pkg-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-  .pkg-pill { background: rgba(129,140,248,.12); color: var(--accent); border-radius: 3px; padding: 1px 6px; font-size: 11px; font-family: monospace; }
+  tr.cl-row{background:var(--surface);border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+  tr.cl-row:hover{background:var(--surface2);}
+  tr.cl-row td{padding:10px 12px;vertical-align:top;}
 
-  /* badge */
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-  .badge-green  { background: rgba(52,211,153,.15); color: var(--green); }
-  .badge-yellow { background: rgba(251,191,36,.15); color: var(--yellow); }
-  .badge-red    { background: rgba(248,113,113,.15); color: var(--red); }
+  tr.cl-detail{display:none;background:var(--surface3);}
+  tr.cl-detail.open{display:table-row;}
+  tr.cl-detail td{padding:0;border-bottom:2px solid var(--border);}
 
-  .num   { font-variant-numeric: tabular-nums; }
-  .muted { color: var(--muted); }
-  .imports-cell { color: var(--muted); font-size: 11px; max-width: 280px; }
+  .caret{display:inline-block;font-size:9px;color:var(--muted);margin-right:5px;transition:transform .18s;vertical-align:middle;}
+  tr.cl-row.open .caret{transform:rotate(90deg);}
 
-  /* ── member detail panel ── */
-  .detail-panel { padding: 14px 18px 18px; }
-  .detail-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
-  table.members { width: 100%; border-collapse: collapse; font-size: 12px; }
-  table.members th { text-align: left; padding: 5px 10px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); }
-  table.members td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  table.members tr:last-child td { border-bottom: none; }
-  .fn-name { font-weight: 600; color: var(--accent2); font-family: monospace; font-size: 12px; }
-  .fn-pkg  { color: var(--accent3); font-family: monospace; font-size: 11px; }
-  .fn-file { color: var(--muted); font-size: 11px; font-family: monospace; }
-  .fn-line { color: var(--muted2); font-size: 11px; }
+  /* token sequence — the visual identity of each cluster */
+  .token-seq{display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:4px;}
+  .token-chip{background:rgba(129,140,248,.14);color:var(--accent);border:1px solid rgba(129,140,248,.28);border-radius:3px;padding:1px 6px;font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;font-weight:600;letter-spacing:.02em;}
+  .token-arrow{color:var(--muted2);font-size:9px;padding:0 1px;}
+  .no-shape{color:var(--muted2);font-size:11px;font-style:italic;}
+  .cl-hash{font-family:'JetBrains Mono','Fira Code',monospace;font-size:10px;color:var(--muted);display:block;margin-top:2px;}
 
-  footer { text-align: center; padding: 28px; color: var(--muted2); font-size: 11px; border-top: 1px solid var(--border); margin-top: 40px; }
+  /* badges */
+  .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;}
+  .badge-green{background:rgba(52,211,153,.15);color:var(--green);}
+  .badge-yellow{background:rgba(251,191,36,.15);color:var(--yellow);}
+  .badge-red{background:rgba(248,113,113,.15);color:var(--red);}
 
-  /* ── search bar ── */
-  .sec-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .sec-bar .sec { margin: 0; border: none; padding: 0; }
-  .search-wrap { display: flex; align-items: center; gap: 6px; }
-  .search-icon { color: var(--muted); font-size: 16px; line-height: 1; }
-  .search-input {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-    color: var(--text); padding: 6px 10px; font-size: 13px; width: 210px;
-    outline: none; transition: border-color .15s;
-  }
-  .search-input:focus { border-color: var(--accent); }
-  #file-search:focus { border-color: var(--accent2); }
-  .search-clear {
-    background: none; border: none; color: var(--muted); cursor: pointer;
-    font-size: 13px; padding: 4px 6px; border-radius: 4px; line-height: 1;
-    display: none;
-  }
-  .search-clear:hover { color: var(--text); background: var(--surface2); }
-  .search-divider { color: var(--muted2); font-size: 11px; padding: 0 2px; }
-  .search-count { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 80px; }
+  .pkg-pills{display:flex;flex-wrap:wrap;gap:3px;}
+  .pkg-pill{background:rgba(192,132,252,.10);color:var(--accent3);border-radius:3px;padding:1px 5px;font-size:10px;font-family:monospace;}
+
+  .num{font-variant-numeric:tabular-nums;}
+  .muted{color:var(--muted);}
+
+  /* member detail panel */
+  .detail-panel{padding:14px 20px 18px;}
+  .detail-meta{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;}
+  .detail-meta-item{font-size:11px;color:var(--muted);}
+  .detail-meta-item strong{color:var(--text);font-weight:600;}
+  table.members{width:100%;border-collapse:collapse;font-size:12px;}
+  table.members th{text-align:left;padding:5px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
+  table.members td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  table.members tr:last-child td{border-bottom:none;}
+  .fn-name{font-weight:600;color:var(--accent2);font-family:monospace;font-size:12px;}
+  .fn-pkg{color:var(--accent3);font-family:monospace;font-size:11px;}
+  .fn-file{color:var(--muted);font-size:11px;font-family:monospace;}
+  .fn-line{color:var(--muted2);font-size:11px;font-variant-numeric:tabular-nums;}
+
+  /* score bar inside member table */
+  .score-wrap{display:flex;align-items:center;gap:7px;min-width:110px;}
+  .score-num{font-size:11px;font-variant-numeric:tabular-nums;font-weight:600;min-width:34px;text-align:right;}
+  .score-num.score-high{color:var(--green);}
+  .score-num.score-mid{color:var(--yellow);}
+  .score-num.score-low{color:var(--red);}
+  .score-bar-bg{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .score-bar-fill{height:100%;border-radius:3px;transition:width .2s;}
+  .score-bar-fill.score-high{background:var(--green);}
+  .score-bar-fill.score-mid{background:var(--yellow);}
+  .score-bar-fill.score-low{background:var(--red);}
 
   /* search state */
-  tr.cl-row.search-hidden { display: none; }
-  tr.cl-detail.search-hidden { display: none; }
-  tr.cl-row.quad-hidden { display: none; }
-  tr.cl-detail.quad-hidden { display: none; }
-  table.members tr.member-hidden { display: none; }
-  table.members tr.member-match td { background: rgba(129,140,248,.07); }
-  .fn-name mark { background: rgba(129,140,248,.35); color: var(--text); border-radius: 2px; padding: 0 1px; }
+  tr.cl-row.search-hidden,tr.cl-detail.search-hidden{display:none;}
+  tr.cl-row.quad-hidden,tr.cl-detail.quad-hidden{display:none;}
+  table.members tr.member-hidden{display:none;}
+  table.members tr.member-match td{background:rgba(129,140,248,.07);}
+  .fn-name mark{background:rgba(129,140,248,.35);color:var(--text);border-radius:2px;padding:0 1px;}
 
-  /* ── quadrant pills (table column + filter bar) ── */
-  .quad-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: .05em; white-space: nowrap; }
-  .quad-hh { background: rgba(52,211,153,.15); color: var(--green);   border: 1px solid rgba(52,211,153,.30); }
-  .quad-lh { background: rgba(96,165,250,.15); color: var(--accent2); border: 1px solid rgba(96,165,250,.30); }
-  .quad-hl { background: rgba(251,191,36,.15); color: var(--yellow);  border: 1px solid rgba(251,191,36,.25); }
-  .quad-ll { background: rgba(248,113,113,.10); color: var(--red);    border: 1px solid rgba(248,113,113,.20); }
-
-  /* ── quadrant filter bar ── */
-  .quad-filter-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-  .quad-filter-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-right: 4px; }
-  .quad-filter-item { display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 4px 8px; border-radius: 6px; border: 1px solid transparent; transition: background .1s; user-select: none; }
-  .quad-filter-item:hover { background: var(--surface2); }
-  .quad-filter-item input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
-  .quad-filter-item.inactive { opacity: 0.45; }
-  .quad-filter-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+  footer{text-align:center;padding:24px;color:var(--muted2);font-size:11px;border-top:1px solid var(--border);margin-top:36px;}
 </style>
 </head>
 <body>
@@ -471,175 +528,180 @@ const reportTemplate = `<!DOCTYPE html>
     <div class="repo">{{.Repo}}</div>
   </div>
   <div class="hdr-right">
-    collapsed clusters<br/>
-    vocabulary-independent structural fingerprinting<br/>
+    structural fingerprinting · ∛(seq × import × call)<br/>
     {{.GeneratedAt}}
   </div>
 </header>
 
 <div class="container">
 
-  <!-- summary cards — row 1: totals + coherence means -->
   <div class="cards">
     <div class="card">
-      <div class="lbl">Total Clusters</div>
+      <div class="lbl">Clusters</div>
       <div class="val">{{.TotalClusters}}</div>
-      <div class="sub">collapsed families</div>
+      <div class="sub">structural patterns found</div>
     </div>
     <div class="card">
-      <div class="lbl">Functions in Clusters</div>
+      <div class="lbl">Functions Covered</div>
       <div class="val">{{.FunctionsInClusters}}</div>
       <div class="sub">across all clusters</div>
     </div>
     <div class="card">
+      <div class="lbl">Mean Pairwise Score</div>
+      <div class="val">{{f2 .MeanAvgScore}}</div>
+      <div class="sub">mean ∛(seq×imp×call) across clusters</div>
+    </div>
+    <div class="card">
       <div class="lbl">Mean Import Coh.</div>
       <div class="val">{{f2 .MeanCoherence}}</div>
-      <div class="sub">mean pairwise Jaccard similarity of function level import</div>
+      <div class="sub">mean pairwise import Jaccard</div>
     </div>
     <div class="card">
       <div class="lbl">Mean Call Coh.</div>
       <div class="val">{{f2 .MeanCallCoherence}}</div>
-      <div class="sub">mean pairwise Jaccard similarity of function level call targets(fan outs)</div>
+      <div class="sub">mean pairwise call-target Jaccard</div>
     </div>
-  </div>
-  <!-- summary cards — row 2: coherence quadrant counts -->
-  <div class="cards" style="margin-top: -4px;">
-    <div class="card" style="border-color: rgba(52,211,153,.35);">
-      <div class="lbl" style="color: var(--green);">High Import · High Call</div>
-      <div class="val" style="color: var(--green);">{{.QuadHH}}</div>
-      <div class="sub">{{pct .QuadHH .TotalClusters}} — tight domain-local</div>
+    <div class="card" style="border-color:rgba(52,211,153,.35);">
+      <div class="lbl" style="color:var(--green);">HH</div>
+      <div class="val" style="color:var(--green);">{{.QuadHH}}</div>
+      <div class="sub">{{pct .QuadHH .TotalClusters}} tight domain-local</div>
     </div>
-    <div class="card" style="border-color: rgba(96,165,250,.35);">
-      <div class="lbl" style="color: var(--accent2);">Low Import · High Call</div>
-      <div class="val" style="color: var(--accent2);">{{.QuadLH}}</div>
-      <div class="sub">{{pct .QuadLH .TotalClusters}} — cross-cutting structural</div>
+    <div class="card" style="border-color:rgba(96,165,250,.35);">
+      <div class="lbl" style="color:var(--accent2);">LH</div>
+      <div class="val" style="color:var(--accent2);">{{.QuadLH}}</div>
+      <div class="sub">{{pct .QuadLH .TotalClusters}} cross-cutting</div>
     </div>
-    <div class="card" style="border-color: rgba(251,191,36,.30);">
-      <div class="lbl" style="color: var(--yellow);">High Import · Low Call</div>
-      <div class="val" style="color: var(--yellow);">{{.QuadHL}}</div>
-      <div class="sub">{{pct .QuadHL .TotalClusters}} — domain-cohesive, diverse</div>
+    <div class="card" style="border-color:rgba(251,191,36,.30);">
+      <div class="lbl" style="color:var(--yellow);">HL</div>
+      <div class="val" style="color:var(--yellow);">{{.QuadHL}}</div>
+      <div class="sub">{{pct .QuadHL .TotalClusters}} domain-cohesive</div>
     </div>
-    <div class="card" style="border-color: rgba(248,113,113,.25);">
-      <div class="lbl" style="color: var(--red);">Low Import · Low Call</div>
-      <div class="val" style="color: var(--red);">{{.QuadLL}}</div>
-      <div class="sub">{{pct .QuadLL .TotalClusters}} — probably noise</div>
+    <div class="card" style="border-color:rgba(248,113,113,.25);">
+      <div class="lbl" style="color:var(--red);">LL</div>
+      <div class="val" style="color:var(--red);">{{.QuadLL}}</div>
+      <div class="sub">{{pct .QuadLL .TotalClusters}} probably noise</div>
     </div>
   </div>
 
-  <!-- collapsible legend -->
   <details class="legend">
     <summary>Metric Glossary</summary>
     <div class="legend-body">
-      <div class="lg-item"><span class="lg-term">Import Coherence (Coh.)</span><span class="lg-def">Mean pairwise Jaccard of DirectImports across members. High = every member touches the same package domain (e.g. all use "database/sql"). Measures <em>domain locality</em>.</span></div>
-      <div class="lg-item"><span class="lg-term">Call Coherence(Coh.)</span><span class="lg-def">Mean pairwise Jaccard of CallTargets across members. High = every member invokes the same external functions (e.g. all call RegisterTaskFatal). Measures <em>structural role</em>.</span></div>
-      <div class="quadrant-wrap">
+
+      <div class="lg-item" style="grid-column:1/-1;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--border);">
+        <span class="lg-term" style="color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;">Cluster metrics</span>
+      </div>
+
+      <div class="lg-item"><span class="lg-term">Common Shape</span><span class="lg-def">The longest token subsequence present in <em>every</em> member of the cluster — the structural skeleton they all share. A longer shape means the cluster has a richer shared convention. A very short shape (2–4 tokens) may indicate coincidental similarity rather than a real pattern.</span></div>
+      <div class="lg-item"><span class="lg-term">Avg Pairwise Score</span><span class="lg-def">Mean ∛(seqSim × importJaccard × callJaccard) computed over every unique pair of functions in the cluster. The cube root is a geometric mean — all three dimensions must contribute; a zero on any one collapses the score to zero. Range 0–1. Higher = tighter, more coherent cluster. Clusters are sorted by this value descending.</span></div>
+      <div class="lg-item"><span class="lg-term">Member Score</span><span class="lg-def">Each function's mean pairwise score against every other member. The cluster avg is the mean of these. Members are sorted high→low — the lowest-scoring members are outlier candidates that weakened the cluster. A large gap between the top and bottom member scores is a sign the cluster should be split.</span></div>
+      <div class="lg-item"><span class="lg-term">Import Coh.</span><span class="lg-def">Mean pairwise Jaccard similarity of the direct import sets across all member pairs. High (≥ 0.60) means the cluster operates in a shared package domain. Low means the structural shape is shared across unrelated package domains.</span></div>
+      <div class="lg-item"><span class="lg-term">Call Coh.</span><span class="lg-def">Mean pairwise Jaccard similarity of the call-target sets (external functions called). High (≥ 0.60) means the cluster uses the same external vocabulary — a strong signal of shared structural role, not coincidence.</span></div>
+
+      <div class="lg-item" style="grid-column:1/-1;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--border);margin-top:10px;">
+        <span class="lg-term" style="color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;">Token reference</span>
+        <span class="lg-def" style="margin-left:8px;">Every function is reduced to an ordered sequence of these tokens — no names, no literals, only structure. The common shape is a subsequence of these tokens.</span>
+      </div>
+
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL</span><span class="lg-def">A plain local function call — either a bare identifier call like <code>doWork()</code>, a builtin like <code>make()</code> or <code>len()</code>, or a type conversion. The callee is defined in the same package or is a language builtin.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_PKG</span><span class="lg-def">A package-qualified call — the receiver is an imported package alias, e.g. <code>fmt.Sprintf()</code>, <code>xorm.In()</code>, <code>errors.New()</code>. Distinguishes calls into external packages from calls on variables or methods.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_METHOD</span><span class="lg-def">A method or chained call — the receiver is a variable, struct field, or chained expression, e.g. <code>w.Close()</code>, <code>db.Where(...).Find()</code>, <code>rref.LinkName()</code>. Indicates the function is orchestrating behaviour through an object or interface.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">ASSIGN</span><span class="lg-def">A variable assignment or short variable declaration (<code>:=</code> or <code>=</code>). Signals that the function is building up local state rather than just delegating.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">RETURN</span><span class="lg-def">A return statement. Each return value in the function signature appends one RETURN token — so a function returning <code>(*T, error)</code> emits two RETURN tokens at the end. This encodes the output arity into the shape.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">IF</span><span class="lg-def">An if statement (including <code>if err != nil</code> guards). High frequency of IF in a shape indicates defensive/error-handling code.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FOR</span><span class="lg-def">A C-style for loop (<code>for i := 0; i &lt; n; i++</code>). Distinct from RANGE — this token signals index-based iteration.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">RANGE</span><span class="lg-def">A range-based for loop (<code>for k, v := range m</code>). The most common iteration token in idiomatic Go — frequent in shapes involving slices, maps, or channels.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SWITCH</span><span class="lg-def">A switch statement (expression switch or type switch). Paired with CASE tokens for each branch.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CASE</span><span class="lg-def">A case clause inside a switch or select block. The number of CASE tokens encodes how many branches the switch has.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FUNCLIT</span><span class="lg-def">A function literal (anonymous function / closure), e.g. <code>func() { ... }</code> passed as an argument or assigned to a variable. Common in goroutine launches, callbacks, and deferred cleanup patterns.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">DEFER</span><span class="lg-def">A defer statement. Signals resource cleanup or unlock patterns. Often paired with CALL_METHOD (e.g. <code>defer rows.Close()</code>) or FUNCLIT (e.g. <code>defer func() { ... }()</code>).</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">GO</span><span class="lg-def">A go statement — launching a goroutine (<code>go doWork()</code>). Presence in a shape indicates concurrency in the function's control flow.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SEND</span><span class="lg-def">A channel send operation (<code>ch &lt;- value</code>). Signals producer-side channel communication.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SELECT</span><span class="lg-def">A select statement — multiplexing over multiple channel operations. Paired with COMM tokens for each case.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">COMM</span><span class="lg-def">A communication clause inside a select block (each <code>case &lt;-ch:</code> or <code>case ch &lt;- v:</code> branch).</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">BREAK / CONTINUE</span><span class="lg-def">Loop control flow. BREAK exits the innermost loop or switch; CONTINUE skips to the next iteration.</span></div>
+
+      <div class="quadrant-wrap" style="margin-top:14px;">
         <div class="quadrant-label">Coherence quadrant guide</div>
         <div class="quadrant-grid">
-          <div class="qg-corner"></div>
-          <div class="qg-col-hdr">High Call Coh.</div>
-          <div class="qg-col-hdr">Low Call Coh.</div>
-          <div class="qg-row-hdr">High Import Coh.</div>
-          <div class="qg-cell qg-hh"><strong>Tight domain-local pattern</strong><span style="color:var(--muted)">Shares both package context and exact call vocabulary. Most actionable.</span></div>
-          <div class="qg-cell qg-hl"><strong>Domain-cohesive, structurally diverse</strong><span style="color:var(--muted)">Shared package domain, divergent calls. May need splitting.</span></div>
-          <div class="qg-row-hdr">Low Import Coh.</div>
-          <div class="qg-cell qg-lh"><strong>Cross-cutting structural pattern</strong><span style="color:var(--muted)">Different domains, same structural role (e.g. cron registration, adapters).</span></div>
-          <div class="qg-cell qg-ll"><strong>Probably noise</strong><span style="color:var(--muted)">Shape coincidence, not convention. Treat with scepticism.</span></div>
+          <div></div><div class="qg-col-hdr">High Call Coh. (≥ 0.60)</div><div class="qg-col-hdr">Low Call Coh. (&lt; 0.60)</div>
+          <div class="qg-row-hdr">High Import (≥ 0.60)</div>
+          <div class="qg-cell qg-hh"><strong>HH — Tight domain-local</strong><span style="color:var(--muted)">Shares both package context and call vocabulary. The strongest signal — a real settled convention. Most actionable for onboarding and refactoring.</span></div>
+          <div class="qg-cell qg-hl"><strong>HL — Domain-cohesive</strong><span style="color:var(--muted)">Same package domain, divergent call targets. The convention is drifting — functions do the same kind of thing but via different paths. May benefit from splitting or standardising the approach.</span></div>
+          <div class="qg-row-hdr">Low Import (&lt; 0.60)</div>
+          <div class="qg-cell qg-lh"><strong>LH — Cross-cutting</strong><span style="color:var(--muted)">Same structural role, different domains. Classic adapter or hook pattern — functions that all wrap or delegate in the same way regardless of what they wrap.</span></div>
+          <div class="qg-cell qg-ll"><strong>LL — Noise</strong><span style="color:var(--muted)">Shape coincidence only. Neither domain nor call vocabulary is shared. Treat with scepticism — likely incidental structural similarity.</span></div>
         </div>
       </div>
-      <div class="lg-item"><span class="lg-term">Quadrant cards</span><span class="lg-def">Each cluster is placed in one of four quadrants based on whether Import Coh. and Call Coh. are above or below 0.60. The four summary cards at the top show counts per quadrant. Table is sorted by combined score (import + call) / 2 descending by default.</span></div>
-      <div class="lg-item"><span class="lg-term">Cyclo P95</span><span class="lg-def">95th-percentile cyclomatic complexity among cluster members. Cyclo = 1 + decision points (if/for/case). P95 ≥ 10 means at least 5% of functions are complex.</span></div>
-<div class="lg-item"><span class="lg-term">Top Imports</span><span class="lg-def">Most frequent DirectImports across cluster members — the shared abstractions that define what this cluster "does".</span></div>
-      <div class="lg-item"><span class="lg-term">Packages</span><span class="lg-def">Go packages that contribute members to this cluster. Multiple packages = cross-cutting structural pattern. Single package = localised idiom.</span></div>
-      <div class="lg-item"><span class="lg-term">Shape Hash</span><span class="lg-def">Stable 16-hex identity of the cluster's token sequence. Same hash in two different repos = structurally identical pattern across codebases.</span></div>
-      <div class="lg-item"><span class="lg-term">Coherence badge</span><span class="lg-def"><span class="badge badge-green">≥ 0.60 tight</span> &nbsp; <span class="badge badge-yellow">0.40–0.59 moderate</span> &nbsp; <span class="badge badge-red">&lt; 0.40 loose</span></span></div>
-      <div class="lg-item" style="grid-column: 1 / -1; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border);">
-        <span class="lg-term" style="color: var(--muted);">Filtered noise</span>
-        <span class="lg-def">Clusters whose shape appears in <strong style="color:var(--text)">≥ 5% of all analysed functions</strong> are dropped before this report is generated. These are structural stop-words — patterns so universal (e.g. every model has a fetch-by-ID or a simple getter) that they are technically correct groupings but carry no useful signal. Showing them would dilute the findings that actually reveal conventions and idioms. The function count in the summary cards reflects only the clusters shown here.</span>
+
+      <div class="lg-item" style="grid-column:1/-1;margin-top:10px;padding-top:9px;border-top:1px solid var(--border);">
+        <span class="lg-term" style="color:var(--muted);">Filtered noise</span>
+        <span class="lg-def">Clusters whose trigram shape matches ≥ 5% of the entire corpus are dropped before clustering — structural stop-words (e.g. a function that is just one RETURN) with no discriminating signal.</span>
       </div>
     </div>
   </details>
 
-  <!-- quadrant filter bar -->
   <div class="quad-filter-bar">
     <span class="quad-filter-label">Show</span>
-    <label class="quad-filter-item" id="fi-hh">
-      <input type="checkbox" class="quad-cb" data-quad="hh" checked/>
-      <span class="quad-pill quad-hh">HH</span>
-      <span style="font-size:11px;color:var(--muted)">High Import · High Call</span>
-    </label>
+    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="hh" checked/><span class="quad-pill quad-hh">HH</span><span style="font-size:11px;color:var(--muted)">High Import · High Call</span></label>
     <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item" id="fi-lh">
-      <input type="checkbox" class="quad-cb" data-quad="lh" checked/>
-      <span class="quad-pill quad-lh">LH</span>
-      <span style="font-size:11px;color:var(--muted)">Low Import · High Call</span>
-    </label>
+    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="lh" checked/><span class="quad-pill quad-lh">LH</span><span style="font-size:11px;color:var(--muted)">Low Import · High Call</span></label>
     <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item" id="fi-hl">
-      <input type="checkbox" class="quad-cb" data-quad="hl" checked/>
-      <span class="quad-pill quad-hl">HL</span>
-      <span style="font-size:11px;color:var(--muted)">High Import · Low Call</span>
-    </label>
+    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="hl" checked/><span class="quad-pill quad-hl">HL</span><span style="font-size:11px;color:var(--muted)">High Import · Low Call</span></label>
     <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item" id="fi-ll">
-      <input type="checkbox" class="quad-cb" data-quad="ll" checked/>
-      <span class="quad-pill quad-ll">LL</span>
-      <span style="font-size:11px;color:var(--muted)">Low Import · Low Call</span>
-    </label>
+    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="ll" checked/><span class="quad-pill quad-ll">LL</span><span style="font-size:11px;color:var(--muted)">Low Import · Low Call</span></label>
   </div>
 
-  <!-- cluster table -->
   <div class="sec-bar">
-    <div class="sec">Clusters — sorted by combined coherence ↓</div>
+    <div class="sec">Clusters — sorted by avg pairwise score ↓</div>
     <div class="search-wrap">
       <span class="search-icon">⌕</span>
-      <input type="text" id="fn-search"   class="search-input" placeholder="Function name…"  autocomplete="off" spellcheck="false"/>
-      <button id="fn-search-clear"   class="search-clear" title="Clear function search">✕</button>
+      <input type="text" id="fn-search" class="search-input" placeholder="Function name…" autocomplete="off" spellcheck="false"/>
+      <button id="fn-search-clear" class="search-clear" title="Clear">✕</button>
       <span class="search-divider">·</span>
       <input type="text" id="file-search" class="search-input" placeholder="File path…" autocomplete="off" spellcheck="false"/>
-      <button id="file-search-clear" class="search-clear" title="Clear file search">✕</button>
+      <button id="file-search-clear" class="search-clear" title="Clear">✕</button>
       <span id="search-count" class="search-count"></span>
     </div>
   </div>
+
   <div class="tbl-wrap">
   <table class="clusters" id="cl-table">
     <thead>
       <tr>
-        <th data-col="quadrant">Type</th>
-        <th data-col="label">Label / Shape</th>
+        <th data-col="quadrant" style="width:52px">Type</th>
+        <th data-col="shape">Common Shape</th>
         <th data-col="size">Size</th>
+        <th data-col="avgscore" class="sorted-desc">Avg Score</th>
         <th data-col="coherence">Import Coh.</th>
-        <th data-col="callcoherence" class="sorted-desc">Call Coh.</th>
-        <th data-col="cyclo95">Cyclo P95</th>
+        <th data-col="callcoherence">Call Coh.</th>
         <th data-col="packages">Packages</th>
-        <th data-col="imports">Top Imports</th>
       </tr>
     </thead>
     <tbody>
 {{range $i, $cl := .Clusters}}
       <tr class="cl-row" data-idx="{{$i}}" data-quadrant="{{quadrantCode $cl.Coherence $cl.CallCoherence}}" onclick="toggleRow({{$i}})">
-        <td style="width:52px;text-align:center"><span class="quad-pill quad-{{quadrantCode $cl.Coherence $cl.CallCoherence}}">{{quadrantLabel $cl.Coherence $cl.CallCoherence}}</span></td>
+        <td style="text-align:center;vertical-align:middle;"><span class="quad-pill quad-{{quadrantCode $cl.Coherence $cl.CallCoherence}}">{{quadrantLabel $cl.Coherence $cl.CallCoherence}}</span></td>
         <td>
-          <span class="caret">▶</span>
-          {{if $cl.Label}}<span class="cl-label">{{$cl.Label}}</span><br/><span class="cl-hash">{{$cl.ShapeHash}}</span>
-          {{else}}<span class="cl-hash">{{$cl.ShapeHash}}</span>{{end}}
+          <span class="caret">▶</span>{{tokenChips $cl.CommonShape}}
+          <span class="cl-hash">{{$cl.ShapeHash}}{{if $cl.Label}} · {{$cl.Label}}{{end}}</span>
         </td>
-        <td class="num">{{$cl.Size}}</td>
-        <td><span class="badge {{badgeClass $cl.Coherence}}">{{f2 $cl.Coherence}}</span></td>
-        <td><span class="badge {{badgeClass $cl.CallCoherence}}">{{f2 $cl.CallCoherence}}</span></td>
-        <td class="num">{{f1 $cl.CycloP95}}</td>
-        <td>
-          <div class="pkg-pills">
-            {{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}
-          </div>
+        <td class="num" style="vertical-align:middle;">{{$cl.Size}}</td>
+        <td style="vertical-align:middle;"><span class="badge {{scoreBadge $cl.AvgPairwiseScore}}">{{f3 $cl.AvgPairwiseScore}}</span></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.Coherence}}">{{f2 $cl.Coherence}}</span></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.CallCoherence}}">{{f2 $cl.CallCoherence}}</span></td>
+        <td style="vertical-align:middle;">
+          <div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div>
         </td>
-        <td class="imports-cell">{{joinComma $cl.TopImports}}</td>
       </tr>
       <tr class="cl-detail" id="detail-{{$i}}">
-        <td colspan="8">
+        <td colspan="7">
           <div class="detail-panel">
-            <h4>{{$cl.Size}} member functions</h4>
+            <div class="detail-meta">
+              <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
+              <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+            </div>
             <table class="members">
-              <thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th></tr></thead>
+              <thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
               <tbody>
 {{range $cl.Members}}
                 <tr>
@@ -647,6 +709,12 @@ const reportTemplate = `<!DOCTYPE html>
                   <td><span class="fn-pkg">{{.Package}}</span></td>
                   <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
                   <td><span class="fn-line">{{.Line}}</span></td>
+                  <td>
+                    <div class="score-wrap">
+                      <span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span>
+                      <div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div>
+                    </div>
+                  </td>
                 </tr>
 {{end}}
               </tbody>
@@ -661,240 +729,125 @@ const reportTemplate = `<!DOCTYPE html>
 
 </div>
 
-<footer>
-  generated by beats &nbsp;·&nbsp; vocabulary-independent structural fingerprinting for Go &nbsp;·&nbsp; {{.GeneratedAt}}
-</footer>
+<footer>beats · vocabulary-independent structural fingerprinting for Go · {{.GeneratedAt}}</footer>
 
 <script>
 function toggleRow(idx) {
-  var row  = document.querySelector('tr.cl-row[data-idx="' + idx + '"]');
-  var det  = document.getElementById('detail-' + idx);
+  var row = document.querySelector('tr.cl-row[data-idx="'+idx+'"]');
+  var det = document.getElementById('detail-'+idx);
   var open = det.classList.contains('open');
-  det.classList.toggle('open', !open);
-  row.classList.toggle('open', !open);
+  det.classList.toggle('open',!open);
+  row.classList.toggle('open',!open);
 }
 
-// ── column sort ────────────────────────────────────────────────────────────
-(function () {
-  var state = { col: 'callcoherence', asc: false };
+(function(){
+  var state={col:'avgscore',asc:false};
+  var colIndex={quadrant:0,shape:1,size:2,avgscore:3,coherence:4,callcoherence:5,packages:6};
 
-  var colIndex = { quadrant: 0, label: 1, size: 2, coherence: 3, callcoherence: 4, cyclo95: 5, packages: 6, imports: 7 };
-
-  document.querySelectorAll('#cl-table thead th').forEach(function (th) {
-    th.addEventListener('click', function () {
-      var col = th.dataset.col;
-      if (state.col === col) { state.asc = !state.asc; }
-      else { state.col = col; state.asc = col === 'label' || col === 'packages'; }
-
-      document.querySelectorAll('#cl-table thead th').forEach(function (t) {
-        t.classList.remove('sorted-asc', 'sorted-desc');
-      });
-      th.classList.add(state.asc ? 'sorted-asc' : 'sorted-desc');
-      sortTable(col, state.asc);
+  document.querySelectorAll('#cl-table thead th').forEach(function(th){
+    th.addEventListener('click',function(){
+      var col=th.dataset.col;
+      if(state.col===col){state.asc=!state.asc;}
+      else{state.col=col;state.asc=(col==='shape'||col==='packages');}
+      document.querySelectorAll('#cl-table thead th').forEach(function(t){t.classList.remove('sorted-asc','sorted-desc');});
+      th.classList.add(state.asc?'sorted-asc':'sorted-desc');
+      sortTable(col,state.asc);
     });
   });
 
-  function sortTable(col, asc) {
-    var tbody = document.querySelector('#cl-table tbody');
-    var pairs = [];
-    document.querySelectorAll('#cl-table tbody tr.cl-row').forEach(function (row) {
-      var idx = row.dataset.idx;
-      pairs.push({ row: row, det: document.getElementById('detail-' + idx) });
+  function sortTable(col,asc){
+    var tbody=document.querySelector('#cl-table tbody');
+    var pairs=[];
+    document.querySelectorAll('#cl-table tbody tr.cl-row').forEach(function(row){
+      pairs.push({row:row,det:document.getElementById('detail-'+row.dataset.idx)});
     });
-
-    pairs.sort(function (a, b) {
-      var av = cellVal(a.row, col);
-      var bv = cellVal(b.row, col);
-      if (typeof av === 'number') return asc ? av - bv : bv - av;
-      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    pairs.sort(function(a,b){
+      var av=cellVal(a.row,col),bv=cellVal(b.row,col);
+      if(typeof av==='number')return asc?av-bv:bv-av;
+      return asc?av.localeCompare(bv):bv.localeCompare(av);
     });
-
-    pairs.forEach(function (p) {
-      tbody.appendChild(p.row);
-      tbody.appendChild(p.det);
-    });
+    pairs.forEach(function(p){tbody.appendChild(p.row);tbody.appendChild(p.det);});
   }
 
-  function cellVal(row, col) {
-    var ci = colIndex[col];
-    if (ci === undefined) return '';
-    var cell = row.querySelectorAll('td')[ci];
-    var text = cell ? cell.textContent.trim() : '';
-    var n = parseFloat(text);
-    return isNaN(n) ? text : n;
+  function cellVal(row,col){
+    var ci=colIndex[col];
+    if(ci===undefined)return '';
+    var cell=row.querySelectorAll('td')[ci];
+    var text=cell?cell.textContent.trim():'';
+    var n=parseFloat(text);
+    return isNaN(n)?text:n;
   }
 })();
 
-// ── search (function name + file path) ────────────────────────────────────
-(function () {
-  var fnInput    = document.getElementById('fn-search');
-  var fnClear    = document.getElementById('fn-search-clear');
-  var fileInput  = document.getElementById('file-search');
-  var fileClear  = document.getElementById('file-search-clear');
-  var countEl    = document.getElementById('search-count');
+(function(){
+  var fnInput=document.getElementById('fn-search');
+  var fnClear=document.getElementById('fn-search-clear');
+  var fileInput=document.getElementById('file-search');
+  var fileClear=document.getElementById('file-search-clear');
+  var countEl=document.getElementById('search-count');
 
-  fnInput.addEventListener('input',   runSearch);
-  fileInput.addEventListener('input', runSearch);
+  fnInput.addEventListener('input',runSearch);
+  fileInput.addEventListener('input',runSearch);
+  fnClear.addEventListener('click',function(){fnInput.value='';runSearch();fnInput.focus();});
+  fileClear.addEventListener('click',function(){fileInput.value='';runSearch();fileInput.focus();});
 
-  fnClear.addEventListener('click', function () {
-    fnInput.value = ''; runSearch(); fnInput.focus();
-  });
-  fileClear.addEventListener('click', function () {
-    fileInput.value = ''; runSearch(); fileInput.focus();
-  });
-
-  function runSearch() {
-    var fnTerm   = fnInput.value.trim().toLowerCase();
-    var fileTerm = fileInput.value.trim().toLowerCase();
-
-    fnClear.style.display   = fnTerm   ? 'block' : 'none';
-    fileClear.style.display = fileTerm ? 'block' : 'none';
-
-    var searching = fnTerm || fileTerm;
-
-    if (!searching) {
-      document.querySelectorAll('tr.cl-row').forEach(function (row) {
-        row.classList.remove('search-hidden');
+  function runSearch(){
+    var fnTerm=fnInput.value.trim().toLowerCase();
+    var fileTerm=fileInput.value.trim().toLowerCase();
+    fnClear.style.display=fnTerm?'block':'none';
+    fileClear.style.display=fileTerm?'block':'none';
+    var searching=fnTerm||fileTerm;
+    if(!searching){
+      document.querySelectorAll('tr.cl-row').forEach(function(r){r.classList.remove('search-hidden');});
+      document.querySelectorAll('tr.cl-detail').forEach(function(d){
+        d.classList.remove('search-hidden');
+        d.querySelectorAll('table.members tr').forEach(function(mr){mr.classList.remove('member-hidden','member-match');});
+        d.querySelectorAll('.fn-name mark,.fn-file mark').forEach(function(m){m.outerHTML=m.textContent;});
       });
-      document.querySelectorAll('tr.cl-detail').forEach(function (det) {
-        det.classList.remove('search-hidden');
-        det.querySelectorAll('table.members tr').forEach(function (mr) {
-          mr.classList.remove('member-hidden', 'member-match');
-        });
-        det.querySelectorAll('.fn-name mark, .fn-file mark').forEach(function (m) {
-          m.outerHTML = m.textContent;
-        });
-      });
-      countEl.textContent = '';
-      return;
+      countEl.textContent='';return;
     }
-
-    var matchedClusters  = 0;
-    var matchedFunctions = 0;
-
-    document.querySelectorAll('tr.cl-row').forEach(function (row) {
-      var idx = row.dataset.idx;
-      var det = document.getElementById('detail-' + idx);
-      var memberRows = det.querySelectorAll('table.members tbody tr');
-      var clusterHasMatch = false;
-
-      memberRows.forEach(function (mr) {
-        // strip previous highlights
-        mr.querySelectorAll('.fn-name mark, .fn-file mark').forEach(function (m) {
-          m.outerHTML = m.textContent;
-        });
-
-        var nameEl = mr.querySelector('.fn-name');
-        var fileEl = mr.querySelector('.fn-file');
-        if (!nameEl || !fileEl) return;
-
-        var nameText = nameEl.textContent.toLowerCase();
-        // match against both the display text and the full path in title=""
-        var fileText = (fileEl.getAttribute('title') || fileEl.textContent).toLowerCase();
-
-        var fnMatch   = !fnTerm   || nameText.includes(fnTerm);
-        var fileMatch = !fileTerm || fileText.includes(fileTerm);
-
-        if (fnMatch && fileMatch) {
-          mr.classList.remove('member-hidden');
-          mr.classList.add('member-match');
-          clusterHasMatch = true;
-          matchedFunctions++;
-
-          // highlight function name match
-          if (fnTerm) {
-            var raw = nameEl.textContent;
-            var lo  = raw.toLowerCase().indexOf(fnTerm);
-            if (lo !== -1) {
-              nameEl.innerHTML =
-                escHtml(raw.slice(0, lo)) +
-                '<mark>' + escHtml(raw.slice(lo, lo + fnTerm.length)) + '</mark>' +
-                escHtml(raw.slice(lo + fnTerm.length));
-            }
-          }
-
-          // highlight file path match (display text only)
-          if (fileTerm) {
-            var rawF = fileEl.textContent;
-            var loF  = rawF.toLowerCase().indexOf(fileTerm);
-            if (loF !== -1) {
-              fileEl.innerHTML =
-                escHtml(rawF.slice(0, loF)) +
-                '<mark style="background:rgba(96,165,250,.35);border-radius:2px;padding:0 1px">' +
-                escHtml(rawF.slice(loF, loF + fileTerm.length)) + '</mark>' +
-                escHtml(rawF.slice(loF + fileTerm.length));
-            }
-          }
-        } else {
-          mr.classList.add('member-hidden');
-          mr.classList.remove('member-match');
-        }
+    var mc=0,mf=0;
+    document.querySelectorAll('tr.cl-row').forEach(function(row){
+      var idx=row.dataset.idx;
+      var det=document.getElementById('detail-'+idx);
+      var memberRows=det.querySelectorAll('table.members tbody tr');
+      var hit=false;
+      memberRows.forEach(function(mr){
+        mr.querySelectorAll('.fn-name mark,.fn-file mark').forEach(function(m){m.outerHTML=m.textContent;});
+        var nameEl=mr.querySelector('.fn-name');
+        var fileEl=mr.querySelector('.fn-file');
+        if(!nameEl||!fileEl)return;
+        var fnOk=!fnTerm||nameEl.textContent.toLowerCase().includes(fnTerm);
+        var fileOk=!fileTerm||(fileEl.getAttribute('title')||fileEl.textContent).toLowerCase().includes(fileTerm);
+        if(fnOk&&fileOk){
+          mr.classList.remove('member-hidden');mr.classList.add('member-match');hit=true;mf++;
+          if(fnTerm){var r=nameEl.textContent,lo=r.toLowerCase().indexOf(fnTerm);if(lo!==-1)nameEl.innerHTML=esc(r.slice(0,lo))+'<mark>'+esc(r.slice(lo,lo+fnTerm.length))+'</mark>'+esc(r.slice(lo+fnTerm.length));}
+          if(fileTerm){var rf=fileEl.textContent,lf=rf.toLowerCase().indexOf(fileTerm);if(lf!==-1)fileEl.innerHTML=esc(rf.slice(0,lf))+'<mark style="background:rgba(96,165,250,.35);border-radius:2px;padding:0 1px">'+esc(rf.slice(lf,lf+fileTerm.length))+'</mark>'+esc(rf.slice(lf+fileTerm.length));}
+        }else{mr.classList.add('member-hidden');mr.classList.remove('member-match');}
       });
-
-      if (clusterHasMatch) {
-        row.classList.remove('search-hidden');
-        det.classList.remove('search-hidden');
-        det.classList.add('open');
-        row.classList.add('open');
-        matchedClusters++;
-      } else {
-        row.classList.add('search-hidden');
-        det.classList.add('search-hidden');
-        det.classList.remove('open');
-        row.classList.remove('open');
-      }
+      if(hit){row.classList.remove('search-hidden');det.classList.remove('search-hidden');det.classList.add('open');row.classList.add('open');mc++;}
+      else{row.classList.add('search-hidden');det.classList.add('search-hidden');det.classList.remove('open');row.classList.remove('open');}
     });
-
-    var parts = [];
-    if (matchedFunctions > 0) {
-      parts.push(matchedFunctions + ' fn' + (matchedFunctions !== 1 ? 's' : ''));
-      parts.push(matchedClusters + ' cluster' + (matchedClusters !== 1 ? 's' : ''));
-    } else {
-      parts.push('no matches');
-    }
-    countEl.textContent = parts.join(' in ');
+    countEl.textContent=mf>0?(mf+' fn'+(mf!==1?'s':'')+' in '+mc+' cluster'+(mc!==1?'s':'')):'no matches';
   }
-
-  function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 })();
 
-// ── quadrant filter (checkboxes) ──────────────────────────────────────────
-(function () {
-  function activeQuads() {
-    var q = {};
-    document.querySelectorAll('.quad-cb').forEach(function (cb) {
-      if (cb.checked) q[cb.dataset.quad] = true;
+(function(){
+  function applyQuadFilter(){
+    var q={};
+    document.querySelectorAll('.quad-cb').forEach(function(cb){if(cb.checked)q[cb.dataset.quad]=true;});
+    document.querySelectorAll('tr.cl-row').forEach(function(row){
+      var vis=!!q[row.dataset.quadrant];
+      row.classList.toggle('quad-hidden',!vis);
+      var det=document.getElementById('detail-'+row.dataset.idx);
+      if(det){det.classList.toggle('quad-hidden',!vis);if(!vis){det.classList.remove('open');row.classList.remove('open');}}
     });
-    return q;
-  }
-
-  function applyQuadFilter() {
-    var q = activeQuads();
-    document.querySelectorAll('tr.cl-row').forEach(function (row) {
-      var quad = row.dataset.quadrant;
-      var visible = !!q[quad];
-      row.classList.toggle('quad-hidden', !visible);
-      var det = document.getElementById('detail-' + row.dataset.idx);
-      if (det) {
-        det.classList.toggle('quad-hidden', !visible);
-        if (!visible) {
-          det.classList.remove('open');
-          row.classList.remove('open');
-        }
-      }
-    });
-    // update filter item opacity so unchecked ones look dimmed
-    document.querySelectorAll('.quad-filter-item').forEach(function (item) {
-      var cb = item.querySelector('.quad-cb');
-      item.classList.toggle('inactive', cb && !cb.checked);
+    document.querySelectorAll('.quad-filter-item').forEach(function(item){
+      var cb=item.querySelector('.quad-cb');item.classList.toggle('inactive',cb&&!cb.checked);
     });
   }
-
-  document.querySelectorAll('.quad-cb').forEach(function (cb) {
-    cb.addEventListener('change', applyQuadFilter);
-  });
+  document.querySelectorAll('.quad-cb').forEach(function(cb){cb.addEventListener('change',applyQuadFilter);});
 })();
 </script>
 </body>

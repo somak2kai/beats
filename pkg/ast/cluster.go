@@ -660,6 +660,102 @@ func editDistance(a, b []int) int {
 	return prev[lb]
 }
 
+// ── Cross-cluster analysis helpers ───────────────────────────────────────────
+
+// lcsInts returns the Longest Common Subsequence of two int slices.
+func lcsInts(a, b []int) []int {
+	m, n := len(a), len(b)
+	dp := make([][]int, m+1)
+	for i := range dp {
+		dp[i] = make([]int, n+1)
+	}
+	for i := 1; i <= m; i++ {
+		for j := 1; j <= n; j++ {
+			if a[i-1] == b[j-1] {
+				dp[i][j] = dp[i-1][j-1] + 1
+			} else if dp[i-1][j] >= dp[i][j-1] {
+				dp[i][j] = dp[i-1][j]
+			} else {
+				dp[i][j] = dp[i][j-1]
+			}
+		}
+	}
+	length := dp[m][n]
+	if length == 0 {
+		return nil
+	}
+	result := make([]int, length)
+	i, j, k := m, n, length-1
+	for i > 0 && j > 0 {
+		if a[i-1] == b[j-1] {
+			result[k] = a[i-1]
+			i--
+			j--
+			k--
+		} else if dp[i-1][j] >= dp[i][j-1] {
+			i--
+		} else {
+			j--
+		}
+	}
+	return result
+}
+
+// CommonSubsequence returns the longest token subsequence shared by ALL
+// members, computed by iterative pairwise LCS reduction starting from the
+// first member's sequence.
+//
+// Note: two clusters can share the same common subsequence — the ShapeHash
+// remains the unique cluster identifier. Returns nil when members is empty
+// or no token is common to all members.
+func CommonSubsequence(members []ds.FunctionMeta) []int {
+	if len(members) == 0 {
+		return nil
+	}
+	common := members[0].TokenSeq
+	for _, m := range members[1:] {
+		common = lcsInts(common, m.TokenSeq)
+		if len(common) == 0 {
+			return nil
+		}
+	}
+	return common
+}
+
+// SeqString is the exported form of seqString, for use outside this package.
+func SeqString(seq []int) string { return seqString(seq) }
+
+// MemberPairwiseScores returns, for each member, its mean ∛(seqS×impS×callS)
+// against all other members in the cluster. Index aligns with the members
+// slice. Members in a singleton cluster get score 0.
+func MemberPairwiseScores(members []ds.FunctionMeta) []float64 {
+	n := len(members)
+	scores := make([]float64, n)
+	if n < 2 {
+		return scores
+	}
+	importSets := make([]map[string]bool, n)
+	callSets := make([]map[string]bool, n)
+	for i, m := range members {
+		importSets[i] = toStringSet(m.DirectImports)
+		callSets[i] = toStringSet(m.CallTargets)
+	}
+	for i := 0; i < n; i++ {
+		var total float64
+		for j := 0; j < n; j++ {
+			if i == j {
+				continue
+			}
+			seqS := seqSimilarity(members[i].TokenSeq, members[j].TokenSeq)
+			impS := jaccard(importSets[i], importSets[j])
+			callS := jaccard(callSets[i], callSets[j])
+			total += math.Cbrt(seqS * impS * callS)
+		}
+		scores[i] = total / float64(n-1)
+	}
+	return scores
+}
+
 // WriteIndex writes a compact markdown index of labelled clusters.
 // One line per cluster header, followed by file:line locations of every member.
 // Designed to be read by an LLM as a lookup table: "which functions implement
