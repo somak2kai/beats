@@ -31,8 +31,8 @@ type ClusterRow struct {
 	CommonShape      string  // human-readable LCS of all member token sequences
 	AvgPairwiseScore float64 // mean cbrt score across all member pairs
 	Size             int
-	Coherence        float64  // mean pairwise Jaccard of DirectImports
-	CallCoherence    float64  // mean pairwise Jaccard of CallTargets
+	Coherence        float64 // mean pairwise Jaccard of DirectImports
+	CallCoherence    float64 // mean pairwise Jaccard of CallTargets
 	CycloMean        float64
 	TopImports       []string
 	Packages         []string    // unique package names, sorted
