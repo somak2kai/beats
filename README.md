@@ -53,13 +53,8 @@ For each function, beats computes three features:
 
 No attempt is made to understand *what* a call target does or *what* an import statement provides. That would reintroduce vocabulary dependence and defeat the purpose.
 
-These three features — along with some additional metadata — form a **FunctionMetadata** record. Beats collects FunctionMetadata across the entire codebase and clusters them using a weighted similarity function:
-
-| Feature | Weight |
-|---|---|
-| Token sequence similarity | 50% |
-| Jaccard similarity of import sets | 30% |
-| Jaccard similarity of call target sets | 20% |
+These three features — along with some additional metadata — form a **FunctionMetadata** record. <br>
+Beats collects FunctionMetadata across the entire codebase and clusters structurally similar functions. Similarity between two functions is computed as the geometric mean of three signals, each normalized to [0, 1]: token-sequence similarity (1 − normalized Levenshtein distance), Jaccard overlap of imports, and Jaccard overlap of called functions. Using the geometric mean (∛(A·B·C)) rather than a weighted sum means a pair must score well across all three dimensions to be considered similar — a function with high token overlap but no shared imports or calls won't be treated as a match
 
 The output is *N* clusters, each with a **coherence value** — a measure of how tightly packed the function metadata within it are. Coherence is broken into two axes:
 
