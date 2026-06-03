@@ -47,31 +47,21 @@ type scoredPair struct {
 	score float64 // indicates scoring of possibility of belonging in same cluster for the function metadata pair.
 }
 
-// IdentifyClusters builds clusters in a single agglomerative pass over all
-// functions. Import and call target similarity are part of the grouping decision
-// from the start — not a post-hoc merge step — which prevents contaminated
-// clusters from ever forming.
-//
-// Algorithm:
-//  1. Build a trigram map from each function's TokenSeqHash. Functions sharing a trigram are structural candidates.
-//  2. For each candidate pair, compute the combined score. Fast-reject pairs
-//     with seqSim < 0.40 before touching import/call sets.
-//  3. Perform simple union find algoritm to define member and agglomerative clustering at identifyThreshold: two groups
-//     merge only when every cross-group pair exceeds the threshold, preventing
-//     chaining artefacts.
-//  4. Drop clusters below identifyMinSize and structural stop-words (≥ 5% of
-//     corpus).
-func IdentifyClusters(fns []ds.FunctionMeta) []ds.Cluster {
+// IdentifyClusters builds clusters and returns:
+//   - clusters: all multi-member structural clusters (after filtering)
+//   - orphans: functions that did not join any cluster and are eligible for
+//     Z-score affinity analysis (not generated, token length ≥ 4, not test, not init)
+func IdentifyClusters(fns []ds.FunctionMeta) ([]ds.Cluster, []ds.FunctionMeta) {
 	if len(fns) == 0 {
-		return nil
+		return nil, nil
 	}
 	primitiveThreshold := float64(len(fns)) * 0.05
 
 	trigramMap := buildTrigramMap(fns)
 	sharedCounts := countSharedTrigrams(trigramMap)
-	candidates, pairScores := scorePairs(fns, sharedCounts)
+	candidates, pairScores, scoredFns := scorePairs(fns, sharedCounts)
 	clusterMembers := agglomerate(fns, candidates, pairScores)
-	return buildClusters(fns, clusterMembers, primitiveThreshold)
+	return buildClusters(fns, clusterMembers, primitiveThreshold, scoredFns)
 }
 
 // buildTrigramMap maps each trigram hash to the indices of functions that contain it.
@@ -83,7 +73,7 @@ func buildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
 		if len(fn.TokenSeq) < minTokenSeqLen {
 			continue
 		}
-		if fn.GeneratedCode { // ignored auto generated code gen.
+		if fn.GeneratedCode || fn.TestCode {
 			continue
 		}
 		for _, h := range fn.TokenSeqHash {
@@ -112,12 +102,18 @@ func countSharedTrigrams(trigramMap map[int64][]int) map[pairKey]int {
 }
 
 // scorePairs filters and scores candidate pairs using the three-term similarity
-// formula: 0.5×seqSim + 0.3×importJaccard + 0.2×callJaccard.
+// formula: ∛(seqSim × importJaccard × callJaccard).
 //
 // Returns:
 //   - candidates: pairs above identifyThreshold, sorted descending by score
 //   - pairScores: lookup map used by the complete-linkage gate
-func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPair, map[pairKey]float64) {
+//   - scoredFns: set of function indices that had at least one full score computed
+//     (i.e. survived the seqS fast-reject). Any function in this set that later
+//     remains a singleton is a genuine orphan — it had structural affinity to
+//     something but every pair still fell below identifyThreshold.
+//     Functions absent from this set never shared enough trigram structure to
+//     score against anything and are structurally unique, not orphaned.
+func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPair, map[pairKey]float64, map[int]bool) {
 	// pre-compute per-function keys and sets once — reused across all pair lookups.
 	keys := make([]string, len(fns))
 	importSets := make([]map[string]bool, len(fns))
@@ -130,6 +126,7 @@ func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPa
 
 	var candidates []scoredPair
 	pairScores := make(map[pairKey]float64, len(sharedCounts))
+	scoredFns := make(map[int]bool)
 
 	for pk, cnt := range sharedCounts {
 		// adaptive minimum: require ≥2 shared trigrams when both functions have
@@ -157,8 +154,13 @@ func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPa
 		callS := jaccard(callSets[pk.i], callSets[pk.j])
 		score := math.Cbrt(seqS * impS * callS)
 
+		// Both functions had a full score computed — they are orphan candidates
+		// if they ultimately don't join a cluster.
+		scoredFns[pk.i] = true
+		scoredFns[pk.j] = true
+
 		if score < identifyThreshold {
-			continue // pre-filter: no point passing to agglomerate if completeLinkageCheck would reject it anyway
+			continue // below threshold — not a clustering candidate
 		}
 
 		candidates = append(candidates, scoredPair{pk.i, pk.j, score})
@@ -170,7 +172,7 @@ func scorePairs(fns []ds.FunctionMeta, sharedCounts map[pairKey]int) ([]scoredPa
 		return candidates[i].score > candidates[j].score
 	})
 
-	return candidates, pairScores
+	return candidates, pairScores, scoredFns
 }
 
 // agglomerate runs complete-linkage agglomerative clustering over the scored
@@ -243,11 +245,29 @@ func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64) bo
 // buildClusters converts raw cluster membership data into Cluster objects.
 // Filters out singletons, structural stop-words, test clusters, and init clusters.
 // Disambiguates ShapeHash collisions and sorts by size descending.
-func buildClusters(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64) []ds.Cluster {
+//
+// Returns clusters and orphan metas. An orphan is a singleton that:
+//   - appeared in scoredFns — it had at least one full pair score computed,
+//     meaning it had structural affinity to something but every pair fell below
+//     identifyThreshold. Functions that never shared enough trigrams to score
+//     against anything are structurally unique, not orphaned.
+//   - passes the standard eligibility guard (not generated, ≥4 tokens, not test, not init)
+func buildClusters(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool) ([]ds.Cluster, []ds.FunctionMeta) {
 	var clusters []ds.Cluster
+	var orphans []ds.FunctionMeta
 
 	for _, idxs := range clusterMembers {
 		if len(idxs) < identifyMinSize {
+			// Singleton — collect as orphan only if it had a real score computed
+			// against at least one other function (i.e. it almost joined something).
+			// GeneratedCode and TestCode functions are already excluded by
+			// buildTrigramMap so they never appear in scoredFns.
+			if len(idxs) == 1 && scoredFns[idxs[0]] {
+				fn := fns[idxs[0]]
+				if fn.Name != "init" {
+					orphans = append(orphans, fn)
+				}
+			}
 			continue
 		}
 		if float64(len(idxs)) >= primitiveThreshold {
@@ -275,7 +295,7 @@ func buildClusters(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiv
 	sort.Slice(clusters, func(i, j int) bool {
 		return clusters[i].Size > clusters[j].Size
 	})
-	return clusters
+	return clusters, orphans
 }
 
 // assembleCluster builds a single Cluster value from its member FunctionMeta slice.
@@ -306,6 +326,7 @@ func assembleCluster(metas []ds.FunctionMeta) ds.Cluster {
 	c.Profile = computeProfile(metas)
 	c.Coherence = computeCoherence(metas)
 	c.CallCoherence = computeCallCoherence(metas)
+	c.Stats = computeClusterStats(metas)
 	return c
 }
 
@@ -754,6 +775,106 @@ func MemberPairwiseScores(members []ds.FunctionMeta) []float64 {
 		scores[i] = total / float64(n-1)
 	}
 	return scores
+}
+
+// computeClusterStats builds the ClusterStats for a cluster using arithmetic
+// mean pairwise scores (seqS + impS + callS) / 3. Arithmetic mean is used here
+// (rather than geometric) so that partial matches across dimensions stay visible
+// and do not collapse to 0. This is what orphan Z-score analysis compares against.
+func computeClusterStats(metas []ds.FunctionMeta) ds.ClusterStats {
+	n := len(metas)
+	if n < 2 {
+		return ds.ClusterStats{}
+	}
+	importSets := make([]map[string]bool, n)
+	callSets := make([]map[string]bool, n)
+	for i, m := range metas {
+		importSets[i] = toStringSet(m.DirectImports)
+		callSets[i] = toStringSet(m.CallTargets)
+	}
+
+	// Per-member mean arithmetic pairwise score
+	memberScores := make([]float64, n)
+	for i := 0; i < n; i++ {
+		var total float64
+		for j := 0; j < n; j++ {
+			if i == j {
+				continue
+			}
+			total += arithPairwiseScore(
+				metas[i].TokenSeq, metas[j].TokenSeq,
+				importSets[i], importSets[j],
+				callSets[i], callSets[j],
+			)
+		}
+		memberScores[i] = total / float64(n-1)
+	}
+
+	// Overall mean and sample std dev
+	var mean float64
+	for _, s := range memberScores {
+		mean += s
+	}
+	mean /= float64(n)
+
+	var variance float64
+	for _, s := range memberScores {
+		d := s - mean
+		variance += d * d
+	}
+	std := math.Sqrt(variance / float64(n-1)) // sample std dev
+
+	// Top-3 members by score (medoids)
+	type idxScore struct {
+		idx   int
+		score float64
+	}
+	ranked := make([]idxScore, n)
+	for i, s := range memberScores {
+		ranked[i] = idxScore{i, s}
+	}
+	sort.Slice(ranked, func(a, b int) bool {
+		return ranked[a].score > ranked[b].score
+	})
+	k := 3
+	if n < k {
+		k = n
+	}
+	top3 := make([]ds.RankedMember, k)
+	for i := 0; i < k; i++ {
+		top3[i] = ds.RankedMember{Meta: metas[ranked[i].idx], Score: ranked[i].score}
+	}
+
+	return ds.ClusterStats{
+		MeanScore: mean,
+		StdScore:  std,
+		Top3:      top3,
+	}
+}
+
+// arithPairwiseScore computes (seqS + impS + callS) / 3 for a pair of functions.
+// Unlike the geometric mean used in clustering, this never collapses to 0 when
+// one dimension is 0, making it suitable for orphan affinity analysis.
+func arithPairwiseScore(seqA, seqB []int, impsA, impsB, callsA, callsB map[string]bool) float64 {
+	seqS := seqSimilarity(seqA, seqB)
+	impS := jaccard(impsA, impsB)
+	callS := jaccard(callsA, callsB)
+	return (seqS + impS + callS) / 3.0
+}
+
+// OrphanScore computes the three dimension scores and arithmetic mean between
+// an orphaned function and a cluster medoid. Returns (seqS, impS, callS, arith).
+// Used by the orphan analysis pass in cmd.go.
+func OrphanScore(orphan, medoid ds.FunctionMeta) (seqS, impS, callS, arith float64) {
+	impA := toStringSet(orphan.DirectImports)
+	impB := toStringSet(medoid.DirectImports)
+	callA := toStringSet(orphan.CallTargets)
+	callB := toStringSet(medoid.CallTargets)
+	seqS = seqSimilarity(orphan.TokenSeq, medoid.TokenSeq)
+	impS = jaccard(impA, impB)
+	callS = jaccard(callA, callB)
+	arith = (seqS + impS + callS) / 3.0
+	return
 }
 
 // WriteIndex writes a compact markdown index of labelled clusters.

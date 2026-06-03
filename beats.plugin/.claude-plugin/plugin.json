@@ -1,0 +1,11 @@
+{
+  "name": "beats",
+  "version": "0.1.0",
+  "description": "Structural fingerprinting and LLM-enriched cluster analysis for Go codebases. Indexes a repository with the beats binary, enriches every structural cluster with idiom names, verdicts, canonical examples, and developer search questions, then generates an interactive HTML report.",
+  "author": {
+    "name": "somak2kai"
+  },
+  "repository": "https://github.com/somak2kai/beats",
+  "license": "MIT",
+  "keywords": ["golang", "static-analysis", "structural-patterns", "code-intelligence", "fingerprinting"]
+}

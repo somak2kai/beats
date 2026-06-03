@@ -46,6 +46,7 @@ type FunctionMeta struct {
 	Imports       []string // packages imported by the file this function lives in
 	DirectImports []string // packages this function actually references (subset)
 	GeneratedCode bool
+	TestCode      bool // true when the file this function lives in imports a test framework
 }
 
 type StructuralFeatures struct {
@@ -113,6 +114,43 @@ type ClusterProfile struct {
 	TopCallTargets []string // most frequent CallTargets across members
 }
 
+// RankedMember is a cluster member with its arithmetic-mean pairwise score.
+// Used to track the top-3 most representative members (medoids).
+type RankedMember struct {
+	Meta  FunctionMeta
+	Score float64 // arithmetic mean of (seqS + impS + callS) / 3 against all other members
+}
+
+// ClusterStats holds summary statistics computed during agglomeration, stored
+// alongside the cluster so orphan analysis can use them without recomputing.
+type ClusterStats struct {
+	MeanScore float64        // arithmetic mean of all pairwise arithmetic scores
+	StdScore  float64        // sample std deviation; floored at 0.05 in Z-score calc
+	Top3      []RankedMember // up to 3 members with highest mean pairwise score (medoids)
+}
+
+// ClusterCandidate is a cluster that an orphaned function has some affinity
+// toward, scored via arithmetic mean rather than geometric mean so that
+// partial matches across dimensions are visible.
+type ClusterCandidate struct {
+	ClusterIdx int
+	ShapeHash  string
+	SeqScore   float64 // token-sequence similarity
+	ImpScore   float64 // DirectImports Jaccard
+	CallScore  float64 // CallTargets Jaccard
+	ArithScore float64 // (SeqScore + ImpScore + CallScore) / 3
+	ZScore     float64 // (mean_C - arithScore) / max(std_C, 0.05); < 2 → plausible fit
+	Idiom      string  // SemanticIdiom of the candidate cluster (if enriched)
+}
+
+// OrphanedFunction is a function that did not join any cluster during
+// agglomeration. It carries its own metadata and a ranked list of the
+// clusters it came closest to.
+type OrphanedFunction struct {
+	Meta       FunctionMeta
+	Candidates []ClusterCandidate // sorted by ZScore ascending (best fit first)
+}
+
 type Cluster struct {
 	SeqKey        string // canonical string key of the token sequence
 	ShapeHash     string // SHA-256 prefix of SeqKey — stable identity across runs (16 hex chars)
@@ -121,10 +159,19 @@ type Cluster struct {
 	Members       []FunctionMeta
 	Size          int
 	Profile       ClusterProfile
-	Coherence     float64 // mean pairwise Jaccard of DirectImports
-	CallCoherence float64 // mean pairwise Jaccard of CallTargets
-	IsPrimitive   bool    // true if cluster is too common to be meaningful (IDF stop-word)
-	Label         string  // filled later by labelling pass
+	Stats         ClusterStats // summary statistics for orphan Z-score analysis
+	Coherence     float64      // mean pairwise Jaccard of DirectImports
+	CallCoherence float64      // mean pairwise Jaccard of CallTargets
+	IsPrimitive   bool         // true if cluster is too common to be meaningful (IDF stop-word)
+	Label         string       // filled later by labelling pass
+
+	// LLM enrichment — populated by beats update cluster, empty until then
+	SemanticIdiom   string   // 3–6 word name for the structural idiom, e.g. "webhook config deserializer"
+	Verdict         string   // one-sentence description of what the cluster represents
+	CanonicalMember string   // pkg/FuncName of the most representative member
+	SuggestedAction string   // suggested action: "none", or a short attention-candidate note
+	Confidence      string   // "high" | "medium" | "low"
+	SearchQuestions []string // 5–8 natural-language questions a developer might ask whose answer is this cluster
 }
 
 type Index struct {

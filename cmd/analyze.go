@@ -37,6 +37,45 @@ type ClusterRow struct {
 	TopImports       []string
 	Packages         []string    // unique package names, sorted
 	Members          []MemberRow // sorted by descending pairwise score
+	// LLM enrichment — empty until beats update cluster has been run
+	SemanticIdiom   string
+	Verdict         string
+	CanonicalMember string
+	SuggestedAction string
+	Confidence      string
+	SearchQuestions []string
+	// Orphan candidates — functions that did not join this cluster but have
+	// strong Z-score affinity to it. Each entry is "FuncName#shortpath#line".
+	Potentials []string
+}
+
+// CandidateRow is one cluster candidate for an orphaned function, ready for template rendering.
+type CandidateRow struct {
+	ClusterIdx int
+	ShapeHash  string
+	SeqScore   float64
+	ImpScore   float64
+	CallScore  float64
+	ArithScore float64
+	ZScore     float64
+	Idiom      string // SemanticIdiom if enriched, else ""
+}
+
+// OrphanRow holds display data for one orphaned function.
+type OrphanRow struct {
+	Package    string
+	Name       string
+	FilePath   string
+	Line       int
+	Candidates []CandidateRow
+}
+
+// DistBucket is one bar in a histogram — a label, a count, and a bar width
+// (0–100) pre-scaled to the bucket with the highest count.
+type DistBucket struct {
+	Label string
+	Count int
+	Width int // 0–100, for CSS bar width %
 }
 
 type RepoReport struct {
@@ -52,7 +91,12 @@ type RepoReport struct {
 	QuadHL              int          // import >= 0.60 AND call <  0.60
 	QuadLH              int          // import <  0.60 AND call >= 0.60
 	QuadLL              int          // import <  0.60 AND call <  0.60
+	ScoreDist           []DistBucket // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
+	ScoreExplain        string       // data-driven interpretation of the score distribution shape
+	SizeDist            []DistBucket // size histogram: 2, 3–4, 5–9, 10+
+	SizeExplain         string       // data-driven interpretation of the size distribution shape
 	Clusters            []ClusterRow // sorted by avg pairwise score desc
+	Orphans             []OrphanRow  // functions that escaped clustering, with Z-score candidates
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────
@@ -82,7 +126,9 @@ func runAnalyze(repo string) error {
 
 	slog.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
-	report := buildReport(repo, clusters)
+	orphans, _ := bDb.LoadOrphanedFunctions() // best-effort; nil if not yet computed
+
+	report := buildReport(repo, clusters, orphans)
 
 	beatsDir := filepath.Join(repo, ".beats")
 	if err := os.MkdirAll(beatsDir, 0755); err != nil {
@@ -159,10 +205,120 @@ func buildClusterRow(c ds.Cluster) ClusterRow {
 		TopImports:       c.Profile.TopImports,
 		Packages:         pkgs,
 		Members:          members,
+		SemanticIdiom:    c.SemanticIdiom,
+		Verdict:          c.Verdict,
+		CanonicalMember:  c.CanonicalMember,
+		SuggestedAction:  c.SuggestedAction,
+		Confidence:       c.Confidence,
+		SearchQuestions:  c.SearchQuestions,
 	}
 }
 
-func buildReport(repo string, clusters []ds.Cluster) RepoReport {
+// buildScoreExplain reads the five score buckets and returns a short
+// data-driven interpretation of the shape.
+//
+// buckets: [0]=0.55–0.65  [1]=0.65–0.75  [2]=0.75–0.85  [3]=0.85–0.95  [4]=0.95–1.00
+func buildScoreExplain(b [5]int) string {
+	total := 0
+	for _, c := range b {
+		total += c
+	}
+	if total == 0 {
+		return "No clusters to analyse."
+	}
+
+	body := b[0] + b[1] + b[2]   // 0.55–0.85
+	clones := b[4]                // 0.95–1.00
+	trough := b[3]                // 0.85–0.95
+	clonePct := clones * 100 / total
+	bodyPct := body * 100 / total
+
+	// bimodal: body is large, there's a visible dip at [3], and [4] spikes back up
+	bimodal := body > trough && clones > trough && trough < (body+clones)/3
+
+	switch {
+	case bimodal && clonePct >= 15:
+		return fmt.Sprintf(
+			"Bimodal shape: %d%% of clusters (0.55–0.85) are structural conventions — "+
+				"functions following the same pattern with variation — and %d%% (0.95–1.00) are near-identical, "+
+				"pointing to intentional twins or unabstracted copy-paste. "+
+				"The dip at 0.85–0.95 means these are two distinct populations, not a continuum.",
+			bodyPct, clonePct)
+	case clonePct >= 25:
+		return fmt.Sprintf(
+			"Heavy clone concentration: %d%% of clusters score above 0.95, indicating a large number of "+
+				"near-identical function pairs. These are strong candidates for abstraction or consolidation.",
+			clonePct)
+	case bodyPct >= 80:
+		return fmt.Sprintf(
+			"Most clusters (%d%%) sit in the 0.55–0.85 band — structural conventions with variation, "+
+				"not near-clones. The codebase has a consistent structural vocabulary without excessive copy-paste. "+
+				"Few clusters reach the 0.95+ near-identical threshold.",
+			bodyPct)
+	case b[0] >= b[1] && b[1] >= b[2] && b[2] >= b[3] && b[3] >= b[4]:
+		return "Smoothly declining distribution: most clusters sit just above the similarity threshold " +
+			"and count drops steadily toward 1.00. No dominant clone population; the codebase favours " +
+			"loosely similar conventions over tight structural repetition."
+	default:
+		return fmt.Sprintf(
+			"Score distribution is broadly spread across the 0.55–1.00 range (%d total clusters). "+
+				"No single band dominates, suggesting a mix of loose conventions, tighter sub-idioms, "+
+				"and isolated near-clones.",
+			total)
+	}
+}
+
+// buildSizeExplain reads the four size buckets and returns a short
+// data-driven interpretation of the shape.
+//
+// buckets: [0]=2  [1]=3–4  [2]=5–9  [3]=10+
+func buildSizeExplain(b [4]int) string {
+	total := 0
+	for _, c := range b {
+		total += c
+	}
+	if total == 0 {
+		return "No clusters to analyse."
+	}
+
+	pairPct := b[0] * 100 / total
+	large := b[2] + b[3] // size ≥ 5
+
+	switch {
+	case b[3] >= 5:
+		return fmt.Sprintf(
+			"%d%% of clusters are pairs (size 2), which is expected — "+
+				"truly identical functions get abstracted, so pairs are the most common structural echo. "+
+				"Notably, %d clusters recur 10 or more times: these are genuine codebase-wide idioms "+
+				"the team has organically converged on.",
+			pairPct, b[3])
+	case b[3] >= 1 && b[2] >= 3:
+		return fmt.Sprintf(
+			"%d%% of clusters are pairs (size 2). %d clusters recur 5 or more times — "+
+				"a small but real set of broadly recurring conventions worth documenting as canonical idioms.",
+			pairPct, large)
+	case b[3] == 0 && b[2] <= 2:
+		return fmt.Sprintf(
+			"%d%% of clusters are pairs (size 2) and no cluster recurs 10 or more times. "+
+				"The codebase has no single structural convention that appears broadly across the corpus — "+
+				"patterns are localised rather than codebase-wide.",
+			pairPct)
+	case pairPct >= 85:
+		return fmt.Sprintf(
+			"Pair-dominated: %d%% of clusters have exactly 2 members. "+
+				"Most findings are isolated echoes rather than recurring conventions. "+
+				"Focus on the size 5+ clusters (%d total) for the most actionable patterns.",
+			pairPct, large)
+	default:
+		return fmt.Sprintf(
+			"%d%% of clusters are pairs (size 2), with %d clusters of size 5 or more. "+
+				"A reasonable spread — the codebase has both local structural echoes and some "+
+				"broader recurring conventions.",
+			pairPct, large)
+	}
+}
+
+func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFunction) RepoReport {
 	rows := make([]ClusterRow, 0, len(clusters))
 	var totalCoherence, totalCallCoherence, totalAvgScore float64
 	var functionsInClusters int
@@ -207,6 +363,110 @@ func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 		meanAvgScore = totalAvgScore / float64(n)
 	}
 
+	// ── score distribution ────────────────────────────────────────────────────
+	scoreCounts := [5]int{} // buckets: <0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95+
+	for _, r := range rows {
+		s := r.AvgPairwiseScore
+		switch {
+		case s >= 0.95:
+			scoreCounts[4]++
+		case s >= 0.85:
+			scoreCounts[3]++
+		case s >= 0.75:
+			scoreCounts[2]++
+		case s >= 0.65:
+			scoreCounts[1]++
+		default:
+			scoreCounts[0]++
+		}
+	}
+	scoreLabels := [5]string{"0.55 – 0.65", "0.65 – 0.75", "0.75 – 0.85", "0.85 – 0.95", "0.95 – 1.00"}
+	scoreMax := 1
+	for _, c := range scoreCounts {
+		if c > scoreMax {
+			scoreMax = c
+		}
+	}
+	scoreDist := make([]DistBucket, 5)
+	for i, c := range scoreCounts {
+		scoreDist[i] = DistBucket{Label: scoreLabels[i], Count: c, Width: c * 100 / scoreMax}
+	}
+
+	// ── size distribution ─────────────────────────────────────────────────────
+	sizeCounts := [4]int{} // buckets: 2, 3–4, 5–9, 10+
+	for _, r := range rows {
+		switch {
+		case r.Size >= 10:
+			sizeCounts[3]++
+		case r.Size >= 5:
+			sizeCounts[2]++
+		case r.Size >= 3:
+			sizeCounts[1]++
+		default:
+			sizeCounts[0]++
+		}
+	}
+	sizeLabels := [4]string{"2", "3 – 4", "5 – 9", "10+"}
+	sizeMax := 1
+	for _, c := range sizeCounts {
+		if c > sizeMax {
+			sizeMax = c
+		}
+	}
+	sizeDist := make([]DistBucket, 4)
+	for i, c := range sizeCounts {
+		sizeDist[i] = DistBucket{Label: sizeLabels[i], Count: c, Width: c * 100 / sizeMax}
+	}
+
+	// ── orphan potentials reverse index: ClusterIdx → candidate entries ────────
+	// Each entry is "FuncName#shortpath#line" for display in the cluster table.
+	clusterPotentials := make(map[int][]string)
+	for _, o := range orphanedFns {
+		for _, c := range o.Candidates {
+			entry := o.Meta.Name + "#" + shortPath(o.Meta.FileMeta.Path) + "#" + fmt.Sprintf("%d", o.Meta.Start_line)
+			clusterPotentials[c.ClusterIdx] = append(clusterPotentials[c.ClusterIdx], entry)
+		}
+	}
+	// Attach potentials to cluster rows (rows are already built, patch them in).
+	for i := range rows {
+		// rows[i] was built from clusters[i] (same order, buildClusterRow preserves index)
+		// We need to find which original cluster index corresponds to rows[i].
+		// Since rows were appended in cluster order before the sort, we match by ShapeHash.
+		for clIdx, cl := range clusters {
+			if cl.ShapeHash == rows[i].ShapeHash {
+				if pots := clusterPotentials[clIdx]; len(pots) > 0 {
+					rows[i].Potentials = pots
+				}
+				break
+			}
+		}
+	}
+
+	// ── orphan rows ────────────────────────────────────────────────────────────
+	orphanRows := make([]OrphanRow, 0, len(orphanedFns))
+	for _, o := range orphanedFns {
+		cands := make([]CandidateRow, 0, len(o.Candidates))
+		for _, c := range o.Candidates {
+			cands = append(cands, CandidateRow{
+				ClusterIdx: c.ClusterIdx,
+				ShapeHash:  c.ShapeHash,
+				SeqScore:   c.SeqScore,
+				ImpScore:   c.ImpScore,
+				CallScore:  c.CallScore,
+				ArithScore: c.ArithScore,
+				ZScore:     c.ZScore,
+				Idiom:      c.Idiom,
+			})
+		}
+		orphanRows = append(orphanRows, OrphanRow{
+			Package:    o.Meta.Package,
+			Name:       o.Meta.Name,
+			FilePath:   o.Meta.FileMeta.Path,
+			Line:       o.Meta.Start_line,
+			Candidates: cands,
+		})
+	}
+
 	return RepoReport{
 		Repo:                filepath.Base(repo),
 		GeneratedAt:         time.Now().Format("2006-01-02 15:04:05"),
@@ -219,7 +479,12 @@ func buildReport(repo string, clusters []ds.Cluster) RepoReport {
 		QuadHL:              quadHL,
 		QuadLH:              quadLH,
 		QuadLL:              quadLL,
+		ScoreDist:           scoreDist,
+		ScoreExplain:        buildScoreExplain(scoreCounts),
+		SizeDist:            sizeDist,
+		SizeExplain:         buildSizeExplain(sizeCounts),
 		Clusters:            rows,
+		Orphans:             orphanRows,
 	}
 }
 
@@ -510,12 +775,45 @@ const reportTemplate = `<!DOCTYPE html>
   .score-bar-fill.score-mid{background:var(--yellow);}
   .score-bar-fill.score-low{background:var(--red);}
 
+  /* scroll indicator */
+  .tbl-scroll-hint{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;color:var(--muted2);margin-bottom:4px;user-select:none;}
+  .tbl-scroll-hint svg{opacity:.5;}
+
+  /* LLM enrichment panel */
+  .enrich-panel{margin-top:10px;padding:10px 12px;background:rgba(129,140,248,.06);border:1px solid rgba(129,140,248,.18);border-radius:6px;}
+  .enrich-row{display:flex;gap:8px;margin-bottom:5px;font-size:12px;align-items:baseline;}
+  .enrich-row:last-child{margin-bottom:0;}
+  .enrich-key{min-width:100px;flex-shrink:0;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:600;}
+  .enrich-val{color:var(--text);line-height:1.5;}
+  .conf-high{color:var(--green);font-weight:600;}
+  .conf-medium{color:var(--yellow);font-weight:600;}
+  .conf-low{color:var(--red);font-weight:600;}
+  .action-none{color:var(--muted2);font-style:italic;}
+  .action-attention{color:var(--yellow);}
+
+  /* search questions */
+  .sq-list{display:flex;flex-direction:column;gap:4px;margin-top:1px;}
+  .sq-item{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--muted);line-height:1.5;}
+  .sq-item::before{content:'?';flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);opacity:.6;width:10px;text-align:center;}
+
   /* search state */
   tr.cl-row.search-hidden,tr.cl-detail.search-hidden{display:none;}
   tr.cl-row.quad-hidden,tr.cl-detail.quad-hidden{display:none;}
   table.members tr.member-hidden{display:none;}
   table.members tr.member-match td{background:rgba(129,140,248,.07);}
   .fn-name mark{background:rgba(129,140,248,.35);color:var(--text);border-radius:2px;padding:0 1px;}
+
+  /* distribution histograms */
+  .dist-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:20px;}
+  .dist-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .dist-title{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px;}
+  .dist-row{display:flex;align-items:center;gap:9px;margin-bottom:5px;}
+  .dist-label{font-size:11px;color:var(--muted);font-family:'JetBrains Mono','Fira Code',monospace;min-width:80px;flex-shrink:0;text-align:right;}
+  .dist-bar-bg{flex:1;height:10px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+  .dist-bar-fill{height:100%;border-radius:3px;background:var(--accent);opacity:.7;transition:width .3s;}
+  .dist-count{font-size:11px;color:var(--muted2);font-variant-numeric:tabular-nums;min-width:28px;}
+  .dist-explain{font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px;padding-top:9px;border-top:1px solid var(--border);}
+  .dist-explain strong{color:var(--text);font-weight:600;}
 
   footer{text-align:center;padding:24px;color:var(--muted2);font-size:11px;border-top:1px solid var(--border);margin-top:36px;}
 </style>
@@ -640,6 +938,33 @@ const reportTemplate = `<!DOCTYPE html>
     </div>
   </details>
 
+  <div class="dist-section">
+    <div class="dist-grid">
+      <div>
+        <div class="dist-title">Score distribution — avg pairwise ∛(seq × imp × call)</div>
+{{range .ScoreDist}}
+        <div class="dist-row">
+          <span class="dist-label">{{.Label}}</span>
+          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%"></div></div>
+          <span class="dist-count">{{.Count}}</span>
+        </div>
+{{end}}
+        <p class="dist-explain">{{.ScoreExplain}}</p>
+      </div>
+      <div>
+        <div class="dist-title">Size distribution — functions per cluster</div>
+{{range .SizeDist}}
+        <div class="dist-row">
+          <span class="dist-label">{{.Label}}</span>
+          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%;background:var(--accent3)"></div></div>
+          <span class="dist-count">{{.Count}}</span>
+        </div>
+{{end}}
+        <p class="dist-explain">{{.SizeExplain}}</p>
+      </div>
+    </div>
+  </div>
+
   <div class="quad-filter-bar">
     <span class="quad-filter-label">Show</span>
     <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="hh" checked/><span class="quad-pill quad-hh">HH</span><span style="font-size:11px;color:var(--muted)">High Import · High Call</span></label>
@@ -664,6 +989,12 @@ const reportTemplate = `<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="tbl-scroll-hint">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 2v8M6 10l-2.5-2.5M6 10l2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    scroll to explore
+  </div>
   <div class="tbl-wrap">
   <table class="clusters" id="cl-table">
     <thead>
@@ -675,6 +1006,7 @@ const reportTemplate = `<!DOCTYPE html>
         <th data-col="coherence">Import Coh.</th>
         <th data-col="callcoherence">Call Coh.</th>
         <th data-col="packages">Packages</th>
+        <th data-col="potential" title="Orphaned functions with strong structural affinity to this cluster">Potential</th>
       </tr>
     </thead>
     <tbody>
@@ -692,9 +1024,18 @@ const reportTemplate = `<!DOCTYPE html>
         <td style="vertical-align:middle;">
           <div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div>
         </td>
+        <td style="vertical-align:top;padding:6px 12px;">
+          {{if $cl.Potentials}}
+            <div style="display:flex;flex-direction:column;gap:3px;">
+            {{range $cl.Potentials}}
+              <span style="font-size:10px;color:var(--accent2);white-space:nowrap;font-family:monospace;">{{.}}</span>
+            {{end}}
+            </div>
+          {{end}}
+        </td>
       </tr>
       <tr class="cl-detail" id="detail-{{$i}}">
-        <td colspan="7">
+        <td colspan="8">
           <div class="detail-panel">
             <div class="detail-meta">
               <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
@@ -719,6 +1060,25 @@ const reportTemplate = `<!DOCTYPE html>
 {{end}}
               </tbody>
             </table>
+{{if or $cl.SemanticIdiom $cl.Verdict $cl.SuggestedAction $cl.SearchQuestions}}
+            <div class="enrich-panel">
+{{if $cl.SemanticIdiom}}
+              <div class="enrich-row"><span class="enrich-key">Idiom</span><span class="enrich-val">{{$cl.SemanticIdiom}}{{if $cl.Confidence}} &nbsp;<span class="conf-{{$cl.Confidence}}">{{$cl.Confidence}}</span>{{end}}</span></div>
+{{end}}
+{{if $cl.CanonicalMember}}
+              <div class="enrich-row"><span class="enrich-key">Canonical</span><span class="enrich-val"><code style="font-size:11px;font-family:monospace;color:var(--accent2)">{{$cl.CanonicalMember}}</code></span></div>
+{{end}}
+{{if $cl.Verdict}}
+              <div class="enrich-row"><span class="enrich-key">Verdict</span><span class="enrich-val">{{$cl.Verdict}}</span></div>
+{{end}}
+{{if $cl.SuggestedAction}}
+              <div class="enrich-row"><span class="enrich-key">Action</span><span class="enrich-val {{if eq $cl.SuggestedAction "none"}}action-none{{else}}action-attention{{end}}">{{$cl.SuggestedAction}}</span></div>
+{{end}}
+{{if $cl.SearchQuestions}}
+              <div class="enrich-row"><span class="enrich-key">Questions</span><span class="enrich-val"><div class="sq-list">{{range $cl.SearchQuestions}}<div class="sq-item">{{.}}</div>{{end}}</div></span></div>
+{{end}}
+            </div>
+{{end}}
           </div>
         </td>
       </tr>
@@ -728,6 +1088,57 @@ const reportTemplate = `<!DOCTYPE html>
   </div>
 
 </div>
+
+{{if .Orphans}}
+<div style="max-width:1400px;margin:32px auto;padding:0 24px;">
+<h2 style="font-size:1rem;font-weight:700;color:var(--accent);margin-bottom:12px;">
+  Function Deviations
+  <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px;">{{len .Orphans}} function(s) that did not join any cluster — shown with closest structural cluster match</span>
+</h2>
+<table id="orphan-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+<thead>
+  <tr style="background:var(--surface2);color:var(--muted);text-align:left;">
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Function</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Package</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">File : Line</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Closest Cluster</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Token-sequence similarity">Seq</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Import Jaccard">Imp</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="CallTarget Jaccard">Call</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Arithmetic mean of the three scores">(S+I+C)/3</th>
+    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Z = (arith − cluster_mean) / max(cluster_std, 0.05). Higher = stronger fit. Z > 0 beats the cluster mean.">Z</th>
+  </tr>
+</thead>
+<tbody>
+{{range .Orphans}}
+  {{$fn := .}}
+  {{if .Candidates}}
+    {{with index .Candidates 0}}
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 12px;font-weight:600;color:var(--text);">{{$fn.Name}}</td>
+      <td style="padding:8px 12px;color:var(--muted);">{{$fn.Package}}</td>
+      <td style="padding:8px 12px;color:var(--muted2);font-size:11px;">{{shortPath $fn.FilePath}}:{{$fn.Line}}</td>
+      <td style="padding:8px 12px;">
+        {{if .Idiom}}<span style="color:var(--accent2);">{{.Idiom}}</span>{{else}}<span style="color:var(--muted2);">cluster-{{.ClusterIdx}}</span>{{end}}
+        <span style="font-size:10px;color:var(--muted2);margin-left:4px;">{{.ShapeHash}}</span>
+      </td>
+      <td style="padding:8px 12px;text-align:right;">{{f2 .SeqScore}}</td>
+      <td style="padding:8px 12px;text-align:right;">{{f2 .ImpScore}}</td>
+      <td style="padding:8px 12px;text-align:right;">{{f2 .CallScore}}</td>
+      <td style="padding:8px 12px;text-align:right;font-weight:600;">{{f2 .ArithScore}}</td>
+      <td style="padding:8px 12px;text-align:right;">
+        {{if gt .ZScore 2.0}}<span style="color:var(--green);font-weight:600;">{{f2 .ZScore}}</span>
+        {{else if gt .ZScore 0.0}}<span style="color:var(--yellow);">{{f2 .ZScore}}</span>
+        {{else}}<span style="color:var(--muted);">{{f2 .ZScore}}</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
+  {{end}}
+{{end}}
+</tbody>
+</table>
+</div>
+{{end}}
 
 <footer>beats · vocabulary-independent structural fingerprinting for Go · {{.GeneratedAt}}</footer>
 
@@ -742,7 +1153,7 @@ function toggleRow(idx) {
 
 (function(){
   var state={col:'avgscore',asc:false};
-  var colIndex={quadrant:0,shape:1,size:2,avgscore:3,coherence:4,callcoherence:5,packages:6};
+  var colIndex={quadrant:0,shape:1,size:2,avgscore:3,coherence:4,callcoherence:5,packages:6,potential:7};
 
   document.querySelectorAll('#cl-table thead th').forEach(function(th){
     th.addEventListener('click',function(){

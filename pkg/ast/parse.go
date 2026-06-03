@@ -42,6 +42,7 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 	imports := extractImports(file)
 	aliasMap := buildImportAliasMap(file)
 	isGeneratedCode := isGeneratedCode(file)
+	isTestCode := isTestFile(imports)
 
 	funcs := make([]ds.FunctionMeta, 0)
 
@@ -74,11 +75,35 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 			CallTargets:   extractCallTargets(fn, aliasMap),
 			DirectImports: extractDirectImports(fn, aliasMap),
 			GeneratedCode: isGeneratedCode,
+				TestCode:      isTestCode,
 		})
 		return true
 	})
 
 	return funcs, nil
+}
+
+// testFrameworkImports is the set of import paths that identify a file as
+// belonging to test infrastructure. Any file importing one of these is stamped
+// with TestCode=true on every function it contains, excluding all those
+// functions from clustering and orphan analysis entirely.
+var testFrameworkImports = map[string]bool{
+	"testing":                             true,
+	"github.com/stretchr/testify/require": true,
+	"github.com/stretchr/testify/assert":  true,
+	"github.com/stretchr/testify/suite":   true,
+	"github.com/stretchr/testify/mock":    true,
+}
+
+// isTestFile returns true when the file's import list contains at least one
+// test framework import. Checked once per file, not per function.
+func isTestFile(imports []string) bool {
+	for _, imp := range imports {
+		if testFrameworkImports[imp] {
+			return true
+		}
+	}
+	return false
 }
 
 func isGeneratedCode(file *ast.File) bool {

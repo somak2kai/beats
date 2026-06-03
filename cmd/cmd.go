@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 
 	"github.com/google/uuid"
@@ -36,6 +38,10 @@ var (
 	_ skippable = (*identifyClusterWriter)(nil)
 	_ command   = (*analyzer)(nil)
 	_ skippable = (*analyzer)(nil)
+	_ command   = (*orphanAnalyzer)(nil)
+	_ skippable = (*orphanAnalyzer)(nil)
+	_ command   = (*orphanPersistor)(nil)
+	_ skippable = (*orphanPersistor)(nil)
 )
 
 type command interface{ execute() error }
@@ -52,6 +58,8 @@ type identifyCluster struct{ state *State }
 type identifyClusterPersistor struct{ state *State }
 type identifyClusterWriter struct{ state *State }
 type analyzer struct{ state *State }
+type orphanAnalyzer struct{ state *State }
+type orphanPersistor struct{ state *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -64,6 +72,8 @@ type State struct {
 	LabelableCluster  []ds.Cluster
 	IdentifiedCluster []ds.Cluster
 	MemberScores      []ds.MemberScore
+	OrphanMetas       []ds.FunctionMeta      // functions that did not join any cluster
+	OrphanedFunctions []ds.OrphanedFunction  // orphans with Z-score candidates, after analysis
 	RepositoryPath    string
 	Index             ds.Index
 }
@@ -239,8 +249,13 @@ func (a *analyzer) execute() error {
 func (m *analyzer) skipInDryRun() bool { return true }
 
 func (c *identifyCluster) execute() error {
-	c.state.IdentifiedCluster = ast.IdentifyClusters(c.state.FunctionMetadata)
-	slog.Info("identified clusters", slog.Int("count", len(c.state.IdentifiedCluster)))
+	clusters, orphans := ast.IdentifyClusters(c.state.FunctionMetadata)
+	c.state.IdentifiedCluster = clusters
+	c.state.OrphanMetas = orphans
+	slog.Info("identified clusters",
+		slog.Int("count", len(clusters)),
+		slog.Int("orphans", len(orphans)),
+	)
 	return nil
 }
 
@@ -249,16 +264,22 @@ func (c *identifyClusterPersistor) execute() error {
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
-	for _, cl := range c.state.IdentifiedCluster {
-		if err := bDb.StoreCluster(db.TierIdentified, cl.ShapeHash, cl); err != nil {
+	for idx, cl := range c.state.IdentifiedCluster {
+		if err := bDb.StoreClusterByIndex(db.TierIdentified, idx, cl); err != nil {
 			slog.Error("unable to save identified cluster",
+				slog.Int("index", idx),
 				slog.String("shape_hash", cl.ShapeHash),
 				slog.Any("error", err),
 			)
 			return err
 		}
 	}
-	slog.Info("identified clusters persisted", slog.Int("count", len(c.state.IdentifiedCluster)))
+	count := len(c.state.IdentifiedCluster)
+	if err := bDb.StoreClusterCount(db.TierIdentified, count); err != nil {
+		slog.Error("unable to save cluster count", slog.Any("error", err))
+		return err
+	}
+	slog.Info("identified clusters persisted", slog.Int("count", count))
 	return nil
 }
 
@@ -286,6 +307,136 @@ func (w *identifyClusterWriter) execute() error {
 }
 
 func (w *identifyClusterWriter) skipInDryRun() bool { return true }
+
+// orphanAnalyzer scores each orphaned function against every non-primitive
+// cluster and computes a Z-score relative to that cluster's internal score
+// distribution.
+//
+// Scoring: the orphan is scored against ALL cluster members (not just the
+// medoid) using arithmetic mean (seqS+impS+callS)/3. The mean of those scores
+// is then compared to the cluster's own internal mean pairwise score.
+//
+// Z = (arith_orphan − mean_C) / max(std_C, 0.05)
+//
+// Z > 0:  orphan scores above the cluster mean → strong candidate, likely missed member.
+// Z > 2:  very strong fit — more than 2 std devs above the internal mean.
+// Z < −2: too far below the cluster mean → filtered out, not meaningful.
+//
+// Fast-reject: seqS against the medoid must be ≥ 0.30 before full member scoring.
+// For each orphan, up to 5 candidates with Z ≥ −2.0 are kept, sorted by Z
+// descending (highest Z = best fit first).
+func (o *orphanAnalyzer) execute() error {
+	if len(o.state.OrphanMetas) == 0 || len(o.state.IdentifiedCluster) == 0 {
+		slog.Info("orphan analysis skipped", slog.String("reason", "no orphans or no clusters"))
+		return nil
+	}
+
+	const (
+		zFloor        = -2.0  // discard candidates more than 2 std devs below cluster mean
+		arithMinScore = 0.25  // minimum mean-member arith score to surface a candidate
+		seqFastReject = 0.30  // seq similarity against medoid — cheap gate before full scoring
+		maxCandidates = 5
+	)
+
+	result := make([]ds.OrphanedFunction, 0, len(o.state.OrphanMetas))
+
+	for _, orphan := range o.state.OrphanMetas {
+		var candidates []ds.ClusterCandidate
+
+		for idx, cl := range o.state.IdentifiedCluster {
+			if cl.IsPrimitive || len(cl.Stats.Top3) == 0 || len(cl.Members) == 0 {
+				continue
+			}
+
+			// Fast-reject: check seq similarity against the medoid before
+			// scoring the orphan against every member.
+			medoidSeqS, _, _, _ := ast.OrphanScore(orphan, cl.Stats.Top3[0].Meta)
+			if medoidSeqS < seqFastReject {
+				continue
+			}
+
+			// Score orphan against every cluster member, collect per-dimension sums.
+			var seqSum, impSum, callSum float64
+			for _, m := range cl.Members {
+				s, i, c, _ := ast.OrphanScore(orphan, m)
+				seqSum += s
+				impSum += i
+				callSum += c
+			}
+			n := float64(len(cl.Members))
+			seqS := seqSum / n
+			impS := impSum / n
+			callS := callSum / n
+			arith := (seqS + impS + callS) / 3.0
+
+			if arith < arithMinScore {
+				continue
+			}
+
+			// Z > 0: orphan beats the cluster mean → probable missed member.
+			// Z < −2: too distant → discard.
+			z := (arith - cl.Stats.MeanScore) / math.Max(cl.Stats.StdScore, 0.05)
+			if z < zFloor {
+				continue
+			}
+
+			candidates = append(candidates, ds.ClusterCandidate{
+				ClusterIdx: idx,
+				ShapeHash:  cl.ShapeHash,
+				SeqScore:   seqS,
+				ImpScore:   impS,
+				CallScore:  callS,
+				ArithScore: arith,
+				ZScore:     z,
+				Idiom:      cl.SemanticIdiom,
+			})
+		}
+
+		if len(candidates) == 0 {
+			continue
+		}
+
+		// Sort descending: highest Z (strongest fit) first.
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].ZScore > candidates[j].ZScore
+		})
+		if len(candidates) > maxCandidates {
+			candidates = candidates[:maxCandidates]
+		}
+
+		result = append(result, ds.OrphanedFunction{
+			Meta:       orphan,
+			Candidates: candidates,
+		})
+	}
+
+	o.state.OrphanedFunctions = result
+	slog.Info("orphan analysis complete",
+		slog.Int("orphans_analysed", len(o.state.OrphanMetas)),
+		slog.Int("orphans_with_candidates", len(result)),
+	)
+	return nil
+}
+
+func (o *orphanAnalyzer) skipInDryRun() bool { return false }
+
+func (p *orphanPersistor) execute() error {
+	if len(p.state.OrphanedFunctions) == 0 {
+		return nil
+	}
+	tmp := filepath.Join(os.TempDir(), "badger", p.state.RepositoryPath)
+	bDb := db.NewBadgerXDb(tmp)
+	defer bDb.Close() //nolint:errcheck
+
+	if err := bDb.StoreOrphanedFunctions(p.state.OrphanedFunctions); err != nil {
+		slog.Error("unable to persist orphaned functions", slog.Any("error", err))
+		return err
+	}
+	slog.Info("orphaned functions persisted", slog.Int("count", len(p.state.OrphanedFunctions)))
+	return nil
+}
+
+func (p *orphanPersistor) skipInDryRun() bool { return true }
 
 func (b *Beats) run(repo string) error {
 
@@ -318,9 +469,11 @@ func getCommands(s *State) []command {
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
 		&functionMetadataWriter{state: s},
-		&identifyCluster{state: s},
+		&identifyCluster{state: s},         // also populates OrphanMetas
 		&identifyClusterPersistor{state: s},
 		&identifyClusterWriter{state: s},
+		&orphanAnalyzer{state: s},           // Z-score analysis against cluster stats
+		&orphanPersistor{state: s},          // persist OrphanedFunctions to DB
 		&indexCommand{state: s},
 		&indexMetadataWriter{state: s},
 		&indexPersistor{state: s},

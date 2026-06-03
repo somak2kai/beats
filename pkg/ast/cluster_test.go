@@ -474,7 +474,7 @@ func TestIsInitCluster_Empty(t *testing.T) {
 var seq5 = []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
 
 func TestIdentifyClusters_NilInput(t *testing.T) {
-	if got := IdentifyClusters(nil); got != nil {
+	if got, _ := IdentifyClusters(nil); got != nil {
 		t.Fatalf("expected nil for nil input, got %v", got)
 	}
 }
@@ -488,7 +488,7 @@ func TestIdentifyClusters_IdenticalFunctionsClustered(t *testing.T) {
 		[]ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
 		makeNoiseFns(98)...,
 	)
-	clusters := IdentifyClusters(fns)
+	clusters, _ := IdentifyClusters(fns)
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster for identical functions, got %d", len(clusters))
 	}
@@ -501,7 +501,7 @@ func TestIdentifyClusters_StructurallyDifferentNotClustered(t *testing.T) {
 	// Disjoint token sequences → no shared trigrams → no candidates → no cluster.
 	f0 := makeFn([]int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}, []string{"fmt"}, nil)
 	f1 := makeFn([]int{TK_RANGE, TK_DEFER, TK_CALL_PKG, TK_ASSIGN, TK_GO}, []string{"os"}, nil)
-	if clusters := IdentifyClusters([]ds.FunctionMeta{f0, f1}); len(clusters) != 0 {
+	if clusters, _ := IdentifyClusters([]ds.FunctionMeta{f0, f1}); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for structurally different functions, got %d", len(clusters))
 	}
 }
@@ -519,7 +519,7 @@ func TestIdentifyClusters_CompleteLinkagePreventsChaining(t *testing.T) {
 
 	// 3 target + 97 noise = 100 total → primitiveThreshold = 5 → cluster of 2 survives.
 	fns := append([]ds.FunctionMeta{f0, f1, f2}, makeNoiseFns(97)...)
-	clusters := IdentifyClusters(fns)
+	clusters, _ := IdentifyClusters(fns)
 	// F2 is a singleton → dropped (identifyMinSize=2). Only {F0,F1} survives.
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster (complete linkage blocks 3-way merge), got %d", len(clusters))
@@ -547,7 +547,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 		},
 		makeNoiseFns(95)...,
 	)
-	clusters := IdentifyClusters(fns)
+	clusters, _ := IdentifyClusters(fns)
 	if len(clusters) < 2 {
 		t.Fatalf("expected ≥2 clusters, got %d", len(clusters))
 	}
@@ -560,7 +560,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 func TestIdentifyClusters_SingletonDropped(t *testing.T) {
 	// One function alone cannot form a cluster (identifyMinSize=2).
 	fns := []ds.FunctionMeta{makeFn(seq5, []string{"fmt"}, nil)}
-	if clusters := IdentifyClusters(fns); len(clusters) != 0 {
+	if clusters, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for a single function, got %d", len(clusters))
 	}
 }
@@ -575,7 +575,7 @@ func TestIdentifyClusters_InitClusterDropped(t *testing.T) {
 	// The cluster of 2 would survive the stop-word check (2 < 5) but must be
 	// dropped by isInitCluster — this tests that filter specifically.
 	fns := append([]ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)
-	if clusters := IdentifyClusters(fns); len(clusters) != 0 {
+	if clusters, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected init cluster to be dropped, got %d clusters", len(clusters))
 	}
 }
