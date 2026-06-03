@@ -30,7 +30,6 @@ var (
 	_ skippable = (*indexMetadataWriter)(nil)
 	_ command   = (*indexPersistor)(nil)
 	_ skippable = (*indexPersistor)(nil)
-	_ command   = (*beatsLabelWriter)(nil)
 	_ command   = (*identifyCluster)(nil)
 	_ command   = (*identifyClusterPersistor)(nil)
 	_ skippable = (*identifyClusterPersistor)(nil)
@@ -53,7 +52,7 @@ type indexCommand struct{ state *State }
 type functionMetadataWriter struct{ state *State }
 type indexMetadataWriter struct{ state *State }
 type indexPersistor struct{ state *State }
-type beatsLabelWriter struct{ state *State }
+
 type identifyCluster struct{ state *State }
 type identifyClusterPersistor struct{ state *State }
 type identifyClusterWriter struct{ state *State }
@@ -67,9 +66,6 @@ type Beats struct {
 type State struct {
 	PkgToFileMetadata ds.PkgToFileMeta
 	FunctionMetadata  []ds.FunctionMeta
-	OriginalCluster   []ds.Cluster
-	CollapsedCluster  []ds.Cluster
-	LabelableCluster  []ds.Cluster
 	IdentifiedCluster []ds.Cluster
 	MemberScores      []ds.MemberScore
 	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
@@ -215,33 +211,6 @@ func (w *indexPersistor) skipInDryRun() bool {
 	return true
 }
 
-func (b *beatsLabelWriter) execute() error {
-
-	beatsDir := filepath.Join(b.state.RepositoryPath, ".beats")
-	if err := os.MkdirAll(beatsDir, 0755); err != nil {
-		slog.Error("unable to create .beats directory", slog.Any("error", err))
-		return err
-	}
-
-	base := filepath.Base(b.state.RepositoryPath)
-	labelFile := filepath.Join(beatsDir, "beats_label_"+base+".md")
-
-	if err := b.createClusterLabels(b.state.LabelableCluster, labelFile, base); err != nil {
-		slog.Error("unable to create cluster labels ", slog.Any("error", err))
-		return err
-	}
-	slog.Info("beats label wrote", slog.String("path", labelFile))
-	return nil
-}
-
-func (b *beatsLabelWriter) createClusterLabels(cls []ds.Cluster, path, repo string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close() //nolint:errcheck
-	return ast.WriteClusters(f, repo, cls)
-}
 func (a *analyzer) execute() error {
 	return runAnalyze(a.state.RepositoryPath)
 }
@@ -443,9 +412,6 @@ func (b *Beats) run(repo string) error {
 	s := &State{
 		RepositoryPath:    repo,
 		FunctionMetadata:  make([]ds.FunctionMeta, 0),
-		OriginalCluster:   make([]ds.Cluster, 0),
-		CollapsedCluster:  make([]ds.Cluster, 0),
-		LabelableCluster:  make([]ds.Cluster, 0),
 		PkgToFileMetadata: make(ds.PkgToFileMeta),
 	}
 	for _, cmd := range getCommands(s) {
