@@ -75,7 +75,7 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 			CallTargets:   extractCallTargets(fn, aliasMap),
 			DirectImports: extractDirectImports(fn, aliasMap),
 			GeneratedCode: isGeneratedCode,
-				TestCode:      isTestCode,
+			TestCode:      isTestCode,
 		})
 		return true
 	})

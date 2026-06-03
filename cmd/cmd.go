@@ -72,8 +72,8 @@ type State struct {
 	LabelableCluster  []ds.Cluster
 	IdentifiedCluster []ds.Cluster
 	MemberScores      []ds.MemberScore
-	OrphanMetas       []ds.FunctionMeta      // functions that did not join any cluster
-	OrphanedFunctions []ds.OrphanedFunction  // orphans with Z-score candidates, after analysis
+	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
+	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
 	RepositoryPath    string
 	Index             ds.Index
 }
@@ -332,9 +332,9 @@ func (o *orphanAnalyzer) execute() error {
 	}
 
 	const (
-		zFloor        = -2.0  // discard candidates more than 2 std devs below cluster mean
-		arithMinScore = 0.25  // minimum mean-member arith score to surface a candidate
-		seqFastReject = 0.30  // seq similarity against medoid — cheap gate before full scoring
+		zFloor        = -2.0 // discard candidates more than 2 std devs below cluster mean
+		arithMinScore = 0.25 // minimum mean-member arith score to surface a candidate
+		seqFastReject = 0.30 // seq similarity against medoid — cheap gate before full scoring
 		maxCandidates = 5
 	)
 
@@ -469,11 +469,11 @@ func getCommands(s *State) []command {
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
 		&functionMetadataWriter{state: s},
-		&identifyCluster{state: s},         // also populates OrphanMetas
+		&identifyCluster{state: s}, // also populates OrphanMetas
 		&identifyClusterPersistor{state: s},
 		&identifyClusterWriter{state: s},
-		&orphanAnalyzer{state: s},           // Z-score analysis against cluster stats
-		&orphanPersistor{state: s},          // persist OrphanedFunctions to DB
+		&orphanAnalyzer{state: s},  // Z-score analysis against cluster stats
+		&orphanPersistor{state: s}, // persist OrphanedFunctions to DB
 		&indexCommand{state: s},
 		&indexMetadataWriter{state: s},
 		&indexPersistor{state: s},

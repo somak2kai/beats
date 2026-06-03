@@ -227,9 +227,9 @@ func buildScoreExplain(b [5]int) string {
 		return "No clusters to analyse."
 	}
 
-	body := b[0] + b[1] + b[2]   // 0.55–0.85
-	clones := b[4]                // 0.95–1.00
-	trough := b[3]                // 0.85–0.95
+	body := b[0] + b[1] + b[2] // 0.55–0.85
+	clones := b[4]             // 0.95–1.00
+	trough := b[3]             // 0.85–0.95
 	clonePct := clones * 100 / total
 	bodyPct := body * 100 / total
 
