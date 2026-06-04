@@ -16,14 +16,14 @@ import (
 // identifyThreshold is the minimum combined similarity score for two functions
 // to be considered members of the same cluster.
 //
-// Score = 0.5×seqSim + 0.3×importJaccard + 0.2×callJaccard
+// Score = ∛(seqSim × importJaccard × callJaccard)
 //
 // At 0.55 the gate sits between:
-//   - identical sequence + mismatched imports (~0.515) → reject
-//   - identical sequence + moderate import overlap (~0.65+) → accept
+//   - identical sequence, one empty import/call set (∛(1×0×…)=0) → reject
+//   - identical sequence + moderate overlap on both import and call sets (~0.6+) → accept
 const (
 	identifyThreshold = 0.55
-	identifyMinSize   = 2
+	identifyMinSize   = 3
 
 	// maxTrigranBucket caps how many functions a single trigram may appear in
 	// before it is treated as a structural stop-word and skipped during candidate
@@ -243,7 +243,7 @@ func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64) bo
 }
 
 // buildClusters converts raw cluster membership data into Cluster objects.
-// Filters out singletons, structural stop-words, test clusters, and init clusters.
+// Filters out clusters smaller than identifyMinSize (currently 3), structural stop-words, test clusters, and init clusters.
 // Disambiguates ShapeHash collisions and sorts by size descending.
 //
 // Returns clusters and orphan metas. An orphan is a singleton that:
@@ -258,10 +258,11 @@ func buildClusters(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiv
 
 	for _, idxs := range clusterMembers {
 		if len(idxs) < identifyMinSize {
-			// Singleton — collect as orphan only if it had a real score computed
-			// against at least one other function (i.e. it almost joined something).
-			// GeneratedCode and TestCode functions are already excluded by
-			// buildTrigramMap so they never appear in scoredFns.
+			// Clusters below identifyMinSize are dropped. Only true singletons (size 1)
+			// are eligible as orphans — size-2 clusters are silently discarded.
+			// An orphan must have had a real score computed (it almost joined something);
+			// GeneratedCode and TestCode functions are excluded by buildTrigramMap and
+			// never appear in scoredFns.
 			if len(idxs) == 1 && scoredFns[idxs[0]] {
 				fn := fns[idxs[0]]
 				if fn.Name != "init" {

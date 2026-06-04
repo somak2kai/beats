@@ -482,18 +482,18 @@ func TestIdentifyClusters_NilInput(t *testing.T) {
 func TestIdentifyClusters_IdenticalFunctionsClustered(t *testing.T) {
 	imp := []string{"fmt"}
 	calls := []string{"fmt.Println"}
-	// 2 target functions + 98 noise = 100 total.
-	// primitiveThreshold = 100 * 0.05 = 5 → a cluster of 2 survives (2 < 5).
+	// 3 target functions + 97 noise = 100 total.
+	// primitiveThreshold = 100 * 0.05 = 5 → a cluster of 3 survives (3 < 5).
 	fns := append(
-		[]ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
-		makeNoiseFns(98)...,
+		[]ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
+		makeNoiseFns(97)...,
 	)
 	clusters, _ := IdentifyClusters(fns)
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster for identical functions, got %d", len(clusters))
 	}
-	if clusters[0].Size != 2 {
-		t.Fatalf("expected cluster size 2, got %d", clusters[0].Size)
+	if clusters[0].Size != 3 {
+		t.Fatalf("expected cluster size 3, got %d", clusters[0].Size)
 	}
 }
 
@@ -507,25 +507,32 @@ func TestIdentifyClusters_StructurallyDifferentNotClustered(t *testing.T) {
 }
 
 func TestIdentifyClusters_CompleteLinkagePreventsChaining(t *testing.T) {
-	// F0 ~ F1 (score≈0.75), F1 ~ F2 (score≈0.67), but F0 !~ F2 (score=0.50 < 0.55).
-	// Complete linkage must block {F0,F1,F2} from merging; only {F0,F1} forms.
+	// F0, F1, F2 all cluster together (every cross-pair scores ≥ 0.55) → {F0,F1,F2}.
+	// F3 shares seq5 but disjoint imports/calls from F0/F1 → cbrt(1×0×0)=0 < 0.55.
+	// Complete linkage must block {F0,F1,F2} ∪ {F3}; only the size-3 cluster survives.
 	//
-	// Score breakdown for F0-F2:
-	//   seqSim=1.0, importJaccard=0 ({"fmt"}∩{"os","io"}=∅), callJaccard=0
-	//   → 0.5×1.0 + 0.3×0 + 0.2×0 = 0.50 < 0.55 → not in pairScores
-	f0 := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
+	// Score breakdown F0/F1 ~ F2 (representative):
+	//   seqSim=1.0, importJaccard({fmt,os},{fmt,os,io})=2/3≈0.67,
+	//   callJaccard({fmt.Println,os.Exit},{fmt.Println,os.Exit,io.Close})=2/3≈0.67
+	//   → cbrt(1.0 × 0.67 × 0.67) ≈ 0.765 ≥ 0.55 ✓
+	//
+	// Score breakdown F0 ~ F3:
+	//   importJaccard({fmt,os},{io,net})=0, callJaccard=0 → cbrt(0)=0 < 0.55 ✗
+	f0 := makeFn(seq5, []string{"fmt", "os"}, []string{"fmt.Println", "os.Exit"})
 	f1 := makeFn(seq5, []string{"fmt", "os"}, []string{"fmt.Println", "os.Exit"})
-	f2 := makeFn(seq5, []string{"os", "io"}, []string{"os.Exit", "io.Close"})
+	f2 := makeFn(seq5, []string{"fmt", "os", "io"}, []string{"fmt.Println", "os.Exit", "io.Close"})
+	f3 := makeFn(seq5, []string{"io", "net"}, []string{"io.Close", "net.Dial"})
 
-	// 3 target + 97 noise = 100 total → primitiveThreshold = 5 → cluster of 2 survives.
-	fns := append([]ds.FunctionMeta{f0, f1, f2}, makeNoiseFns(97)...)
+	// 4 target + 96 noise = 100 total → primitiveThreshold = 5 → cluster of 3 survives (3 < 5).
+	fns := append([]ds.FunctionMeta{f0, f1, f2, f3}, makeNoiseFns(96)...)
 	clusters, _ := IdentifyClusters(fns)
-	// F2 is a singleton → dropped (identifyMinSize=2). Only {F0,F1} survives.
+	// F3 is blocked by complete linkage and becomes a singleton → dropped (identifyMinSize=3).
+	// Only {F0,F1,F2} survives.
 	if len(clusters) != 1 {
-		t.Fatalf("expected 1 cluster (complete linkage blocks 3-way merge), got %d", len(clusters))
+		t.Fatalf("expected 1 cluster (complete linkage blocks 4-way merge), got %d", len(clusters))
 	}
-	if clusters[0].Size != 2 {
-		t.Fatalf("expected cluster size 2 (F0+F1 only), got %d", clusters[0].Size)
+	if clusters[0].Size != 3 {
+		t.Fatalf("expected cluster size 3 (F0+F1+F2 only), got %d", clusters[0].Size)
 	}
 }
 
@@ -534,18 +541,20 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 	imp1, calls1 := []string{"fmt"}, []string{"fmt.Println"}
 	imp2, calls2 := []string{"os"}, []string{"os.Exit"}
 
-	// Three functions sharing seq2 (larger cluster) + two sharing seq5 (smaller).
-	// 5 target + 95 noise = 100 total → primitiveThreshold = 5 → cluster of 3 (3<5)
-	// and cluster of 2 (2<5) both survive.
+	// Four functions sharing seq2 (larger cluster) + three sharing seq5 (smaller).
+	// 7 target + 93 noise = 100 total → primitiveThreshold = 5 → cluster of 4 (4<5)
+	// and cluster of 3 (3<5) both survive.
 	fns := append(
 		[]ds.FunctionMeta{
 			makeFn(seq2, imp2, calls2),
 			makeFn(seq2, imp2, calls2),
 			makeFn(seq2, imp2, calls2),
+			makeFn(seq2, imp2, calls2),
+			makeFn(seq5, imp1, calls1),
 			makeFn(seq5, imp1, calls1),
 			makeFn(seq5, imp1, calls1),
 		},
-		makeNoiseFns(95)...,
+		makeNoiseFns(93)...,
 	)
 	clusters, _ := IdentifyClusters(fns)
 	if len(clusters) < 2 {
@@ -558,7 +567,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 }
 
 func TestIdentifyClusters_SingletonDropped(t *testing.T) {
-	// One function alone cannot form a cluster (identifyMinSize=2).
+	// One function alone cannot form a cluster (identifyMinSize=3).
 	fns := []ds.FunctionMeta{makeFn(seq5, []string{"fmt"}, nil)}
 	if clusters, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for a single function, got %d", len(clusters))
@@ -572,10 +581,137 @@ func TestIdentifyClusters_InitClusterDropped(t *testing.T) {
 	fn.Name = "init"
 	fn2 := fn
 	// 2 init functions + 98 noise = 100 total → primitiveThreshold = 5.
-	// The cluster of 2 would survive the stop-word check (2 < 5) but must be
-	// dropped by isInitCluster — this tests that filter specifically.
+	// The cluster of 2 is dropped at the identifyMinSize=3 gate (2 < 3),
+	// before even reaching isInitCluster — result is still 0 clusters.
 	fns := append([]ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)
 	if clusters, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected init cluster to be dropped, got %d clusters", len(clusters))
+	}
+}
+
+// ── Orphan promotion and exclusion ───────────────────────────────────────────
+
+func TestIdentifyClusters_OrphanPromoted(t *testing.T) {
+	// f0 and f1 share seq5 (identical sequence → seqS=1.0) but have completely
+	// disjoint imports and calls → impS=0, callS=0 → score=∛(1×0×0)=0.
+	// Score 0 < identifyThreshold=0.55 → no cluster formed.
+	// Both had a full score computed against each other → both enter scoredFns
+	// → both are returned as orphans.
+	f0 := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
+	f1 := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
+	fns := append([]ds.FunctionMeta{f0, f1}, makeNoiseFns(98)...)
+	_, orphans := IdentifyClusters(fns)
+	if len(orphans) != 2 {
+		t.Fatalf("expected 2 orphans (both scored below threshold), got %d", len(orphans))
+	}
+}
+
+func TestIdentifyClusters_StructurallyUniqueNotOrphaned(t *testing.T) {
+	// fUnique has a token sequence that shares no trigrams with any other function.
+	// It never enters scoredFns and must NOT appear as an orphan — it is
+	// structurally unique, not orphaned.
+	fUnique := makeFn([]int{50000, 50001, 50002, 50003, 50004}, []string{"fmt"}, []string{"fmt.Println"})
+	fns := append([]ds.FunctionMeta{fUnique}, makeNoiseFns(99)...)
+	_, orphans := IdentifyClusters(fns)
+	if len(orphans) != 0 {
+		t.Fatalf("expected 0 orphans for a structurally unique function, got %d", len(orphans))
+	}
+}
+
+func TestIdentifyClusters_OrphanExcludesInit(t *testing.T) {
+	// An init function that scores below threshold must not appear as an orphan.
+	// fOther (non-init, same seq, disjoint imports/calls) should be the only orphan.
+	fInit := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
+	fInit.Name = "init"
+	fOther := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
+	fns := append([]ds.FunctionMeta{fInit, fOther}, makeNoiseFns(98)...)
+	_, orphans := IdentifyClusters(fns)
+	for _, o := range orphans {
+		if o.Name == "init" {
+			t.Fatal("init function must never appear as an orphan")
+		}
+	}
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan (fOther only), got %d", len(orphans))
+	}
+}
+
+// ── OrphanScore ───────────────────────────────────────────────────────────────
+
+func TestOrphanScore_KnownValues(t *testing.T) {
+	// Inputs chosen so all three dimension scores are non-trivial and verifiable
+	// by hand:
+	//   seqS: editDistance([1,2,3,4],[1,2,3,5])=1, maxLen=4 → 1-1/4 = 0.75
+	//   impS: jaccard({"fmt"},{"fmt","os"}) = 1/2 = 0.5
+	//   callS: jaccard({"fmt.Println"},{"fmt.Println","os.Exit"}) = 1/2 = 0.5
+	//   arith: (0.75+0.5+0.5)/3 ≈ 0.5833
+	orphan := ds.FunctionMeta{
+		TokenSeq:      []int{1, 2, 3, 4},
+		DirectImports: []string{"fmt"},
+		CallTargets:   []string{"fmt.Println"},
+	}
+	medoid := ds.FunctionMeta{
+		TokenSeq:      []int{1, 2, 3, 5},
+		DirectImports: []string{"fmt", "os"},
+		CallTargets:   []string{"fmt.Println", "os.Exit"},
+	}
+	seqS, impS, callS, arith := OrphanScore(orphan, medoid)
+	const eps = 1e-9
+	if absFloat(seqS-0.75) > eps {
+		t.Fatalf("seqS: expected 0.75, got %f", seqS)
+	}
+	if absFloat(impS-0.5) > eps {
+		t.Fatalf("impS: expected 0.5, got %f", impS)
+	}
+	if absFloat(callS-0.5) > eps {
+		t.Fatalf("callS: expected 0.5, got %f", callS)
+	}
+	want := (0.75 + 0.5 + 0.5) / 3.0
+	if absFloat(arith-want) > eps {
+		t.Fatalf("arith: expected %f, got %f", want, arith)
+	}
+}
+
+func TestOrphanScore_IdenticalFunctions(t *testing.T) {
+	// Identical orphan and medoid → perfect score on every dimension.
+	fn := ds.FunctionMeta{
+		TokenSeq:      []int{1, 2, 3, 4},
+		DirectImports: []string{"fmt"},
+		CallTargets:   []string{"fmt.Println"},
+	}
+	seqS, impS, callS, arith := OrphanScore(fn, fn)
+	if seqS != 1.0 {
+		t.Fatalf("expected seqS=1.0, got %f", seqS)
+	}
+	if impS != 1.0 {
+		t.Fatalf("expected impS=1.0, got %f", impS)
+	}
+	if callS != 1.0 {
+		t.Fatalf("expected callS=1.0, got %f", callS)
+	}
+	if arith != 1.0 {
+		t.Fatalf("expected arith=1.0, got %f", arith)
+	}
+}
+
+func TestOrphanScore_NoImportsOrCalls(t *testing.T) {
+	// Both functions have empty imports and calls.
+	// jaccard(empty, empty)=0.0 (no shared vocabulary) → impS=0, callS=0.
+	// arith = (seqS + 0 + 0) / 3 = 1/3 for identical sequences.
+	orphan := ds.FunctionMeta{TokenSeq: []int{1, 2, 3, 4}}
+	medoid := ds.FunctionMeta{TokenSeq: []int{1, 2, 3, 4}}
+	seqS, impS, callS, arith := OrphanScore(orphan, medoid)
+	if seqS != 1.0 {
+		t.Fatalf("expected seqS=1.0 for identical seqs, got %f", seqS)
+	}
+	if impS != 0.0 {
+		t.Fatalf("expected impS=0.0 for both-empty imports, got %f", impS)
+	}
+	if callS != 0.0 {
+		t.Fatalf("expected callS=0.0 for both-empty calls, got %f", callS)
+	}
+	want := 1.0 / 3.0
+	if absFloat(arith-want) > 1e-9 {
+		t.Fatalf("arith: expected %f, got %f", want, arith)
 	}
 }
