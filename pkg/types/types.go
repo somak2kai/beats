@@ -179,6 +179,9 @@ type ClusterCandidate struct {
 	// CallTargets Jaccard
 	CallScore  float64
 	ArithScore float64
+	// CycloDelta is orphan cyclomatic complexity minus cluster mean cyclomatic complexity.
+	// Positive = orphan is more complex than the cluster average; negative = simpler.
+	CycloDelta float64
 	// SemanticIdiom of the candidate cluster (if enriched)
 	Idiom string
 }

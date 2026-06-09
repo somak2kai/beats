@@ -116,6 +116,7 @@ func IdentifyOrphans(orphanMetas []ds.FunctionMeta, cluster []ds.Cluster) ([]ds.
 					ImpScore:   impS,
 					CallScore:  callS,
 					ArithScore: arith,
+					CycloDelta: float64(orphan.Features.CyclomaticComplexity) - cl.Profile.CycloMean,
 					Idiom:      cl.SemanticIdiom,
 				})
 			}

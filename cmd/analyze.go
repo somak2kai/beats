@@ -60,6 +60,8 @@ type OutlierDiff struct {
 	Package        string
 	FilePath       string
 	Line           int
+	// orphan cyclomatic complexity minus cluster mean; positive = more complex, negative = simpler
+	CycloDelta     float64
 	TokenShape     string   // orphan's full token sequence — compare visually to cluster LCS in header
 	TokensAdded    []string // token types in orphan but not in cluster LCS (set diff)
 	TokensRemoved  []string // token types in cluster LCS but not in orphan (set diff)
@@ -282,7 +284,7 @@ func buildScoreExplain(b [5]int) string {
 	case clonePct >= 25:
 		return fmt.Sprintf(
 			"Heavy clone concentration: %d%% of clusters score above 0.95, indicating a large number of "+
-				"near-identical function pairs. These are strong candidates for abstraction or consolidation.",
+				"near-identical function pairs.",
 			clonePct)
 	case bodyPct >= 80:
 		return fmt.Sprintf(
@@ -477,6 +479,7 @@ func buildOutlierGroups(clusters []ds.Cluster, orphans []ds.OrphanedFunction) []
 				Package:        o.Meta.Package,
 				FilePath:       o.Meta.FileMeta.Path,
 				Line:           o.Meta.Start_line,
+				CycloDelta:     o.Candidates[0].CycloDelta,
 				TokenShape:     ast.SeqString(o.Meta.TokenSeq),
 				TokensAdded:    tokAdded,
 				TokensRemoved:  tokRemoved,
@@ -672,9 +675,9 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 		maxConf = 1
 	}
 	tierConfDist := []TierConfidenceRow{
-		{Label: "High StrcScore", Score: highMeanConf, Width: int(highMeanConf / maxConf * 100), Color: "var(--green)"},
-		{Label: "Medium StrcScore", Score: medMeanConf, Width: int(medMeanConf / maxConf * 100), Color: "var(--yellow)"},
-		{Label: "Low StrcScore", Score: lowMeanConf, Width: int(lowMeanConf / maxConf * 100), Color: "var(--red)"},
+		{Label: "High Structural Confidence Score", Score: highMeanConf, Width: int(highMeanConf / maxConf * 100), Color: "var(--green)"},
+		{Label: "Medium Structural Confidence Score", Score: medMeanConf, Width: int(medMeanConf / maxConf * 100), Color: "var(--yellow)"},
+		{Label: "Low Structural Confidence Score", Score: lowMeanConf, Width: int(lowMeanConf / maxConf * 100), Color: "var(--red)"},
 	}
 
 	outlierGroups := buildOutlierGroups(clusters, orphanedFns)
@@ -726,6 +729,14 @@ func pct(a, b int) string {
 
 func f2(v float64) string { return fmt.Sprintf("%.2f", v) }
 func f1(v float64) string { return fmt.Sprintf("%.1f", v) }
+
+// signedDelta formats a float with an explicit sign prefix, e.g. "+3.0", "-2.0", "0.0".
+func signedDelta(v float64) string {
+	if v > 0 {
+		return fmt.Sprintf("+%.1f", v)
+	}
+	return fmt.Sprintf("%.1f", v)
+}
 
 func joinComma(ss []string) string { return strings.Join(ss, ", ") }
 
@@ -834,6 +845,7 @@ func renderHTML(w *os.File, report RepoReport) error {
 		"labelOrHash":   labelOrHash,
 		"shortPath":     shortPath,
 		"diffChips":     diffChips,
+		"signedDelta":   signedDelta,
 	}
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
@@ -1037,10 +1049,17 @@ table.members tr.member-hidden{display:none;}
 
   /* potential deviations accordion */
   .outlier-body{max-height:65vh;overflow-y:auto;padding:12px 16px 16px;display:block;}
-  .outlier-group{border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;}
-  .outlier-group:last-child{margin-bottom:0;}
+  details.outlier-group{border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;}
+  details.outlier-group:last-child{margin-bottom:0;}
+  details.outlier-group summary{list-style:none;cursor:pointer;}
+  details.outlier-group summary::-webkit-details-marker{display:none;}
   .outlier-group-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface2);flex-wrap:wrap;min-height:40px;border-bottom:1px solid var(--border);}
-  .outlier-cluster-link{background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.35);border-radius:4px;color:var(--accent);font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;}
+  details.outlier-group:not([open]) .outlier-group-hdr{border-bottom:none;}
+  .outlier-group-hdr::before{content:'▶';font-size:9px;color:var(--muted);flex-shrink:0;transition:transform .2s;}
+  details.outlier-group[open] .outlier-group-hdr::before{transform:rotate(90deg);}
+  .outlier-cluster-id{font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;font-weight:600;color:var(--accent);background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.25);border-radius:4px;padding:3px 9px;user-select:all;cursor:text;white-space:nowrap;flex-shrink:0;}
+  .outlier-cluster-id:hover{background:rgba(129,140,248,.18);}
+  .outlier-cluster-link{background:none;border:1px solid rgba(129,140,248,.35);border-radius:4px;color:var(--accent);font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;}
   .outlier-cluster-link:hover{background:rgba(129,140,248,.20);}
   .outlier-cluster-lbl{font-size:11px;color:var(--muted);font-style:italic;flex-shrink:0;}
   table.outlier-tbl{width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);}
@@ -1061,6 +1080,11 @@ table.members tr.member-hidden{display:none;}
   #pot-tooltip.visible{display:block;}
   #pot-tooltip .pot-tt-title{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:7px;}
   #pot-tooltip .pot-tt-item{font-size:11px;color:var(--accent2);font-family:'JetBrains Mono','Fira Code',monospace;padding:2px 0;word-break:break-all;}
+  /* column header info icon */
+  th[data-tip]{position:relative;cursor:help;}
+  th[data-tip]::after{content:'ⓘ';margin-left:4px;font-size:10px;color:var(--muted);opacity:.6;vertical-align:middle;font-style:normal;}
+  th[data-tip]:hover::after{color:var(--accent);opacity:1;}
+  #col-tip{position:fixed;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--fg);max-width:320px;line-height:1.5;pointer-events:none;z-index:10000;box-shadow:0 4px 16px rgba(0,0,0,.35);display:none;white-space:pre-wrap;}
 </style>
 </head>
 <body>
@@ -1085,17 +1109,17 @@ table.members tr.member-hidden{display:none;}
       <div class="sub">structural patterns found</div>
     </div>
     <div class="card" style="border-color:rgba(52,211,153,.35);">
-      <div class="lbl" style="color:var(--green);">High StrcScore</div>
+      <div class="lbl" style="color:var(--green);">High Structural Confidence Score</div>
       <div class="val" style="color:var(--green);">{{len .HighClusters}}</div>
       <div class="sub">std &lt; 0.05 — tight</div>
     </div>
     <div class="card" style="border-color:rgba(251,191,36,.30);">
-      <div class="lbl" style="color:var(--yellow);">Medium StrcScore</div>
+      <div class="lbl" style="color:var(--yellow);">Medium Structural Confidence Score</div>
       <div class="val" style="color:var(--yellow);">{{len .MediumClusters}}</div>
       <div class="sub">0.05 ≤ std &lt; 0.12</div>
     </div>
     <div class="card" style="border-color:rgba(248,113,113,.25);">
-      <div class="lbl" style="color:var(--red);">Low StrcScore</div>
+      <div class="lbl" style="color:var(--red);">Low Structural Confidence Score</div>
       <div class="val" style="color:var(--red);">{{len .LowClusters}}</div>
       <div class="sub">std ≥ 0.12 — broad</div>
     </div>
@@ -1218,12 +1242,13 @@ table.members tr.member-hidden{display:none;}
     <summary>Potential Deviations <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px;">{{.TotalOutliers}} function(s) across {{len .OutlierGroups}} cluster(s) — functions that did not join but score close</span></summary>
     <div class="outlier-body">
 {{range .OutlierGroups}}
-      <div class="outlier-group">
-        <div class="outlier-group-hdr">
-          <button class="outlier-cluster-link" onclick="jumpToCluster('{{.ClusterID}}')">↗ {{.ClusterID}}</button>
+      <details class="outlier-group" open>
+        <summary class="outlier-group-hdr">
+          <code class="outlier-cluster-id" title="Click to select · Ctrl+C to copy">{{.ClusterID}}</code>
+          <button class="outlier-cluster-link" onclick="event.stopPropagation();jumpToCluster('{{.ClusterID}}')">↗ jump</button>
           {{if .ClusterLabel}}<span class="outlier-cluster-lbl">{{.ClusterLabel}}</span>{{end}}
-          {{tokenChips .CommonShape}}
-        </div>
+          <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap;">Longest Common Subsequence:</span>{{tokenChips .CommonShape}}
+        </summary>
         <table class="outlier-tbl">
           <thead><tr>
             <th>Function</th>
@@ -1233,22 +1258,24 @@ table.members tr.member-hidden{display:none;}
             <th title="Token types present in this function but absent from the cluster LCS (+), or in the LCS but not here (−)">Token Δ</th>
             <th title="Imports present in this function but not in cluster's common imports (+), or vice versa (−)">Import Δ</th>
             <th title="Call targets present in this function but not in cluster's common calls (+), or vice versa (−)">Call Δ</th>
+            <th title="Cyclomatic complexity of this function minus the cluster mean. Positive = more complex than the cluster average; negative = simpler.">Cyclo Δ</th>
           </tr></thead>
           <tbody>
 {{range .Outliers}}
             <tr>
               <td><span class="fn-name">{{.Name}}</span></td>
               <td><span class="fn-pkg">{{.Package}}</span></td>
-              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}:{{.Line}}</span></td>
+              <td><span class="fn-file" title="{{shortPath .FilePath}}">{{shortPath .FilePath}}:{{.Line}}</span></td>
               <td>{{tokenChips .TokenShape}}</td>
               <td>{{diffChips .TokensAdded .TokensRemoved}}</td>
               <td>{{diffChips .ImportsAdded .ImportsRemoved}}</td>
               <td>{{diffChips .CallsAdded .CallsRemoved}}</td>
+              <td style="font-variant-numeric:tabular-nums;font-size:11px;white-space:nowrap;">{{signedDelta .CycloDelta}}</td>
             </tr>
 {{end}}
           </tbody>
         </table>
-      </div>
+      </details>
 {{end}}
     </div>
   </details>
@@ -1319,7 +1346,7 @@ table.members tr.member-hidden{display:none;}
           <tbody>
 {{range $cl.Members}}
             <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
-              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-file" title="{{shortPath .FilePath}}">{{shortPath .FilePath}}</span></td>
               <td><span class="fn-line">{{.Line}}</span></td>
               <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
             </tr>
@@ -1384,7 +1411,7 @@ table.members tr.member-hidden{display:none;}
           <tbody>
 {{range $cl.Members}}
             <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
-              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-file" title="{{shortPath .FilePath}}">{{shortPath .FilePath}}</span></td>
               <td><span class="fn-line">{{.Line}}</span></td>
               <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
             </tr>
@@ -1449,7 +1476,7 @@ table.members tr.member-hidden{display:none;}
           <tbody>
 {{range $cl.Members}}
             <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
-              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-file" title="{{shortPath .FilePath}}">{{shortPath .FilePath}}</span></td>
               <td><span class="fn-line">{{.Line}}</span></td>
               <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
             </tr>
@@ -1641,7 +1668,7 @@ function jumpToCluster(stableId) {
       det.classList.add('open');
       row.classList.add('open');
     }
-    setTimeout(function(r){ r.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
+    (function(r){ setTimeout(function(){ r.scrollIntoView({behavior:'smooth', block:'center'}); }, 150); })(row);
     return;
   }
 }
@@ -1682,6 +1709,37 @@ function jumpToCluster(stableId) {
   function hideTt(){tt.classList.remove('visible');current=null;}
   document.addEventListener('click',function(e){if(!tt.contains(e.target)&&e.target!==current)hideTt();});
   document.addEventListener('keydown',function(e){if(e.key==='Escape')hideTt();});
+})();
+
+// ── column header instant tooltip ─────────────────────────────────────────────
+(function(){
+  var tip = document.createElement('div');
+  tip.id = 'col-tip';
+  document.body.appendChild(tip);
+
+  function position(e){
+    var x = e.clientX + 14, y = e.clientY + 14;
+    if(x + tip.offsetWidth + 20 > window.innerWidth) x = e.clientX - tip.offsetWidth - 14;
+    if(y + tip.offsetHeight + 20 > window.innerHeight) y = e.clientY - tip.offsetHeight - 14;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  document.querySelectorAll('th[title]').forEach(function(th){
+    var text = th.getAttribute('title');
+    th.removeAttribute('title');       // suppress native 1s-delay browser tooltip
+    th.setAttribute('data-tip', text); // drives the CSS ::after ⓘ icon
+
+    th.addEventListener('mouseenter', function(e){
+      tip.textContent = text;
+      tip.style.display = 'block';
+      position(e);
+    });
+    th.addEventListener('mousemove', position);
+    th.addEventListener('mouseleave', function(){
+      tip.style.display = 'none';
+    });
+  });
 })();
 
 </script>
