@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strings"
 
 	"github.com/somak2kai/beats/pkg/hash"
@@ -30,11 +31,20 @@ const (
 	TK_ASSIGN
 	TK_CALL_PKG    // package-qualified call: fmt.Sprintf(...), xorm.In(...)
 	TK_CALL_METHOD // method or chained call: rref.LinkName(), w.Close(), a.b.Method()
+	TK_COMPOSITE_LIT // composite/struct literal: T{...} or &T{...}
+	TK_BINARY_OP     // binary expression: a||b, a&&b, a==b, a+b, etc.
+	TK_TYPE_ASSERT   // type assertion: x.(T) or x.(type) in type switch
 )
 
 func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, f.Path, nil, parser.AllErrors|parser.ParseComments)
+	// Read raw bytes first so we can pass them to the parser (avoids a second
+	// open) and slice function bodies by byte offset later.
+	src, err := os.ReadFile(f.Path)
+	if err != nil {
+		return nil, err
+	}
+	file, err := parser.ParseFile(fset, f.Path, src, parser.AllErrors|parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +86,8 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 			DirectImports: extractDirectImports(fn, aliasMap),
 			GeneratedCode: isGeneratedCode,
 			TestCode:      isTestCode,
+			IsConstructor: isTrivialConstructor(fn),
+			Body:          string(src[start.Offset:end.Offset]),
 		})
 		return true
 	})
@@ -104,6 +116,34 @@ func isTestFile(imports []string) bool {
 		}
 	}
 	return false
+}
+
+// isTrivialConstructor reports whether fn is a New* function whose entire body
+// is a single return of a composite literal (struct value or pointer to one).
+// These functions are structural noise: they all look identical at the token
+// level simply because "all constructors look like constructors", not because
+// the codebase has invented a meaningful shared idiom.
+//
+// A New* with any additional logic (validation, error return, assignments) has
+// len(body.List) > 1 and is therefore NOT filtered — it may be a real pattern.
+func isTrivialConstructor(fn *ast.FuncDecl) bool {
+	if !strings.HasPrefix(fn.Name.Name, "New") {
+		return false
+	}
+	if fn.Body == nil || len(fn.Body.List) != 1 {
+		return false
+	}
+	ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return false
+	}
+	expr := ret.Results[0]
+	// unwrap & in &SomeStruct{...}
+	if unary, ok := expr.(*ast.UnaryExpr); ok && unary.Op == token.AND {
+		expr = unary.X
+	}
+	_, isCompLit := expr.(*ast.CompositeLit)
+	return isCompLit
 }
 
 func isGeneratedCode(file *ast.File) bool {
@@ -345,6 +385,16 @@ func extractStructuralFeatures(fn *ast.FuncDecl, aliasMap map[string]string) (ds
 			tokens = append(tokens, TK_FUNCLIT)
 		case *ast.AssignStmt:
 			tokens = append(tokens, TK_ASSIGN)
+		case *ast.CompositeLit:
+			tokens = append(tokens, TK_COMPOSITE_LIT)
+		case *ast.BinaryExpr:
+			// || and && each add an independent execution path.
+			if node.Op == token.LOR || node.Op == token.LAND {
+				f.CyclomaticComplexity++
+			}
+			tokens = append(tokens, TK_BINARY_OP)
+		case *ast.TypeAssertExpr:
+			tokens = append(tokens, TK_TYPE_ASSERT)
 		}
 		return true
 	})

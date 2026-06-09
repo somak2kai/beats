@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,6 +28,10 @@ type MemberRow struct {
 
 type ClusterRow struct {
 	ShapeHash        string
+	StableID         string  // first 6 hex chars of ShapeHash — stable across runs
+	Ordinal          int     // 1-based rank within tier, sorted by ConfidenceScore desc
+	Tier             string  // "high" | "medium" | "low"
+	ConfidenceScore  float64 // ln(size) × ln(numPackages+1) × confidence(tier) × meanScore² × (impCoh+callCoh)/2
 	Label            string
 	CommonShape      string  // human-readable LCS of all member token sequences
 	AvgPairwiseScore float64 // mean cbrt score across all member pairs
@@ -49,25 +54,29 @@ type ClusterRow struct {
 	Potentials []string
 }
 
-// CandidateRow is one cluster candidate for an orphaned function, ready for template rendering.
-type CandidateRow struct {
-	ClusterIdx int
-	ShapeHash  string
-	SeqScore   float64
-	ImpScore   float64
-	CallScore  float64
-	ArithScore float64
-	ZScore     float64
-	Idiom      string // SemanticIdiom if enriched, else ""
+// OutlierDiff describes how one orphaned function diverges from its closest cluster.
+type OutlierDiff struct {
+	Name           string
+	Package        string
+	FilePath       string
+	Line           int
+	TokenShape     string   // orphan's full token sequence — compare visually to cluster LCS in header
+	TokensAdded    []string // token types in orphan but not in cluster LCS (set diff)
+	TokensRemoved  []string // token types in cluster LCS but not in orphan (set diff)
+	ImportsAdded   []string // imports in orphan not in cluster TopImports (short names)
+	ImportsRemoved []string // cluster TopImports not in orphan (short names)
+	CallsAdded     []string // call targets in orphan not in cluster TopCallTargets
+	CallsRemoved   []string // cluster TopCallTargets not in orphan
 }
 
-// OrphanRow holds display data for one orphaned function.
-type OrphanRow struct {
-	Package    string
-	Name       string
-	FilePath   string
-	Line       int
-	Candidates []CandidateRow
+// ClusterOutlierGroup groups all outlier functions that point to the same cluster.
+type ClusterOutlierGroup struct {
+	ClusterID    string // first 6 hex chars of ShapeHash
+	ClusterHash  string
+	ClusterLabel string // SemanticIdiom or Label if enriched
+	CommonShape  string // human-readable cluster LCS
+	Tier         string // "high" | "medium" | "low"
+	Outliers     []OutlierDiff
 }
 
 // DistBucket is one bar in a histogram — a label, a count, and a bar width
@@ -78,25 +87,34 @@ type DistBucket struct {
 	Width int // 0–100, for CSS bar width %
 }
 
+// TierConfidenceRow is one bar in the per-tier confidence-score chart.
+type TierConfidenceRow struct {
+	Label string
+	Score float64
+	Width int    // 0–100 relative to the highest-scoring tier
+	Color string // CSS variable, e.g. "var(--green)"
+}
+
 type RepoReport struct {
 	Repo                string
 	GeneratedAt         string
 	TotalClusters       int
 	FunctionsInClusters int
-	CorpusSize          int          // total functions analysed (including those not in any cluster)
-	MeanCoherence       float64      // mean import Jaccard across clusters
-	MeanCallCoherence   float64      // mean call target Jaccard across clusters
-	MeanAvgScore        float64      // mean avg pairwise cbrt score across clusters
-	QuadHH              int          // import >= 0.60 AND call >= 0.60
-	QuadHL              int          // import >= 0.60 AND call <  0.60
-	QuadLH              int          // import <  0.60 AND call >= 0.60
-	QuadLL              int          // import <  0.60 AND call <  0.60
-	ScoreDist           []DistBucket // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
-	ScoreExplain        string       // data-driven interpretation of the score distribution shape
-	SizeDist            []DistBucket // size histogram: 2, 3–4, 5–9, 10+
-	SizeExplain         string       // data-driven interpretation of the size distribution shape
-	Clusters            []ClusterRow // sorted by avg pairwise score desc
-	Orphans             []OrphanRow  // functions that escaped clustering, with Z-score candidates
+	CorpusSize          int                 // total functions analysed (including those not in any cluster)
+	MeanCoherence       float64             // mean import Jaccard across clusters
+	MeanCallCoherence   float64             // mean call target Jaccard across clusters
+	MeanAvgScore        float64             // mean avg pairwise cbrt score across clusters
+	ScoreDist           []DistBucket        // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
+	ScoreExplain        string              // data-driven interpretation of the score distribution shape
+	SizeDist            []DistBucket        // size histogram: 2, 3–4, 5–9, 10+
+	SizeExplain         string              // data-driven interpretation of the size distribution shape
+	TierConfidenceDist  []TierConfidenceRow // mean confidence score per tier
+	// Tier-split cluster lists — each sorted by ConfidenceScore descending.
+	HighClusters   []ClusterRow
+	MediumClusters []ClusterRow
+	LowClusters    []ClusterRow
+	OutlierGroups  []ClusterOutlierGroup // potential deviations grouped by target cluster
+	TotalOutliers  int                   // sum of len(g.Outliers) across all groups
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────
@@ -166,9 +184,8 @@ func buildClusterRow(c ds.Cluster) ClusterRow {
 		avgScore = totalScore / float64(len(memberScores))
 	}
 
-	// common token subsequence → human-readable shape
-	commonSeq := ast.CommonSubsequence(c.Members)
-	commonShape := ast.SeqString(commonSeq)
+	// common token subsequence → human-readable shape (pre-computed and stored in cluster)
+	commonShape := ast.SeqString(c.CommonSeq)
 
 	pkgSet := make(map[string]bool)
 	members := make([]MemberRow, 0, len(c.Members))
@@ -193,8 +210,26 @@ func buildClusterRow(c ds.Cluster) ClusterRow {
 	}
 	sort.Strings(pkgs)
 
+	// stable ID: first 6 hex chars of ShapeHash
+	stableID := c.ShapeHash
+	if len(stableID) > 6 {
+		stableID = stableID[:6]
+	}
+
+	// tier: trust stored value (set by clusterClassifier); recompute for old indexes.
+	t := c.Tier
+	if t == "" {
+		t = clusterTier(c.Stats.StdScore)
+	}
+
+	// confidence score: trust stored value; recompute for old indexes.
+	conf := c.CompositeScore
+
 	return ClusterRow{
 		ShapeHash:        c.ShapeHash,
+		StableID:         stableID,
+		Tier:             t,
+		ConfidenceScore:  conf,
 		Label:            c.Label,
 		CommonShape:      commonShape,
 		AvgPairwiseScore: avgScore,
@@ -268,11 +303,11 @@ func buildScoreExplain(b [5]int) string {
 	}
 }
 
-// buildSizeExplain reads the four size buckets and returns a short
+// buildSizeExplain reads the three size buckets and returns a short
 // data-driven interpretation of the shape.
 //
-// buckets: [0]=2  [1]=3–4  [2]=5–9  [3]=10+
-func buildSizeExplain(b [4]int) string {
+// buckets: [0]=3–4  [1]=5–9  [2]=10+
+func buildSizeExplain(b [3]int) string {
 	total := 0
 	for _, c := range b {
 		total += c
@@ -281,81 +316,257 @@ func buildSizeExplain(b [4]int) string {
 		return "No clusters to analyse."
 	}
 
-	pairPct := b[0] * 100 / total
-	large := b[2] + b[3] // size ≥ 5
+	small := b[0]        // 3–4
+	large := b[1] + b[2] // 5+
+	largePct := large * 100 / total
 
 	switch {
-	case b[3] >= 5:
+	case b[2] >= 5:
 		return fmt.Sprintf(
-			"%d%% of clusters are pairs (size 2), which is expected — "+
-				"truly identical functions get abstracted, so pairs are the most common structural echo. "+
-				"Notably, %d clusters recur 10 or more times: these are genuine codebase-wide idioms "+
-				"the team has organically converged on.",
-			pairPct, b[3])
-	case b[3] >= 1 && b[2] >= 3:
+			"%d clusters recur 10 or more times — genuine codebase-wide idioms the team has "+
+				"organically converged on. These are the highest-signal patterns worth documenting "+
+				"or enforcing as canonical conventions.",
+			b[2])
+	case b[2] >= 1 && b[1] >= 3:
 		return fmt.Sprintf(
-			"%d%% of clusters are pairs (size 2). %d clusters recur 5 or more times — "+
-				"a small but real set of broadly recurring conventions worth documenting as canonical idioms.",
-			pairPct, large)
-	case b[3] == 0 && b[2] <= 2:
+			"%d%% of clusters have 5 or more members. A healthy spread of recurring conventions — "+
+				"the codebase has settled on structural patterns that appear broadly, not just in isolated pockets.",
+			largePct)
+	case b[2] == 0 && b[1] <= 2:
 		return fmt.Sprintf(
-			"%d%% of clusters are pairs (size 2) and no cluster recurs 10 or more times. "+
-				"The codebase has no single structural convention that appears broadly across the corpus — "+
-				"patterns are localised rather than codebase-wide.",
-			pairPct)
-	case pairPct >= 85:
-		return fmt.Sprintf(
-			"Pair-dominated: %d%% of clusters have exactly 2 members. "+
-				"Most findings are isolated echoes rather than recurring conventions. "+
-				"Focus on the size 5+ clusters (%d total) for the most actionable patterns.",
-			pairPct, large)
+			"Most clusters are small (3–4 members, %d total). No single structural convention appears "+
+				"broadly across the corpus — patterns are localised. Focus on the high-attention clusters "+
+				"as early candidates for abstraction.",
+			small)
 	default:
 		return fmt.Sprintf(
-			"%d%% of clusters are pairs (size 2), with %d clusters of size 5 or more. "+
+			"%d%% of clusters have 5 or more members, with %d clusters of size 10+. "+
 				"A reasonable spread — the codebase has both local structural echoes and some "+
 				"broader recurring conventions.",
-			pairPct, large)
+			largePct, b[2])
 	}
+}
+
+// tokenSetDiff returns token type names in orphan but not in lcs (added) and vice versa. Set-based.
+func tokenSetDiff(orphanSeq, lcsSeq []int) (added, removed []string) {
+	orphanSet := make(map[int]bool, len(orphanSeq))
+	for _, t := range orphanSeq {
+		orphanSet[t] = true
+	}
+	lcsSet := make(map[int]bool, len(lcsSeq))
+	for _, t := range lcsSeq {
+		lcsSet[t] = true
+	}
+	for t := range orphanSet {
+		if !lcsSet[t] {
+			added = append(added, ast.TokenName(t))
+		}
+	}
+	for t := range lcsSet {
+		if !orphanSet[t] {
+			removed = append(removed, ast.TokenName(t))
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	return
+}
+
+// stringSetDiff returns elements only in a (added) and only in b (removed).
+func stringSetDiff(a, b []string) (onlyA, onlyB []string) {
+	setB := make(map[string]bool, len(b))
+	for _, s := range b {
+		setB[s] = true
+	}
+	setA := make(map[string]bool, len(a))
+	for _, s := range a {
+		setA[s] = true
+	}
+	for _, s := range a {
+		if !setB[s] {
+			onlyA = append(onlyA, s)
+		}
+	}
+	for _, s := range b {
+		if !setA[s] {
+			onlyB = append(onlyB, s)
+		}
+	}
+	sort.Strings(onlyA)
+	sort.Strings(onlyB)
+	return
+}
+
+// shortImport returns the last path segment of an import path for compact display.
+func shortImport(imp string) string {
+	parts := strings.Split(imp, "/")
+	if len(parts) == 0 {
+		return imp
+	}
+	return parts[len(parts)-1]
+}
+
+func buildOutlierGroups(clusters []ds.Cluster, orphans []ds.OrphanedFunction) []ClusterOutlierGroup {
+	// Index clusters by ShapeHash — ClusterIdx is an analysis-time array index
+	// that does not survive a DB round-trip reliably.
+	clusterByHash := make(map[string]ds.Cluster, len(clusters))
+	for _, cl := range clusters {
+		if cl.ShapeHash != "" {
+			clusterByHash[cl.ShapeHash] = cl
+		}
+	}
+
+	type entry struct{ orphan ds.OrphanedFunction }
+	groupMap := make(map[string][]entry)
+	for _, o := range orphans {
+		if len(o.Candidates) == 0 {
+			continue
+		}
+		hash := o.Candidates[0].ShapeHash
+		if hash == "" {
+			continue
+		}
+		cl, ok := clusterByHash[hash]
+		if !ok || cl.IsPrimitive {
+			continue
+		}
+		groupMap[hash] = append(groupMap[hash], entry{o})
+	}
+
+	var groups []ClusterOutlierGroup
+	for hash, entries := range groupMap {
+		cl := clusterByHash[hash]
+
+		stableID := cl.ShapeHash
+		if len(stableID) > 6 {
+			stableID = stableID[:6]
+		}
+		label := cl.SemanticIdiom
+		if label == "" {
+			label = cl.Label
+		}
+		tier := cl.Tier
+		if tier == "" {
+			tier = "low"
+		}
+
+		// Use cluster profile data for import/call comparison — always populated
+		// from all cluster members, unlike medoid DirectImports which may be empty.
+		topImports := make([]string, len(cl.Profile.TopImports))
+		for i, imp := range cl.Profile.TopImports {
+			topImports[i] = shortImport(imp)
+		}
+		topCalls := cl.Profile.TopCallTargets
+
+		var outliers []OutlierDiff
+		for _, e := range entries {
+			o := e.orphan
+
+			// shorten orphan import paths for comparison
+			orphanImports := make([]string, len(o.Meta.DirectImports))
+			for i, imp := range o.Meta.DirectImports {
+				orphanImports[i] = shortImport(imp)
+			}
+
+			impAdded, impRemoved := stringSetDiff(orphanImports, topImports)
+			callAdded, callRemoved := stringSetDiff(o.Meta.CallTargets, topCalls)
+			tokAdded, tokRemoved := tokenSetDiff(o.Meta.TokenSeq, cl.CommonSeq)
+
+			outliers = append(outliers, OutlierDiff{
+				Name:           o.Meta.Name,
+				Package:        o.Meta.Package,
+				FilePath:       o.Meta.FileMeta.Path,
+				Line:           o.Meta.Start_line,
+				TokenShape:     ast.SeqString(o.Meta.TokenSeq),
+				TokensAdded:    tokAdded,
+				TokensRemoved:  tokRemoved,
+				ImportsAdded:   impAdded,
+				ImportsRemoved: impRemoved,
+				CallsAdded:     callAdded,
+				CallsRemoved:   callRemoved,
+			})
+		}
+
+		groups = append(groups, ClusterOutlierGroup{
+			ClusterID:    stableID,
+			ClusterHash:  cl.ShapeHash,
+			ClusterLabel: label,
+			CommonShape:  ast.SeqString(cl.CommonSeq),
+			Tier:         tier,
+			Outliers:     outliers,
+		})
+	}
+
+	// drop groups with no outliers
+	filtered := groups[:0]
+	for _, g := range groups {
+		if len(g.Outliers) > 0 {
+			filtered = append(filtered, g)
+		}
+	}
+	groups = filtered
+
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].ClusterID < groups[j].ClusterID
+	})
+	return groups
 }
 
 func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFunction) RepoReport {
 	rows := make([]ClusterRow, 0, len(clusters))
 	var totalCoherence, totalCallCoherence, totalAvgScore float64
 	var functionsInClusters int
-	var quadHH, quadHL, quadLH, quadLL int
 
 	for _, c := range clusters {
+		if c.IsPrimitive {
+			continue // never show primitive clusters — structural stop-words
+		}
 		row := buildClusterRow(c)
 		rows = append(rows, row)
 		totalCoherence += c.Coherence
 		totalCallCoherence += c.CallCoherence
 		totalAvgScore += row.AvgPairwiseScore
 		functionsInClusters += c.Size
+	}
 
-		hiImport := c.Coherence >= 0.60
-		hiCall := c.CallCoherence >= 0.60
-		switch {
-		case hiImport && hiCall:
-			quadHH++
-		case hiImport && !hiCall:
-			quadHL++
-		case !hiImport && hiCall:
-			quadLH++
-		default:
-			quadLL++
+	// group by tier
+	var highRows, medRows, lowRows []ClusterRow
+	for _, r := range rows {
+		switch r.Tier {
+		case "high":
+			highRows = append(highRows, r)
+		case "medium":
+			medRows = append(medRows, r)
+		default: // "low" or unset
+			lowRows = append(lowRows, r)
 		}
 	}
 
-	// sort by avg pairwise score descending — the most structurally coherent
-	// clusters (highest geometric mean across all member pairs) appear first.
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].AvgPairwiseScore != rows[j].AvgPairwiseScore {
-			return rows[i].AvgPairwiseScore > rows[j].AvgPairwiseScore
-		}
-		return rows[i].Size > rows[j].Size
-	})
+	// sort each tier by ConfidenceScore descending, break ties by size
+	sortByConfidence := func(rs []ClusterRow) {
+		sort.Slice(rs, func(i, j int) bool {
+			if rs[i].ConfidenceScore != rs[j].ConfidenceScore {
+				return rs[i].ConfidenceScore > rs[j].ConfidenceScore
+			}
+			return rs[i].Size > rs[j].Size
+		})
+	}
+	sortByConfidence(highRows)
+	sortByConfidence(medRows)
+	sortByConfidence(lowRows)
 
-	n := len(clusters)
+	// assign 1-based ordinals within each tier
+	for i := range highRows {
+		highRows[i].Ordinal = i + 1
+	}
+	for i := range medRows {
+		medRows[i].Ordinal = i + 1
+	}
+	for i := range lowRows {
+		lowRows[i].Ordinal = i + 1
+	}
+
+	n := len(rows)
 	meanCoherence, meanCallCoherence, meanAvgScore := 0.0, 0.0, 0.0
 	if n > 0 {
 		meanCoherence = totalCoherence / float64(n)
@@ -363,8 +574,8 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 		meanAvgScore = totalAvgScore / float64(n)
 	}
 
-	// ── score distribution ────────────────────────────────────────────────────
-	scoreCounts := [5]int{} // buckets: <0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95+
+	// ── score distribution (all rows for histogram) ───────────────────────────
+	scoreCounts := [5]int{}
 	for _, r := range rows {
 		s := r.AvgPairwiseScore
 		switch {
@@ -393,78 +604,83 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 	}
 
 	// ── size distribution ─────────────────────────────────────────────────────
-	sizeCounts := [4]int{} // buckets: 2, 3–4, 5–9, 10+
+	// Minimum cluster size is 3 (size-2 clusters are not formed), so buckets
+	// start at 3–4.
+	sizeCounts := [3]int{}
 	for _, r := range rows {
 		switch {
 		case r.Size >= 10:
-			sizeCounts[3]++
-		case r.Size >= 5:
 			sizeCounts[2]++
-		case r.Size >= 3:
+		case r.Size >= 5:
 			sizeCounts[1]++
-		default:
+		default: // 3–4
 			sizeCounts[0]++
 		}
 	}
-	sizeLabels := [4]string{"2", "3 – 4", "5 – 9", "10+"}
+	sizeLabels := [3]string{"3 – 4", "5 – 9", "10+"}
 	sizeMax := 1
 	for _, c := range sizeCounts {
 		if c > sizeMax {
 			sizeMax = c
 		}
 	}
-	sizeDist := make([]DistBucket, 4)
+	sizeDist := make([]DistBucket, 3)
 	for i, c := range sizeCounts {
 		sizeDist[i] = DistBucket{Label: sizeLabels[i], Count: c, Width: c * 100 / sizeMax}
 	}
 
-	// ── orphan potentials reverse index: ClusterIdx → candidate entries ────────
-	// Each entry is "FuncName#shortpath#line" for display in the cluster table.
-	clusterPotentials := make(map[int][]string)
+	// ── orphan potentials reverse index: ShapeHash → candidate entries ──────────
+	clusterPotentials := make(map[string][]string)
 	for _, o := range orphanedFns {
 		for _, c := range o.Candidates {
-			entry := o.Meta.Name + "#" + shortPath(o.Meta.FileMeta.Path) + "#" + fmt.Sprintf("%d", o.Meta.Start_line)
-			clusterPotentials[c.ClusterIdx] = append(clusterPotentials[c.ClusterIdx], entry)
-		}
-	}
-	// Attach potentials to cluster rows (rows are already built, patch them in).
-	for i := range rows {
-		// rows[i] was built from clusters[i] (same order, buildClusterRow preserves index)
-		// We need to find which original cluster index corresponds to rows[i].
-		// Since rows were appended in cluster order before the sort, we match by ShapeHash.
-		for clIdx, cl := range clusters {
-			if cl.ShapeHash == rows[i].ShapeHash {
-				if pots := clusterPotentials[clIdx]; len(pots) > 0 {
-					rows[i].Potentials = pots
-				}
-				break
+			if c.ShapeHash == "" {
+				continue
 			}
+			entry := o.Meta.Name + "#" + shortPath(o.Meta.FileMeta.Path) + "#" + fmt.Sprintf("%d", o.Meta.Start_line)
+			clusterPotentials[c.ShapeHash] = append(clusterPotentials[c.ShapeHash], entry)
 		}
 	}
 
-	// ── orphan rows ────────────────────────────────────────────────────────────
-	orphanRows := make([]OrphanRow, 0, len(orphanedFns))
-	for _, o := range orphanedFns {
-		cands := make([]CandidateRow, 0, len(o.Candidates))
-		for _, c := range o.Candidates {
-			cands = append(cands, CandidateRow{
-				ClusterIdx: c.ClusterIdx,
-				ShapeHash:  c.ShapeHash,
-				SeqScore:   c.SeqScore,
-				ImpScore:   c.ImpScore,
-				CallScore:  c.CallScore,
-				ArithScore: c.ArithScore,
-				ZScore:     c.ZScore,
-				Idiom:      c.Idiom,
-			})
+	// attach potentials to each tier's rows by matching ShapeHash
+	attachPotentials := func(rs []ClusterRow) {
+		for i := range rs {
+			if pots := clusterPotentials[rs[i].ShapeHash]; len(pots) > 0 {
+				rs[i].Potentials = pots
+			}
 		}
-		orphanRows = append(orphanRows, OrphanRow{
-			Package:    o.Meta.Package,
-			Name:       o.Meta.Name,
-			FilePath:   o.Meta.FileMeta.Path,
-			Line:       o.Meta.Start_line,
-			Candidates: cands,
-		})
+	}
+	attachPotentials(highRows)
+	attachPotentials(medRows)
+	attachPotentials(lowRows)
+
+	// ── tier confidence score distribution ───────────────────────────────────
+	meanConfidenceForTier := func(rs []ClusterRow) float64 {
+		if len(rs) == 0 {
+			return 0
+		}
+		var sum float64
+		for _, r := range rs {
+			sum += r.ConfidenceScore
+		}
+		return sum / float64(len(rs))
+	}
+	highMeanConf := meanConfidenceForTier(highRows)
+	medMeanConf := meanConfidenceForTier(medRows)
+	lowMeanConf := meanConfidenceForTier(lowRows)
+	maxConf := math.Max(highMeanConf, math.Max(medMeanConf, lowMeanConf))
+	if maxConf == 0 {
+		maxConf = 1
+	}
+	tierConfDist := []TierConfidenceRow{
+		{Label: "High StrcScore", Score: highMeanConf, Width: int(highMeanConf / maxConf * 100), Color: "var(--green)"},
+		{Label: "Medium StrcScore", Score: medMeanConf, Width: int(medMeanConf / maxConf * 100), Color: "var(--yellow)"},
+		{Label: "Low StrcScore", Score: lowMeanConf, Width: int(lowMeanConf / maxConf * 100), Color: "var(--red)"},
+	}
+
+	outlierGroups := buildOutlierGroups(clusters, orphanedFns)
+	totalOutliers := 0
+	for _, g := range outlierGroups {
+		totalOutliers += len(g.Outliers)
 	}
 
 	return RepoReport{
@@ -475,16 +691,16 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 		MeanCoherence:       meanCoherence,
 		MeanCallCoherence:   meanCallCoherence,
 		MeanAvgScore:        meanAvgScore,
-		QuadHH:              quadHH,
-		QuadHL:              quadHL,
-		QuadLH:              quadLH,
-		QuadLL:              quadLL,
 		ScoreDist:           scoreDist,
 		ScoreExplain:        buildScoreExplain(scoreCounts),
 		SizeDist:            sizeDist,
 		SizeExplain:         buildSizeExplain(sizeCounts),
-		Clusters:            rows,
-		Orphans:             orphanRows,
+		TierConfidenceDist:  tierConfDist,
+		HighClusters:        highRows,
+		MediumClusters:      medRows,
+		LowClusters:         lowRows,
+		OutlierGroups:       outlierGroups,
+		TotalOutliers:       totalOutliers,
 	}
 }
 
@@ -513,37 +729,6 @@ func f1(v float64) string { return fmt.Sprintf("%.1f", v) }
 
 func joinComma(ss []string) string { return strings.Join(ss, ", ") }
 
-// quadrantCode returns the two-letter quadrant code for a cluster based on its
-// import and call coherence scores. Used as CSS class suffix and data attribute.
-func quadrantCode(imp, call float64) string {
-	hiImp := imp >= 0.60
-	hiCall := call >= 0.60
-	switch {
-	case hiImp && hiCall:
-		return "hh"
-	case hiImp && !hiCall:
-		return "hl"
-	case !hiImp && hiCall:
-		return "lh"
-	default:
-		return "ll"
-	}
-}
-
-// quadrantLabel returns the display label for a quadrant.
-func quadrantLabel(imp, call float64) string {
-	switch quadrantCode(imp, call) {
-	case "hh":
-		return "HH"
-	case "hl":
-		return "HL"
-	case "lh":
-		return "LH"
-	default:
-		return "LL"
-	}
-}
-
 func labelOrHash(cr ClusterRow) string {
 	if cr.Label != "" {
 		return cr.Label
@@ -552,7 +737,6 @@ func labelOrHash(cr ClusterRow) string {
 }
 
 // shortPath returns the last 3 path segments of a file path for display.
-// e.g. /home/user/project/pkg/store/sqlstore/user.go → pkg/store/sqlstore/user.go
 func shortPath(p string) string {
 	parts := strings.Split(filepath.ToSlash(p), "/")
 	if len(parts) <= 3 {
@@ -575,8 +759,7 @@ func scoreBadgeClass(s float64) string {
 	}
 }
 
-// tokenChips renders a space-separated token string (e.g. "IF FOR RETURN")
-// as a sequence of styled chips with arrows, safe for direct HTML embedding.
+// tokenChips renders a space-separated token string as styled chips.
 func tokenChips(shape string) template.HTML {
 	if shape == "" {
 		return template.HTML(`<span class="no-shape">no common tokens</span>`)
@@ -596,8 +779,45 @@ func tokenChips(shape string) template.HTML {
 	return template.HTML(sb.String())
 }
 
+// diffChips renders added (green +) and removed (red −) chips for token/import/call diffs.
+func diffChips(added, removed []string) template.HTML {
+	if len(added) == 0 && len(removed) == 0 {
+		return template.HTML(`<span style="color:var(--muted2);font-size:10px;">—</span>`)
+	}
+	var sb strings.Builder
+	sb.WriteString(`<span class="diff-chips">`)
+	for _, a := range added {
+		sb.WriteString(`<span class="diff-add">+`)
+		sb.WriteString(template.HTMLEscapeString(a))
+		sb.WriteString(`</span>`)
+	}
+	for _, r := range removed {
+		sb.WriteString(`<span class="diff-rem">−`)
+		sb.WriteString(template.HTMLEscapeString(r))
+		sb.WriteString(`</span>`)
+	}
+	sb.WriteString(`</span>`)
+	return template.HTML(sb.String())
+}
+
 // scorePct converts a 0–1 score to an integer percentage for bar width.
 func scorePct(s float64) int { return int(s * 100) }
+
+// confidenceBar converts a confidence score to a bar width capped at 100.
+// Scores above ~8.0 (ln(100) × ln(10+1) × 1.0 × 1.0²) are extremely rare.
+func confidenceBar(a float64) int {
+	pct := int(a / 8.0 * 100)
+	if pct > 100 {
+		return 100
+	}
+	if pct < 0 {
+		return 0
+	}
+	return pct
+}
+
+// suppress math import warning — math.Log is used in clusterAttentionScore (cmd.go)
+var _ = math.Log
 
 func renderHTML(w *os.File, report RepoReport) error {
 	funcMap := template.FuncMap{
@@ -605,6 +825,7 @@ func renderHTML(w *os.File, report RepoReport) error {
 		"scoreBadge":    scoreBadgeClass,
 		"tokenChips":    tokenChips,
 		"scorePct":      scorePct,
+		"confidenceBar": confidenceBar,
 		"pct":           pct,
 		"f2":            f2,
 		"f1":            f1,
@@ -612,8 +833,7 @@ func renderHTML(w *os.File, report RepoReport) error {
 		"joinComma":     joinComma,
 		"labelOrHash":   labelOrHash,
 		"shortPath":     shortPath,
-		"quadrantCode":  quadrantCode,
-		"quadrantLabel": quadrantLabel,
+		"diffChips":     diffChips,
 	}
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
@@ -645,10 +865,10 @@ const reportTemplate = `<!DOCTYPE html>
   .hdr-left .repo{font-size:12px;color:var(--muted);margin-top:2px;}
   .hdr-right{font-size:11px;color:var(--muted2);text-align:right;}
 
-  .container{max-width:1340px;margin:0 auto;padding:24px 32px;}
+  .container{max-width:1400px;margin:0 auto;padding:24px 32px;}
 
   /* summary cards */
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 16px;}
   .card .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px;}
   .card .val{font-size:1.6rem;font-weight:700;color:var(--text);line-height:1.1;}
@@ -661,48 +881,28 @@ const reportTemplate = `<!DOCTYPE html>
   details.legend[open] summary::before{transform:rotate(90deg);}
   .legend-body{padding:4px 16px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:9px;}
   .lg-item{display:flex;gap:9px;}
-  .lg-term{min-width:110px;font-weight:600;color:var(--accent2);font-size:12px;flex-shrink:0;}
+  .lg-term{min-width:130px;font-weight:600;color:var(--accent2);font-size:12px;flex-shrink:0;}
   .lg-def{color:var(--muted);font-size:12px;}
   .lg-def code{background:rgba(129,140,248,.12);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;}
 
-  /* quadrant matrix */
-  .quadrant-wrap{grid-column:1/-1;margin:4px 0 2px;}
-  .quadrant-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;font-weight:600;}
-  .quadrant-grid{display:grid;grid-template-columns:110px 1fr 1fr;gap:2px;font-size:11px;}
-  .qg-col-hdr{padding:5px 10px;text-align:center;font-weight:700;color:var(--muted);background:var(--surface2);border-radius:4px 4px 0 0;}
-  .qg-row-hdr{padding:5px 10px;display:flex;align-items:center;font-weight:700;color:var(--muted);background:var(--surface2);border-radius:4px 0 0 4px;}
-  .qg-cell{padding:7px 11px;border-radius:4px;}
-  .qg-hh{background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.25);}
-  .qg-lh{background:rgba(96,165,250,.10);border:1px solid rgba(96,165,250,.25);}
-  .qg-hl{background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.20);}
-  .qg-ll{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.20);}
-  .qg-cell strong{display:block;margin-bottom:2px;font-size:11px;}
-  .qg-hh strong{color:var(--green);}.qg-lh strong{color:var(--accent2);}
-  .qg-hl strong{color:var(--yellow);}.qg-ll strong{color:var(--red);}
 
   .sec{font-size:.75rem;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;padding-bottom:5px;border-bottom:1px solid var(--border);}
   .sec-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .sec-bar .sec{margin:0;border:none;padding:0;}
 
   /* search */
-  .search-wrap{display:flex;align-items:center;gap:6px;}
+  .search-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .search-icon{color:var(--muted);font-size:16px;line-height:1;}
-  .search-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:13px;width:190px;outline:none;transition:border-color .15s;}
+  .search-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:13px;width:150px;outline:none;transition:border-color .15s;}
   .search-input:focus{border-color:var(--accent);}
+  #id-search{width:110px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:12px;}
+  #id-search:focus{border-color:var(--accent2);}
   #file-search:focus{border-color:var(--accent2);}
   .search-clear{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:3px 5px;border-radius:4px;display:none;}
   .search-clear:hover{color:var(--text);background:var(--surface2);}
   .search-divider{color:var(--muted2);font-size:11px;padding:0 2px;}
   .search-count{font-size:11px;color:var(--muted);white-space:nowrap;min-width:80px;}
 
-  /* quadrant filter */
-  .quad-filter-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:9px 13px;background:var(--surface);border:1px solid var(--border);border-radius:8px;}
-  .quad-filter-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-right:4px;}
-  .quad-filter-item{display:flex;align-items:center;gap:5px;cursor:pointer;padding:3px 7px;border-radius:6px;border:1px solid transparent;transition:background .1s;user-select:none;}
-  .quad-filter-item:hover{background:var(--surface2);}
-  .quad-filter-item input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:pointer;}
-  .quad-filter-item.inactive{opacity:0.4;}
-  .quad-filter-divider{width:1px;height:18px;background:var(--border);margin:0 3px;}
 
   /* quadrant pills */
   .quad-pill{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em;white-space:nowrap;}
@@ -711,17 +911,26 @@ const reportTemplate = `<!DOCTYPE html>
   .quad-hl{background:rgba(251,191,36,.15);color:var(--yellow);border:1px solid rgba(251,191,36,.25);}
   .quad-ll{background:rgba(248,113,113,.10);color:var(--red);border:1px solid rgba(248,113,113,.20);}
 
+  /* tier tabs */
+  .tier-tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:0;gap:0;}
+  .tier-tab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);transition:color .15s,border-color .15s;letter-spacing:.01em;}
+  .tier-tab:hover{color:var(--text);}
+  .tier-tab.active{color:var(--text);border-bottom-color:var(--accent);}
+  .tab-count{font-size:11px;font-weight:400;background:var(--surface2);color:var(--muted);border-radius:10px;padding:1px 8px;margin-left:6px;}
+  .tier-panel{display:block;padding-top:12px;}
+  .tier-panel.hidden{display:none;}
+
   /* cluster table */
-  .tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 240px);border:1px solid var(--border);border-radius:8px;}
+  .tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 260px);border:1px solid var(--border);border-radius:8px;}
   table.clusters{width:100%;border-collapse:collapse;}
-  table.clusters thead th{text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:var(--surface);border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:10;box-shadow:0 1px 0 var(--border);}
+  table.clusters thead th{text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:var(--surface);border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:10;box-shadow:0 1px 0 var(--border);}
   table.clusters thead th:hover{color:var(--text);}
   table.clusters thead th.sorted-asc::after{content:' ▲';color:var(--accent);}
   table.clusters thead th.sorted-desc::after{content:' ▼';color:var(--accent);}
 
   tr.cl-row{background:var(--surface);border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
   tr.cl-row:hover{background:var(--surface2);}
-  tr.cl-row td{padding:10px 12px;vertical-align:top;}
+  tr.cl-row td{padding:9px 10px;vertical-align:top;}
 
   tr.cl-detail{display:none;background:var(--surface3);}
   tr.cl-detail.open{display:table-row;}
@@ -730,7 +939,17 @@ const reportTemplate = `<!DOCTYPE html>
   .caret{display:inline-block;font-size:9px;color:var(--muted);margin-right:5px;transition:transform .18s;vertical-align:middle;}
   tr.cl-row.open .caret{transform:rotate(90deg);}
 
-  /* token sequence — the visual identity of each cluster */
+  /* ordinal + stable ID */
+  .cl-ordinal{font-size:11px;color:var(--muted2);font-variant-numeric:tabular-nums;text-align:right;width:28px;}
+  .cl-stableid{font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;color:var(--accent);letter-spacing:.04em;}
+
+  /* confidence score */
+  .attn-wrap{display:flex;align-items:center;gap:6px;min-width:70px;}
+  .attn-num{font-size:12px;font-weight:600;color:var(--accent2);font-variant-numeric:tabular-nums;min-width:32px;text-align:right;}
+  .attn-bar-bg{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .attn-bar-fill{height:100%;border-radius:2px;background:var(--accent2);opacity:.7;}
+
+  /* token sequence */
   .token-seq{display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:4px;}
   .token-chip{background:rgba(129,140,248,.14);color:var(--accent);border:1px solid rgba(129,140,248,.28);border-radius:3px;padding:1px 6px;font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;font-weight:600;letter-spacing:.02em;}
   .token-arrow{color:var(--muted2);font-size:9px;padding:0 1px;}
@@ -755,7 +974,8 @@ const reportTemplate = `<!DOCTYPE html>
   .detail-meta-item{font-size:11px;color:var(--muted);}
   .detail-meta-item strong{color:var(--text);font-weight:600;}
   table.members{width:100%;border-collapse:collapse;font-size:12px;}
-  table.members th{text-align:left;padding:5px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
+  .members-wrap{max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;}
+  table.members th{text-align:left;padding:5px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface3);z-index:5;box-shadow:0 1px 0 var(--border);}
   table.members td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
   table.members tr:last-child td{border-bottom:none;}
   .fn-name{font-weight:600;color:var(--accent2);font-family:monospace;font-size:12px;}
@@ -763,21 +983,18 @@ const reportTemplate = `<!DOCTYPE html>
   .fn-file{color:var(--muted);font-size:11px;font-family:monospace;}
   .fn-line{color:var(--muted2);font-size:11px;font-variant-numeric:tabular-nums;}
 
-  /* score bar inside member table */
   .score-wrap{display:flex;align-items:center;gap:7px;min-width:110px;}
   .score-num{font-size:11px;font-variant-numeric:tabular-nums;font-weight:600;min-width:34px;text-align:right;}
-  .score-num.score-high{color:var(--green);}
-  .score-num.score-mid{color:var(--yellow);}
-  .score-num.score-low{color:var(--red);}
+  .score-num.score-high,.score-bar-fill.score-high{color:var(--green);}
+  .score-num.score-mid,.score-bar-fill.score-mid{color:var(--yellow);}
+  .score-num.score-low,.score-bar-fill.score-low{color:var(--red);}
   .score-bar-bg{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
   .score-bar-fill{height:100%;border-radius:3px;transition:width .2s;}
   .score-bar-fill.score-high{background:var(--green);}
   .score-bar-fill.score-mid{background:var(--yellow);}
   .score-bar-fill.score-low{background:var(--red);}
 
-  /* scroll indicator */
   .tbl-scroll-hint{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;color:var(--muted2);margin-bottom:4px;user-select:none;}
-  .tbl-scroll-hint svg{opacity:.5;}
 
   /* LLM enrichment panel */
   .enrich-panel{margin-top:10px;padding:10px 12px;background:rgba(129,140,248,.06);border:1px solid rgba(129,140,248,.18);border-radius:6px;}
@@ -790,18 +1007,18 @@ const reportTemplate = `<!DOCTYPE html>
   .conf-low{color:var(--red);font-weight:600;}
   .action-none{color:var(--muted2);font-style:italic;}
   .action-attention{color:var(--yellow);}
-
-  /* search questions */
   .sq-list{display:flex;flex-direction:column;gap:4px;margin-top:1px;}
   .sq-item{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--muted);line-height:1.5;}
   .sq-item::before{content:'?';flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);opacity:.6;width:10px;text-align:center;}
 
   /* search state */
-  tr.cl-row.search-hidden,tr.cl-detail.search-hidden{display:none;}
-  tr.cl-row.quad-hidden,tr.cl-detail.quad-hidden{display:none;}
-  table.members tr.member-hidden{display:none;}
+  tr.cl-row.search-hidden,tr.cl-detail.search-hidden{display:none!important;}
+table.members tr.member-hidden{display:none;}
   table.members tr.member-match td{background:rgba(129,140,248,.07);}
   .fn-name mark{background:rgba(129,140,248,.35);color:var(--text);border-radius:2px;padding:0 1px;}
+
+  /* no-clusters message */
+  .no-clusters{padding:32px;text-align:center;color:var(--muted);font-size:13px;}
 
   /* distribution histograms */
   .dist-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:20px;}
@@ -816,6 +1033,34 @@ const reportTemplate = `<!DOCTYPE html>
   .dist-explain strong{color:var(--text);font-weight:600;}
 
   footer{text-align:center;padding:24px;color:var(--muted2);font-size:11px;border-top:1px solid var(--border);margin-top:36px;}
+
+
+  /* potential deviations accordion */
+  .outlier-body{max-height:65vh;overflow-y:auto;padding:12px 16px 16px;display:block;}
+  .outlier-group{border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;}
+  .outlier-group:last-child{margin-bottom:0;}
+  .outlier-group-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface2);flex-wrap:wrap;min-height:40px;border-bottom:1px solid var(--border);}
+  .outlier-cluster-link{background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.35);border-radius:4px;color:var(--accent);font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;}
+  .outlier-cluster-link:hover{background:rgba(129,140,248,.20);}
+  .outlier-cluster-lbl{font-size:11px;color:var(--muted);font-style:italic;flex-shrink:0;}
+  table.outlier-tbl{width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);}
+  table.outlier-tbl thead th{text-align:left;padding:6px 12px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface3);}
+  table.outlier-tbl td{padding:7px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  table.outlier-tbl tr:last-child td{border-bottom:none;}
+  table.outlier-tbl tr:hover td{background:var(--surface2);}
+  table.outlier-tbl .token-seq{flex-wrap:wrap;max-width:340px;row-gap:3px;}
+  .diff-chips{display:flex;flex-wrap:wrap;gap:3px;}
+  .diff-add{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25);border-radius:3px;padding:1px 5px;font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;white-space:nowrap;}
+  .diff-rem{background:rgba(248,113,113,.10);color:var(--red);border:1px solid rgba(248,113,113,.20);border-radius:3px;padding:1px 5px;font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;white-space:nowrap;}
+
+  /* potential outlier badge + tooltip */
+  .pot-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(96,165,250,.12);color:var(--accent2);border:1px solid rgba(96,165,250,.28);border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;user-select:none;white-space:nowrap;}
+  .pot-badge:hover{background:rgba(96,165,250,.22);}
+  .pot-badge .pot-icon{font-size:10px;opacity:.7;}
+  #pot-tooltip{position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;max-width:480px;min-width:220px;pointer-events:none;}
+  #pot-tooltip.visible{display:block;}
+  #pot-tooltip .pot-tt-title{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:7px;}
+  #pot-tooltip .pot-tt-item{font-size:11px;color:var(--accent2);font-family:'JetBrains Mono','Fira Code',monospace;padding:2px 0;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -839,45 +1084,20 @@ const reportTemplate = `<!DOCTYPE html>
       <div class="val">{{.TotalClusters}}</div>
       <div class="sub">structural patterns found</div>
     </div>
-    <div class="card">
-      <div class="lbl">Functions Covered</div>
-      <div class="val">{{.FunctionsInClusters}}</div>
-      <div class="sub">across all clusters</div>
-    </div>
-    <div class="card">
-      <div class="lbl">Mean Pairwise Score</div>
-      <div class="val">{{f2 .MeanAvgScore}}</div>
-      <div class="sub">mean ∛(seq×imp×call) across clusters</div>
-    </div>
-    <div class="card">
-      <div class="lbl">Mean Import Coh.</div>
-      <div class="val">{{f2 .MeanCoherence}}</div>
-      <div class="sub">mean pairwise import Jaccard</div>
-    </div>
-    <div class="card">
-      <div class="lbl">Mean Call Coh.</div>
-      <div class="val">{{f2 .MeanCallCoherence}}</div>
-      <div class="sub">mean pairwise call-target Jaccard</div>
-    </div>
     <div class="card" style="border-color:rgba(52,211,153,.35);">
-      <div class="lbl" style="color:var(--green);">HH</div>
-      <div class="val" style="color:var(--green);">{{.QuadHH}}</div>
-      <div class="sub">{{pct .QuadHH .TotalClusters}} tight domain-local</div>
-    </div>
-    <div class="card" style="border-color:rgba(96,165,250,.35);">
-      <div class="lbl" style="color:var(--accent2);">LH</div>
-      <div class="val" style="color:var(--accent2);">{{.QuadLH}}</div>
-      <div class="sub">{{pct .QuadLH .TotalClusters}} cross-cutting</div>
+      <div class="lbl" style="color:var(--green);">High StrcScore</div>
+      <div class="val" style="color:var(--green);">{{len .HighClusters}}</div>
+      <div class="sub">std &lt; 0.05 — tight</div>
     </div>
     <div class="card" style="border-color:rgba(251,191,36,.30);">
-      <div class="lbl" style="color:var(--yellow);">HL</div>
-      <div class="val" style="color:var(--yellow);">{{.QuadHL}}</div>
-      <div class="sub">{{pct .QuadHL .TotalClusters}} domain-cohesive</div>
+      <div class="lbl" style="color:var(--yellow);">Medium StrcScore</div>
+      <div class="val" style="color:var(--yellow);">{{len .MediumClusters}}</div>
+      <div class="sub">0.05 ≤ std &lt; 0.12</div>
     </div>
     <div class="card" style="border-color:rgba(248,113,113,.25);">
-      <div class="lbl" style="color:var(--red);">LL</div>
-      <div class="val" style="color:var(--red);">{{.QuadLL}}</div>
-      <div class="sub">{{pct .QuadLL .TotalClusters}} probably noise</div>
+      <div class="lbl" style="color:var(--red);">Low StrcScore</div>
+      <div class="val" style="color:var(--red);">{{len .LowClusters}}</div>
+      <div class="sub">std ≥ 0.12 — broad</div>
     </div>
   </div>
 
@@ -885,61 +1105,78 @@ const reportTemplate = `<!DOCTYPE html>
     <summary>Metric Glossary</summary>
     <div class="legend-body">
 
-      <div class="lg-item" style="grid-column:1/-1;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--border);">
+      <!-- ── FIRST: Tier + Confidence Score ────────────────────────────── -->
+      <div class="lg-item" style="grid-column:1/-1;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--border);">
+        <span class="lg-term" style="color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;">Structural Conformity &amp; Confidence</span>
+      </div>
+
+      <div class="lg-item" style="grid-column:1/-1;">
+        <span class="lg-term" style="color:var(--green);">Structural Conformity Tiers</span>
+        <span class="lg-def">
+          Derived from the <strong style="color:var(--text);">standard deviation of arithmetic pairwise scores</strong>
+          — (AST token-sequence similarity + import Jaccard + call-target Jaccard) / 3 — computed across all member pairs.
+          Thresholds are calibrated to the natural spread of structural clusters (std devs typically 0.00–0.15).<br/>
+          <strong style="color:var(--green);">High Structural Conformity Score (High StrcScore)</strong> (std &lt; 0.05): members are near-identical — the cluster encodes a very tight, settled convention.<br/>
+          <strong style="color:var(--yellow);">Medium Structural Conformity Score (Medium StrcScore)</strong> (0.05 ≤ std &lt; 0.12): consistent pattern with variation — same structural family, some drift.<br/>
+          <strong style="color:var(--red);">Low Structural Conformity Score (Low StrcScore)</strong> (std ≥ 0.12): broad structural family — shape is shared but with significant internal variation.
+        </span>
+      </div>
+
+      <div class="lg-item" style="grid-column:1/-1;">
+        <span class="lg-term" style="color:var(--accent2);">Confidence Score</span>
+        <span class="lg-def">
+          <strong style="color:var(--text);">ln(size) × ln(numPackages+1) × confidence(tier) × meanScore² × (importCoh + callCoh) / 2</strong> — a composite ranking signal.<br/>
+          <strong style="color:var(--text);">ln(size)</strong>: logarithmic prevalence weight — size matters, but diminishingly.<br/>
+          <strong style="color:var(--text);">ln(numPackages+1)</strong>: package-spread weight — patterns recurring across more packages are stronger signals of an established codebase-wide convention.<br/>
+          <strong style="color:var(--text);">confidence</strong>: tier weight — High StrcScore = 1.0 / Medium StrcScore = 0.6 / Low StrcScore = 0.3.<br/>
+          <strong style="color:var(--text);">meanScore²</strong>: structural tightness, squared — penalises loose clusters disproportionately; a score of 0.90 outweighs 0.75 by more than the raw difference suggests.<br/>
+          <strong style="color:var(--text);">(importCoh + callCoh) / 2</strong>: coherence factor — rewards clusters where members share both import domain and call vocabulary, the strongest signal of a real settled convention.<br/>
+          Within each tier tab, clusters are sorted descending by this score.
+        </span>
+      </div>
+
+      <!-- ── Cluster metrics ─────────────────────────────────────────────── -->
+      <div class="lg-item" style="grid-column:1/-1;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--border);margin-top:10px;">
         <span class="lg-term" style="color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;">Cluster metrics</span>
       </div>
 
-      <div class="lg-item"><span class="lg-term">Common Shape</span><span class="lg-def">The longest token subsequence present in <em>every</em> member of the cluster — the structural skeleton they all share. A longer shape means the cluster has a richer shared convention. A very short shape (2–4 tokens) may indicate coincidental similarity rather than a real pattern.</span></div>
-      <div class="lg-item"><span class="lg-term">Avg Pairwise Score</span><span class="lg-def">Mean ∛(seqSim × importJaccard × callJaccard) computed over every unique pair of functions in the cluster. The cube root is a geometric mean — all three dimensions must contribute; a zero on any one collapses the score to zero. Range 0–1. Higher = tighter, more coherent cluster. Clusters are sorted by this value descending.</span></div>
-      <div class="lg-item"><span class="lg-term">Member Score</span><span class="lg-def">Each function's mean pairwise score against every other member. The cluster avg is the mean of these. Members are sorted high→low — the lowest-scoring members are outlier candidates that weakened the cluster. A large gap between the top and bottom member scores is a sign the cluster should be split.</span></div>
-      <div class="lg-item"><span class="lg-term">Import Coh.</span><span class="lg-def">Mean pairwise Jaccard similarity of the direct import sets across all member pairs. High (≥ 0.60) means the cluster operates in a shared package domain. Low means the structural shape is shared across unrelated package domains.</span></div>
-      <div class="lg-item"><span class="lg-term">Call Coh.</span><span class="lg-def">Mean pairwise Jaccard similarity of the call-target sets (external functions called). High (≥ 0.60) means the cluster uses the same external vocabulary — a strong signal of shared structural role, not coincidence.</span></div>
+      <div class="lg-item"><span class="lg-term">ID</span><span class="lg-def">First 6 hex characters of the ShapeHash — stable across <code>beats init</code> runs. Use this to reference a cluster in conversations or with teammates.</span></div>
+      <div class="lg-item"><span class="lg-term">Common Shape</span><span class="lg-def">The longest token subsequence present in <em>every</em> member of the cluster — the structural skeleton they all share. A longer shape means the cluster has a richer shared convention.</span></div>
+      <div class="lg-item"><span class="lg-term">Avg Pairwise Score</span><span class="lg-def">Mean ∛(seqSim × importJaccard × callJaccard) over every unique member pair. The cube root is a geometric mean — all three dimensions must contribute; a zero on any one collapses the score to zero.</span></div>
+      <div class="lg-item"><span class="lg-term">Member Score</span><span class="lg-def">Each function's mean pairwise score against every other member. The lowest-scoring members are outlier candidates. A large gap between top and bottom member scores is a sign the cluster should be split.</span></div>
+      <div class="lg-item"><span class="lg-term">Import Coh.</span><span class="lg-def">Mean pairwise Jaccard of direct import sets. High (≥ 0.60) means the cluster operates in a shared package domain.</span></div>
+      <div class="lg-item"><span class="lg-term">Call Coh.</span><span class="lg-def">Mean pairwise Jaccard of call-target sets. High (≥ 0.60) means the cluster uses the same external vocabulary — a strong signal of shared structural role.</span></div>
 
+      <!-- ── Token reference ─────────────────────────────────────────────── -->
       <div class="lg-item" style="grid-column:1/-1;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--border);margin-top:10px;">
         <span class="lg-term" style="color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;">Token reference</span>
-        <span class="lg-def" style="margin-left:8px;">Every function is reduced to an ordered sequence of these tokens — no names, no literals, only structure. The common shape is a subsequence of these tokens.</span>
+        <span class="lg-def" style="margin-left:8px;">Every function is reduced to an ordered sequence of these tokens — no names, no literals, only structure.</span>
       </div>
 
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL</span><span class="lg-def">A plain local function call — either a bare identifier call like <code>doWork()</code>, a builtin like <code>make()</code> or <code>len()</code>, or a type conversion. The callee is defined in the same package or is a language builtin.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_PKG</span><span class="lg-def">A package-qualified call — the receiver is an imported package alias, e.g. <code>fmt.Sprintf()</code>, <code>xorm.In()</code>, <code>errors.New()</code>. Distinguishes calls into external packages from calls on variables or methods.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_METHOD</span><span class="lg-def">A method or chained call — the receiver is a variable, struct field, or chained expression, e.g. <code>w.Close()</code>, <code>db.Where(...).Find()</code>, <code>rref.LinkName()</code>. Indicates the function is orchestrating behaviour through an object or interface.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">ASSIGN</span><span class="lg-def">A variable assignment or short variable declaration (<code>:=</code> or <code>=</code>). Signals that the function is building up local state rather than just delegating.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">RETURN</span><span class="lg-def">A return statement. Each return value in the function signature appends one RETURN token — so a function returning <code>(*T, error)</code> emits two RETURN tokens at the end. This encodes the output arity into the shape.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">IF</span><span class="lg-def">An if statement (including <code>if err != nil</code> guards). High frequency of IF in a shape indicates defensive/error-handling code.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FOR</span><span class="lg-def">A C-style for loop (<code>for i := 0; i &lt; n; i++</code>). Distinct from RANGE — this token signals index-based iteration.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">RANGE</span><span class="lg-def">A range-based for loop (<code>for k, v := range m</code>). The most common iteration token in idiomatic Go — frequent in shapes involving slices, maps, or channels.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SWITCH</span><span class="lg-def">A switch statement (expression switch or type switch). Paired with CASE tokens for each branch.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CASE</span><span class="lg-def">A case clause inside a switch or select block. The number of CASE tokens encodes how many branches the switch has.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FUNCLIT</span><span class="lg-def">A function literal (anonymous function / closure), e.g. <code>func() { ... }</code> passed as an argument or assigned to a variable. Common in goroutine launches, callbacks, and deferred cleanup patterns.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">DEFER</span><span class="lg-def">A defer statement. Signals resource cleanup or unlock patterns. Often paired with CALL_METHOD (e.g. <code>defer rows.Close()</code>) or FUNCLIT (e.g. <code>defer func() { ... }()</code>).</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">GO</span><span class="lg-def">A go statement — launching a goroutine (<code>go doWork()</code>). Presence in a shape indicates concurrency in the function's control flow.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SEND</span><span class="lg-def">A channel send operation (<code>ch &lt;- value</code>). Signals producer-side channel communication.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SELECT</span><span class="lg-def">A select statement — multiplexing over multiple channel operations. Paired with COMM tokens for each case.</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">COMM</span><span class="lg-def">A communication clause inside a select block (each <code>case &lt;-ch:</code> or <code>case ch &lt;- v:</code> branch).</span></div>
-      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">BREAK / CONTINUE</span><span class="lg-def">Loop control flow. BREAK exits the innermost loop or switch; CONTINUE skips to the next iteration.</span></div>
-
-      <div class="quadrant-wrap" style="margin-top:14px;">
-        <div class="quadrant-label">Coherence quadrant guide</div>
-        <div class="quadrant-grid">
-          <div></div><div class="qg-col-hdr">High Call Coh. (≥ 0.60)</div><div class="qg-col-hdr">Low Call Coh. (&lt; 0.60)</div>
-          <div class="qg-row-hdr">High Import (≥ 0.60)</div>
-          <div class="qg-cell qg-hh"><strong>HH — Tight domain-local</strong><span style="color:var(--muted)">Shares both package context and call vocabulary. The strongest signal — a real settled convention. Most actionable for onboarding and refactoring.</span></div>
-          <div class="qg-cell qg-hl"><strong>HL — Domain-cohesive</strong><span style="color:var(--muted)">Same package domain, divergent call targets. The convention is drifting — functions do the same kind of thing but via different paths. May benefit from splitting or standardising the approach.</span></div>
-          <div class="qg-row-hdr">Low Import (&lt; 0.60)</div>
-          <div class="qg-cell qg-lh"><strong>LH — Cross-cutting</strong><span style="color:var(--muted)">Same structural role, different domains. Classic adapter or hook pattern — functions that all wrap or delegate in the same way regardless of what they wrap.</span></div>
-          <div class="qg-cell qg-ll"><strong>LL — Noise</strong><span style="color:var(--muted)">Shape coincidence only. Neither domain nor call vocabulary is shared. Treat with scepticism — likely incidental structural similarity.</span></div>
-        </div>
-      </div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL</span><span class="lg-def">A plain local function call or builtin (<code>make()</code>, <code>len()</code>) or type conversion.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_PKG</span><span class="lg-def">A package-qualified call — the receiver is an imported package alias, e.g. <code>fmt.Sprintf()</code>.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">CALL_METHOD</span><span class="lg-def">A method or chained call — the receiver is a variable or struct field, e.g. <code>w.Close()</code>.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">ASSIGN</span><span class="lg-def">A variable assignment or short variable declaration (<code>:=</code> or <code>=</code>).</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">RETURN</span><span class="lg-def">A return statement. Each return value appends one RETURN token, encoding output arity into the shape.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">IF</span><span class="lg-def">An if statement (including <code>if err != nil</code> guards). High frequency indicates defensive/error-handling code.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FOR / RANGE</span><span class="lg-def">C-style for loop vs range-based iteration. RANGE is the most common iteration token in idiomatic Go.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">SWITCH / CASE</span><span class="lg-def">Switch statement with CASE tokens for each branch, encoding branching arity.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">DEFER</span><span class="lg-def">A defer statement. Signals resource cleanup or unlock patterns.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">GO / SEND / SELECT</span><span class="lg-def">Goroutine spawn, channel send, and channel multiplexing. Presence indicates concurrency in the control flow.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">FUNCLIT</span><span class="lg-def">An anonymous function / closure, e.g. passed as a callback or used in a goroutine launch.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">COMPOSITE_LIT</span><span class="lg-def">A composite literal — struct, slice, map, or array initialisation, e.g. <code>&amp;Foo{}</code>, <code>[]string{...}</code>. High frequency indicates constructor-style or data-builder functions.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">BINARY_OP</span><span class="lg-def">A binary expression — arithmetic, comparison, or logical operator (<code>+</code>, <code>==</code>, <code>&amp;&amp;</code>, etc.). Distinguishes computation-heavy functions from pure dispatch/delegation shapes.</span></div>
+      <div class="lg-item"><span class="lg-term" style="color:var(--accent2);font-family:monospace;">TYPE_ASSERT</span><span class="lg-def">A type assertion or type switch arm — <code>x.(T)</code>. Signals interface-unwrapping patterns common in middleware, codec, or handler code.</span></div>
 
       <div class="lg-item" style="grid-column:1/-1;margin-top:10px;padding-top:9px;border-top:1px solid var(--border);">
         <span class="lg-term" style="color:var(--muted);">Filtered noise</span>
-        <span class="lg-def">Clusters whose trigram shape matches ≥ 5% of the entire corpus are dropped before clustering — structural stop-words (e.g. a function that is just one RETURN) with no discriminating signal.</span>
+        <span class="lg-def">Clusters whose trigram shape matches ≥ 5% of the entire corpus are suppressed — structural stop-words (e.g. a bare RETURN function) with no discriminating signal. They are excluded from all three tier tabs.</span>
       </div>
     </div>
   </details>
 
   <div class="dist-section">
-    <div class="dist-grid">
+    <div class="dist-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div>
         <div class="dist-title">Score distribution — avg pairwise ∛(seq × imp × call)</div>
 {{range .ScoreDist}}
@@ -962,23 +1199,68 @@ const reportTemplate = `<!DOCTYPE html>
 {{end}}
         <p class="dist-explain">{{.SizeExplain}}</p>
       </div>
+      <div>
+        <div class="dist-title">Mean confidence score by tier</div>
+{{range .TierConfidenceDist}}
+        <div class="dist-row">
+          <span class="dist-label" style="min-width:120px;font-family:inherit;">{{.Label}}</span>
+          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%;background:{{.Color}}"></div></div>
+          <span class="dist-count">{{f2 .Score}}</span>
+        </div>
+{{end}}
+        <p class="dist-explain">Mean confidence score per conformity tier. Higher tiers score higher because the tier-confidence weight (1.0 / 0.6 / 0.3) multiplies the same formula — this chart confirms the ranking is working as intended.</p>
+      </div>
     </div>
   </div>
 
-  <div class="quad-filter-bar">
-    <span class="quad-filter-label">Show</span>
-    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="hh" checked/><span class="quad-pill quad-hh">HH</span><span style="font-size:11px;color:var(--muted)">High Import · High Call</span></label>
-    <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="lh" checked/><span class="quad-pill quad-lh">LH</span><span style="font-size:11px;color:var(--muted)">Low Import · High Call</span></label>
-    <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="hl" checked/><span class="quad-pill quad-hl">HL</span><span style="font-size:11px;color:var(--muted)">High Import · Low Call</span></label>
-    <div class="quad-filter-divider"></div>
-    <label class="quad-filter-item"><input type="checkbox" class="quad-cb" data-quad="ll" checked/><span class="quad-pill quad-ll">LL</span><span style="font-size:11px;color:var(--muted)">Low Import · Low Call</span></label>
-  </div>
+{{if .OutlierGroups}}
+  <details class="legend" style="margin-bottom:20px;">
+    <summary>Potential Deviations <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px;">{{.TotalOutliers}} function(s) across {{len .OutlierGroups}} cluster(s) — functions that did not join but score close</span></summary>
+    <div class="outlier-body">
+{{range .OutlierGroups}}
+      <div class="outlier-group">
+        <div class="outlier-group-hdr">
+          <button class="outlier-cluster-link" onclick="jumpToCluster('{{.ClusterID}}')">↗ {{.ClusterID}}</button>
+          {{if .ClusterLabel}}<span class="outlier-cluster-lbl">{{.ClusterLabel}}</span>{{end}}
+          {{tokenChips .CommonShape}}
+        </div>
+        <table class="outlier-tbl">
+          <thead><tr>
+            <th>Function</th>
+            <th>Package</th>
+            <th>File : Line</th>
+            <th title="This function's full token sequence — compare to cluster LCS above to see where the structure diverges">Token Shape</th>
+            <th title="Token types present in this function but absent from the cluster LCS (+), or in the LCS but not here (−)">Token Δ</th>
+            <th title="Imports present in this function but not in cluster's common imports (+), or vice versa (−)">Import Δ</th>
+            <th title="Call targets present in this function but not in cluster's common calls (+), or vice versa (−)">Call Δ</th>
+          </tr></thead>
+          <tbody>
+{{range .Outliers}}
+            <tr>
+              <td><span class="fn-name">{{.Name}}</span></td>
+              <td><span class="fn-pkg">{{.Package}}</span></td>
+              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}:{{.Line}}</span></td>
+              <td>{{tokenChips .TokenShape}}</td>
+              <td>{{diffChips .TokensAdded .TokensRemoved}}</td>
+              <td>{{diffChips .ImportsAdded .ImportsRemoved}}</td>
+              <td>{{diffChips .CallsAdded .CallsRemoved}}</td>
+            </tr>
+{{end}}
+          </tbody>
+        </table>
+      </div>
+{{end}}
+    </div>
+  </details>
+{{end}}
 
   <div class="sec-bar">
-    <div class="sec">Clusters — sorted by avg pairwise score ↓</div>
+    <div class="sec">Clusters — sorted by confidence score ↓</div>
     <div class="search-wrap">
+      <span class="search-icon" title="Filter by cluster ID">⌗</span>
+      <input type="text" id="id-search" class="search-input" placeholder="Cluster ID…" autocomplete="off" spellcheck="false"/>
+      <button id="id-search-clear" class="search-clear" title="Clear">✕</button>
+      <span class="search-divider">·</span>
       <span class="search-icon">⌕</span>
       <input type="text" id="fn-search" class="search-input" placeholder="Function name…" autocomplete="off" spellcheck="false"/>
       <button id="fn-search-clear" class="search-clear" title="Clear">✕</button>
@@ -989,200 +1271,273 @@ const reportTemplate = `<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="tbl-scroll-hint">
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6 2v8M6 10l-2.5-2.5M6 10l2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    scroll to explore
+  <div class="tier-tabs" id="tier-tabs">
+    <button class="tier-tab active" data-tier="high" onclick="switchTab('high')">High StrcScore<span class="tab-count">{{len .HighClusters}}</span></button>
+    <button class="tier-tab" data-tier="medium" onclick="switchTab('medium')">Medium StrcScore<span class="tab-count">{{len .MediumClusters}}</span></button>
+    <button class="tier-tab" data-tier="low" onclick="switchTab('low')">Low StrcScore<span class="tab-count">{{len .LowClusters}}</span></button>
   </div>
-  <div class="tbl-wrap">
-  <table class="clusters" id="cl-table">
-    <thead>
-      <tr>
-        <th data-col="quadrant" style="width:52px">Type</th>
-        <th data-col="shape">Common Shape</th>
-        <th data-col="size">Size</th>
-        <th data-col="avgscore" class="sorted-desc">Avg Score</th>
-        <th data-col="coherence">Import Coh.</th>
-        <th data-col="callcoherence">Call Coh.</th>
-        <th data-col="packages">Packages</th>
-        <th data-col="potential" title="Orphaned functions with strong structural affinity to this cluster">Potential</th>
-      </tr>
-    </thead>
-    <tbody>
-{{range $i, $cl := .Clusters}}
-      <tr class="cl-row" data-idx="{{$i}}" data-quadrant="{{quadrantCode $cl.Coherence $cl.CallCoherence}}" onclick="toggleRow({{$i}})">
-        <td style="text-align:center;vertical-align:middle;"><span class="quad-pill quad-{{quadrantCode $cl.Coherence $cl.CallCoherence}}">{{quadrantLabel $cl.Coherence $cl.CallCoherence}}</span></td>
-        <td>
-          <span class="caret">▶</span>{{tokenChips $cl.CommonShape}}
-          <span class="cl-hash">{{$cl.ShapeHash}}{{if $cl.Label}} · {{$cl.Label}}{{end}}</span>
-        </td>
+
+  <!-- ── HIGH tab ─────────────────────────────────────────────────────────── -->
+  <div class="tier-panel" id="panel-high">
+    <div class="tbl-scroll-hint"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 2v8M6 10l-2.5-2.5M6 10l2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> scroll to explore</div>
+    <div class="tbl-wrap">
+    <table class="clusters" id="tbl-high">
+      <thead><tr>
+        <th data-col="ordinal" style="width:32px;" title="Ordinal rank within this tier, sorted by confidence score">#</th>
+        <th data-col="stableid" style="width:70px;" title="First 6 hex chars of ShapeHash — stable across runs. Use to reference a cluster in conversations or issues.">ID</th>
+        <th data-col="shape" title="Longest token subsequence shared by every member — the structural skeleton they all share. Longer = richer shared convention.">Common Shape</th>
+        <th data-col="size" title="Number of functions in this cluster">Size</th>
+        <th data-col="avgscore" title="Mean ∛(seqSim × importJaccard × callJaccard) over all member pairs. Geometric mean — a zero on any dimension collapses to zero.">Avg Score</th>
+        <th data-col="confidence" class="sorted-desc" title="ln(size) × ln(packages+1) × tier_weight × meanScore² × (importCoh+callCoh)/2. Composite ranking signal — size, spread, tightness, and coherence combined.">CScore</th>
+        <th data-col="coherence" title="Mean pairwise Jaccard of direct import sets. ≥0.60 = members share a package domain.">Import Coh.</th>
+        <th data-col="callcoherence" title="Mean pairwise Jaccard of call-target sets. ≥0.60 = members share a function vocabulary — strongest signal of a settled convention.">Call Coh.</th>
+        <th data-col="packages" title="Unique packages containing cluster members. More packages = pattern is codebase-wide, not localised.">Packages</th>
+        <th data-col="potential" title="Orphaned functions with structural affinity to this cluster — did not join but scored close. Click badge to see names.">Potential</th>
+      </tr></thead>
+      <tbody>
+{{if not .HighClusters}}<tr><td colspan="10" class="no-clusters">No high-conformity clusters in this index.</td></tr>{{end}}
+{{range $i, $cl := .HighClusters}}
+      <tr class="cl-row" data-idx="{{$i}}" data-stableid="{{$cl.StableID}}" onclick="toggleRow('high',{{$i}})">
+        <td class="cl-ordinal">{{$cl.Ordinal}}</td>
+        <td><span class="cl-stableid">{{$cl.StableID}}</span></td>
+        <td><span class="caret">▶</span>{{tokenChips $cl.CommonShape}}<span class="cl-hash">{{$cl.ShapeHash}}{{if $cl.Label}} · {{$cl.Label}}{{end}}</span></td>
         <td class="num" style="vertical-align:middle;">{{$cl.Size}}</td>
         <td style="vertical-align:middle;"><span class="badge {{scoreBadge $cl.AvgPairwiseScore}}">{{f3 $cl.AvgPairwiseScore}}</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">{{f2 $cl.ConfidenceScore}}</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:{{confidenceBar $cl.ConfidenceScore}}%"></div></div></div></td>
         <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.Coherence}}">{{f2 $cl.Coherence}}</span></td>
         <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.CallCoherence}}">{{f2 $cl.CallCoherence}}</span></td>
-        <td style="vertical-align:middle;">
-          <div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div>
-        </td>
-        <td style="vertical-align:top;padding:6px 12px;">
-          {{if $cl.Potentials}}
-            <div style="display:flex;flex-direction:column;gap:3px;">
-            {{range $cl.Potentials}}
-              <span style="font-size:10px;color:var(--accent2);white-space:nowrap;font-family:monospace;">{{.}}</span>
-            {{end}}
-            </div>
-          {{end}}
-        </td>
+        <td style="vertical-align:middle;"><div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div></td>
+        <td style="vertical-align:middle;padding:6px 10px;">{{if $cl.Potentials}}<span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="{{range $cl.Potentials}}{{.}}|{{end}}"><span class="pot-icon">⚑</span>{{len $cl.Potentials}}</span>{{end}}</td>
       </tr>
-      <tr class="cl-detail" id="detail-{{$i}}">
-        <td colspan="8">
-          <div class="detail-panel">
-            <div class="detail-meta">
-              <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
-              <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
-            </div>
-            <table class="members">
-              <thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-              <tbody>
-{{range $cl.Members}}
-                <tr>
-                  <td><span class="fn-name">{{.Name}}</span></td>
-                  <td><span class="fn-pkg">{{.Package}}</span></td>
-                  <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
-                  <td><span class="fn-line">{{.Line}}</span></td>
-                  <td>
-                    <div class="score-wrap">
-                      <span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span>
-                      <div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div>
-                    </div>
-                  </td>
-                </tr>
-{{end}}
-              </tbody>
-            </table>
-{{if or $cl.SemanticIdiom $cl.Verdict $cl.SuggestedAction $cl.SearchQuestions}}
-            <div class="enrich-panel">
-{{if $cl.SemanticIdiom}}
-              <div class="enrich-row"><span class="enrich-key">Idiom</span><span class="enrich-val">{{$cl.SemanticIdiom}}{{if $cl.Confidence}} &nbsp;<span class="conf-{{$cl.Confidence}}">{{$cl.Confidence}}</span>{{end}}</span></div>
-{{end}}
-{{if $cl.CanonicalMember}}
-              <div class="enrich-row"><span class="enrich-key">Canonical</span><span class="enrich-val"><code style="font-size:11px;font-family:monospace;color:var(--accent2)">{{$cl.CanonicalMember}}</code></span></div>
-{{end}}
-{{if $cl.Verdict}}
-              <div class="enrich-row"><span class="enrich-key">Verdict</span><span class="enrich-val">{{$cl.Verdict}}</span></div>
-{{end}}
-{{if $cl.SuggestedAction}}
-              <div class="enrich-row"><span class="enrich-key">Action</span><span class="enrich-val {{if eq $cl.SuggestedAction "none"}}action-none{{else}}action-attention{{end}}">{{$cl.SuggestedAction}}</span></div>
-{{end}}
-{{if $cl.SearchQuestions}}
-              <div class="enrich-row"><span class="enrich-key">Questions</span><span class="enrich-val"><div class="sq-list">{{range $cl.SearchQuestions}}<div class="sq-item">{{.}}</div>{{end}}</div></span></div>
-{{end}}
-            </div>
-{{end}}
+      <tr class="cl-detail" id="detail-high-{{$i}}">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
+            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
           </div>
-        </td>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+{{range $cl.Members}}
+            <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
+              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-line">{{.Line}}</span></td>
+              <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
+            </tr>
+{{end}}
+          </tbody></table></div>
+{{if or $cl.SemanticIdiom $cl.Verdict $cl.SuggestedAction $cl.SearchQuestions}}
+          <div class="enrich-panel">
+{{if $cl.SemanticIdiom}}<div class="enrich-row"><span class="enrich-key">Idiom</span><span class="enrich-val">{{$cl.SemanticIdiom}}{{if $cl.Confidence}} &nbsp;<span class="conf-{{$cl.Confidence}}">{{$cl.Confidence}}</span>{{end}}</span></div>{{end}}
+{{if $cl.CanonicalMember}}<div class="enrich-row"><span class="enrich-key">Canonical</span><span class="enrich-val"><code style="font-size:11px;font-family:monospace;color:var(--accent2)">{{$cl.CanonicalMember}}</code></span></div>{{end}}
+{{if $cl.Verdict}}<div class="enrich-row"><span class="enrich-key">Verdict</span><span class="enrich-val">{{$cl.Verdict}}</span></div>{{end}}
+{{if $cl.SuggestedAction}}<div class="enrich-row"><span class="enrich-key">Action</span><span class="enrich-val {{if eq $cl.SuggestedAction "none"}}action-none{{else}}action-attention{{end}}">{{$cl.SuggestedAction}}</span></div>{{end}}
+{{if $cl.SearchQuestions}}<div class="enrich-row"><span class="enrich-key">Questions</span><span class="enrich-val"><div class="sq-list">{{range $cl.SearchQuestions}}<div class="sq-item">{{.}}</div>{{end}}</div></span></div>{{end}}
+          </div>
+{{end}}
+        </div></td>
       </tr>
 {{end}}
-    </tbody>
-  </table>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── MEDIUM tab ───────────────────────────────────────────────────────── -->
+  <div class="tier-panel hidden" id="panel-medium">
+    <div class="tbl-scroll-hint"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 2v8M6 10l-2.5-2.5M6 10l2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> scroll to explore</div>
+    <div class="tbl-wrap">
+    <table class="clusters" id="tbl-medium">
+      <thead><tr>
+        <th data-col="ordinal" style="width:32px;" title="Ordinal rank within this tier, sorted by confidence score">#</th>
+        <th data-col="stableid" style="width:70px;" title="First 6 hex chars of ShapeHash — stable across runs. Use to reference a cluster in conversations or issues.">ID</th>
+        <th data-col="shape" title="Longest token subsequence shared by every member — the structural skeleton they all share. Longer = richer shared convention.">Common Shape</th>
+        <th data-col="size" title="Number of functions in this cluster">Size</th>
+        <th data-col="avgscore" title="Mean ∛(seqSim × importJaccard × callJaccard) over all member pairs. Geometric mean — a zero on any dimension collapses to zero.">Avg Score</th>
+        <th data-col="confidence" class="sorted-desc" title="ln(size) × ln(packages+1) × tier_weight × meanScore² × (importCoh+callCoh)/2. Composite ranking signal — size, spread, tightness, and coherence combined.">CScore</th>
+        <th data-col="coherence" title="Mean pairwise Jaccard of direct import sets. ≥0.60 = members share a package domain.">Import Coh.</th>
+        <th data-col="callcoherence" title="Mean pairwise Jaccard of call-target sets. ≥0.60 = members share a function vocabulary — strongest signal of a settled convention.">Call Coh.</th>
+        <th data-col="packages" title="Unique packages containing cluster members. More packages = pattern is codebase-wide, not localised.">Packages</th>
+        <th data-col="potential" title="Orphaned functions with structural affinity to this cluster — did not join but scored close. Click badge to see names.">Potential</th>
+      </tr></thead>
+      <tbody>
+{{if not .MediumClusters}}<tr><td colspan="10" class="no-clusters">No medium-conformity clusters in this index.</td></tr>{{end}}
+{{range $i, $cl := .MediumClusters}}
+      <tr class="cl-row" data-idx="{{$i}}" data-stableid="{{$cl.StableID}}" onclick="toggleRow('medium',{{$i}})">
+        <td class="cl-ordinal">{{$cl.Ordinal}}</td>
+        <td><span class="cl-stableid">{{$cl.StableID}}</span></td>
+        <td><span class="caret">▶</span>{{tokenChips $cl.CommonShape}}<span class="cl-hash">{{$cl.ShapeHash}}{{if $cl.Label}} · {{$cl.Label}}{{end}}</span></td>
+        <td class="num" style="vertical-align:middle;">{{$cl.Size}}</td>
+        <td style="vertical-align:middle;"><span class="badge {{scoreBadge $cl.AvgPairwiseScore}}">{{f3 $cl.AvgPairwiseScore}}</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">{{f2 $cl.ConfidenceScore}}</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:{{confidenceBar $cl.ConfidenceScore}}%"></div></div></div></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.Coherence}}">{{f2 $cl.Coherence}}</span></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.CallCoherence}}">{{f2 $cl.CallCoherence}}</span></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div></td>
+        <td style="vertical-align:middle;padding:6px 10px;">{{if $cl.Potentials}}<span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="{{range $cl.Potentials}}{{.}}|{{end}}"><span class="pot-icon">⚑</span>{{len $cl.Potentials}}</span>{{end}}</td>
+      </tr>
+      <tr class="cl-detail" id="detail-medium-{{$i}}">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
+            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+          </div>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+{{range $cl.Members}}
+            <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
+              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-line">{{.Line}}</span></td>
+              <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
+            </tr>
+{{end}}
+          </tbody></table></div>
+{{if or $cl.SemanticIdiom $cl.Verdict $cl.SuggestedAction $cl.SearchQuestions}}
+          <div class="enrich-panel">
+{{if $cl.SemanticIdiom}}<div class="enrich-row"><span class="enrich-key">Idiom</span><span class="enrich-val">{{$cl.SemanticIdiom}}{{if $cl.Confidence}} &nbsp;<span class="conf-{{$cl.Confidence}}">{{$cl.Confidence}}</span>{{end}}</span></div>{{end}}
+{{if $cl.CanonicalMember}}<div class="enrich-row"><span class="enrich-key">Canonical</span><span class="enrich-val"><code style="font-size:11px;font-family:monospace;color:var(--accent2)">{{$cl.CanonicalMember}}</code></span></div>{{end}}
+{{if $cl.Verdict}}<div class="enrich-row"><span class="enrich-key">Verdict</span><span class="enrich-val">{{$cl.Verdict}}</span></div>{{end}}
+{{if $cl.SuggestedAction}}<div class="enrich-row"><span class="enrich-key">Action</span><span class="enrich-val {{if eq $cl.SuggestedAction "none"}}action-none{{else}}action-attention{{end}}">{{$cl.SuggestedAction}}</span></div>{{end}}
+{{if $cl.SearchQuestions}}<div class="enrich-row"><span class="enrich-key">Questions</span><span class="enrich-val"><div class="sq-list">{{range $cl.SearchQuestions}}<div class="sq-item">{{.}}</div>{{end}}</div></span></div>{{end}}
+          </div>
+{{end}}
+        </div></td>
+      </tr>
+{{end}}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── LOW tab ──────────────────────────────────────────────────────────── -->
+  <div class="tier-panel hidden" id="panel-low">
+    <div class="tbl-scroll-hint"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 2v8M6 10l-2.5-2.5M6 10l2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> scroll to explore</div>
+    <div class="tbl-wrap">
+    <table class="clusters" id="tbl-low">
+      <thead><tr>
+        <th data-col="ordinal" style="width:32px;" title="Ordinal rank within this tier, sorted by confidence score">#</th>
+        <th data-col="stableid" style="width:70px;" title="First 6 hex chars of ShapeHash — stable across runs. Use to reference a cluster in conversations or issues.">ID</th>
+        <th data-col="shape" title="Longest token subsequence shared by every member — the structural skeleton they all share. Longer = richer shared convention.">Common Shape</th>
+        <th data-col="size" title="Number of functions in this cluster">Size</th>
+        <th data-col="avgscore" title="Mean ∛(seqSim × importJaccard × callJaccard) over all member pairs. Geometric mean — a zero on any dimension collapses to zero.">Avg Score</th>
+        <th data-col="confidence" class="sorted-desc" title="ln(size) × ln(packages+1) × tier_weight × meanScore² × (importCoh+callCoh)/2. Composite ranking signal — size, spread, tightness, and coherence combined.">CScore</th>
+        <th data-col="coherence" title="Mean pairwise Jaccard of direct import sets. ≥0.60 = members share a package domain.">Import Coh.</th>
+        <th data-col="callcoherence" title="Mean pairwise Jaccard of call-target sets. ≥0.60 = members share a function vocabulary — strongest signal of a settled convention.">Call Coh.</th>
+        <th data-col="packages" title="Unique packages containing cluster members. More packages = pattern is codebase-wide, not localised.">Packages</th>
+        <th data-col="potential" title="Orphaned functions with structural affinity to this cluster — did not join but scored close. Click badge to see names.">Potential</th>
+      </tr></thead>
+      <tbody>
+{{if not .LowClusters}}<tr><td colspan="10" class="no-clusters">No low-conformity clusters in this index.</td></tr>{{end}}
+{{range $i, $cl := .LowClusters}}
+      <tr class="cl-row" data-idx="{{$i}}" data-stableid="{{$cl.StableID}}" onclick="toggleRow('low',{{$i}})">
+        <td class="cl-ordinal">{{$cl.Ordinal}}</td>
+        <td><span class="cl-stableid">{{$cl.StableID}}</span></td>
+        <td><span class="caret">▶</span>{{tokenChips $cl.CommonShape}}<span class="cl-hash">{{$cl.ShapeHash}}{{if $cl.Label}} · {{$cl.Label}}{{end}}</span></td>
+        <td class="num" style="vertical-align:middle;">{{$cl.Size}}</td>
+        <td style="vertical-align:middle;"><span class="badge {{scoreBadge $cl.AvgPairwiseScore}}">{{f3 $cl.AvgPairwiseScore}}</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">{{f2 $cl.ConfidenceScore}}</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:{{confidenceBar $cl.ConfidenceScore}}%"></div></div></div></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.Coherence}}">{{f2 $cl.Coherence}}</span></td>
+        <td style="vertical-align:middle;"><span class="badge {{badgeClass $cl.CallCoherence}}">{{f2 $cl.CallCoherence}}</span></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills">{{range $cl.Packages}}<span class="pkg-pill">{{.}}</span>{{end}}</div></td>
+        <td style="vertical-align:middle;padding:6px 10px;">{{if $cl.Potentials}}<span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="{{range $cl.Potentials}}{{.}}|{{end}}"><span class="pot-icon">⚑</span>{{len $cl.Potentials}}</span>{{end}}</td>
+      </tr>
+      <tr class="cl-detail" id="detail-low-{{$i}}">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
+            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+          </div>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+{{range $cl.Members}}
+            <tr><td><span class="fn-name">{{.Name}}</span></td><td><span class="fn-pkg">{{.Package}}</span></td>
+              <td><span class="fn-file" title="{{.FilePath}}">{{shortPath .FilePath}}</span></td>
+              <td><span class="fn-line">{{.Line}}</span></td>
+              <td><div class="score-wrap"><span class="score-num {{scoreBadge .PairwiseScore}}">{{f3 .PairwiseScore}}</span><div class="score-bar-bg"><div class="score-bar-fill {{scoreBadge .PairwiseScore}}" style="width:{{scorePct .PairwiseScore}}%"></div></div></div></td>
+            </tr>
+{{end}}
+          </tbody></table></div>
+{{if or $cl.SemanticIdiom $cl.Verdict $cl.SuggestedAction $cl.SearchQuestions}}
+          <div class="enrich-panel">
+{{if $cl.SemanticIdiom}}<div class="enrich-row"><span class="enrich-key">Idiom</span><span class="enrich-val">{{$cl.SemanticIdiom}}{{if $cl.Confidence}} &nbsp;<span class="conf-{{$cl.Confidence}}">{{$cl.Confidence}}</span>{{end}}</span></div>{{end}}
+{{if $cl.CanonicalMember}}<div class="enrich-row"><span class="enrich-key">Canonical</span><span class="enrich-val"><code style="font-size:11px;font-family:monospace;color:var(--accent2)">{{$cl.CanonicalMember}}</code></span></div>{{end}}
+{{if $cl.Verdict}}<div class="enrich-row"><span class="enrich-key">Verdict</span><span class="enrich-val">{{$cl.Verdict}}</span></div>{{end}}
+{{if $cl.SuggestedAction}}<div class="enrich-row"><span class="enrich-key">Action</span><span class="enrich-val {{if eq $cl.SuggestedAction "none"}}action-none{{else}}action-attention{{end}}">{{$cl.SuggestedAction}}</span></div>{{end}}
+{{if $cl.SearchQuestions}}<div class="enrich-row"><span class="enrich-key">Questions</span><span class="enrich-val"><div class="sq-list">{{range $cl.SearchQuestions}}<div class="sq-item">{{.}}</div>{{end}}</div></span></div>{{end}}
+          </div>
+{{end}}
+        </div></td>
+      </tr>
+{{end}}
+      </tbody>
+    </table>
+    </div>
   </div>
 
 </div>
-
-{{if .Orphans}}
-<div style="max-width:1400px;margin:32px auto;padding:0 24px;">
-<h2 style="font-size:1rem;font-weight:700;color:var(--accent);margin-bottom:12px;">
-  Function Deviations
-  <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px;">{{len .Orphans}} function(s) that did not join any cluster — shown with closest structural cluster match</span>
-</h2>
-<table id="orphan-table" style="width:100%;border-collapse:collapse;font-size:12px;">
-<thead>
-  <tr style="background:var(--surface2);color:var(--muted);text-align:left;">
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Function</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Package</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">File : Line</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);">Closest Cluster</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Token-sequence similarity">Seq</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Import Jaccard">Imp</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="CallTarget Jaccard">Call</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Arithmetic mean of the three scores">(S+I+C)/3</th>
-    <th style="padding:8px 12px;border-bottom:1px solid var(--border);" title="Z = (arith − cluster_mean) / max(cluster_std, 0.05). Higher = stronger fit. Z > 0 beats the cluster mean.">Z</th>
-  </tr>
-</thead>
-<tbody>
-{{range .Orphans}}
-  {{$fn := .}}
-  {{if .Candidates}}
-    {{with index .Candidates 0}}
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px 12px;font-weight:600;color:var(--text);">{{$fn.Name}}</td>
-      <td style="padding:8px 12px;color:var(--muted);">{{$fn.Package}}</td>
-      <td style="padding:8px 12px;color:var(--muted2);font-size:11px;">{{shortPath $fn.FilePath}}:{{$fn.Line}}</td>
-      <td style="padding:8px 12px;">
-        {{if .Idiom}}<span style="color:var(--accent2);">{{.Idiom}}</span>{{else}}<span style="color:var(--muted2);">cluster-{{.ClusterIdx}}</span>{{end}}
-        <span style="font-size:10px;color:var(--muted2);margin-left:4px;">{{.ShapeHash}}</span>
-      </td>
-      <td style="padding:8px 12px;text-align:right;">{{f2 .SeqScore}}</td>
-      <td style="padding:8px 12px;text-align:right;">{{f2 .ImpScore}}</td>
-      <td style="padding:8px 12px;text-align:right;">{{f2 .CallScore}}</td>
-      <td style="padding:8px 12px;text-align:right;font-weight:600;">{{f2 .ArithScore}}</td>
-      <td style="padding:8px 12px;text-align:right;">
-        {{if gt .ZScore 2.0}}<span style="color:var(--green);font-weight:600;">{{f2 .ZScore}}</span>
-        {{else if gt .ZScore 0.0}}<span style="color:var(--yellow);">{{f2 .ZScore}}</span>
-        {{else}}<span style="color:var(--muted);">{{f2 .ZScore}}</span>{{end}}
-      </td>
-    </tr>
-    {{end}}
-  {{end}}
-{{end}}
-</tbody>
-</table>
-</div>
-{{end}}
 
 <footer>beats · vocabulary-independent structural fingerprinting for Go · {{.GeneratedAt}}</footer>
 
+<div id="pot-tooltip"><div class="pot-tt-title">Potential outliers</div><div id="pot-tt-body"></div></div>
+
 <script>
-function toggleRow(idx) {
-  var row = document.querySelector('tr.cl-row[data-idx="'+idx+'"]');
-  var det = document.getElementById('detail-'+idx);
-  var open = det.classList.contains('open');
-  det.classList.toggle('open',!open);
-  row.classList.toggle('open',!open);
+// ── tab switching ──────────────────────────────────────────────────────────────
+function switchTab(tier) {
+  document.querySelectorAll('.tier-tab').forEach(function(t){t.classList.remove('active');});
+  var btn = document.querySelector('.tier-tab[data-tier="'+tier+'"]');
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.tier-panel').forEach(function(p){p.classList.add('hidden');});
+  var panel = document.getElementById('panel-'+tier);
+  if (panel) panel.classList.remove('hidden');
+  if (window.runSearch) window.runSearch();
 }
 
-(function(){
-  var state={col:'avgscore',asc:false};
-  var colIndex={quadrant:0,shape:1,size:2,avgscore:3,coherence:4,callcoherence:5,packages:6,potential:7};
+// ── row expand/collapse (tier-scoped IDs) ─────────────────────────────────────
+function toggleRow(tier, idx) {
+  var row = document.querySelector('#tbl-'+tier+' tr.cl-row[data-idx="'+idx+'"]');
+  var det = document.getElementById('detail-'+tier+'-'+idx);
+  if (!det || !row) return;
+  var open = det.classList.contains('open');
+  det.classList.toggle('open', !open);
+  row.classList.toggle('open', !open);
+}
 
-  document.querySelectorAll('#cl-table thead th').forEach(function(th){
-    th.addEventListener('click',function(){
-      var col=th.dataset.col;
-      if(state.col===col){state.asc=!state.asc;}
-      else{state.col=col;state.asc=(col==='shape'||col==='packages');}
-      document.querySelectorAll('#cl-table thead th').forEach(function(t){t.classList.remove('sorted-asc','sorted-desc');});
-      th.classList.add(state.asc?'sorted-asc':'sorted-desc');
-      sortTable(col,state.asc);
+// ── sortable column headers (per table) ───────────────────────────────────────
+(function(){
+  var colIndex = {ordinal:0,stableid:1,shape:2,size:3,avgscore:4,confidence:5,coherence:6,callcoherence:7,packages:8,potential:9};
+
+  ['high','medium','low'].forEach(function(tier){
+    var tbl = document.getElementById('tbl-'+tier);
+    if (!tbl) return;
+    var state = {col:'confidence', asc:false};
+    tbl.querySelectorAll('thead th').forEach(function(th){
+      th.addEventListener('click', function(){
+        var col = th.dataset.col;
+        if (state.col===col){state.asc=!state.asc;}
+        else{state.col=col;state.asc=(col==='shape'||col==='packages'||col==='stableid');}
+        tbl.querySelectorAll('thead th').forEach(function(t){t.classList.remove('sorted-asc','sorted-desc');});
+        th.classList.add(state.asc?'sorted-asc':'sorted-desc');
+        sortTierTable(tier, col, state.asc);
+      });
     });
   });
 
-  function sortTable(col,asc){
-    var tbody=document.querySelector('#cl-table tbody');
-    var pairs=[];
-    document.querySelectorAll('#cl-table tbody tr.cl-row').forEach(function(row){
-      pairs.push({row:row,det:document.getElementById('detail-'+row.dataset.idx)});
+  function sortTierTable(tier, col, asc){
+    var tbody = document.querySelector('#tbl-'+tier+' tbody');
+    if (!tbody) return;
+    var pairs = [];
+    tbody.querySelectorAll('tr.cl-row').forEach(function(row){
+      pairs.push({row:row, det:document.getElementById('detail-'+tier+'-'+row.dataset.idx)});
     });
     pairs.sort(function(a,b){
-      var av=cellVal(a.row,col),bv=cellVal(b.row,col);
-      if(typeof av==='number')return asc?av-bv:bv-av;
+      var av=cellVal(a.row,col), bv=cellVal(b.row,col);
+      if (typeof av==='number') return asc?av-bv:bv-av;
       return asc?av.localeCompare(bv):bv.localeCompare(av);
     });
-    pairs.forEach(function(p){tbody.appendChild(p.row);tbody.appendChild(p.det);});
+    pairs.forEach(function(p){tbody.appendChild(p.row);if(p.det)tbody.appendChild(p.det);});
   }
 
   function cellVal(row,col){
     var ci=colIndex[col];
-    if(ci===undefined)return '';
+    if (ci===undefined) return '';
     var cell=row.querySelectorAll('td')[ci];
     var text=cell?cell.textContent.trim():'';
     var n=parseFloat(text);
@@ -1190,27 +1545,38 @@ function toggleRow(idx) {
   }
 })();
 
+// ── search (ID, function name, file path) — applied to active tab ─────────────
 (function(){
   var fnInput=document.getElementById('fn-search');
   var fnClear=document.getElementById('fn-search-clear');
   var fileInput=document.getElementById('file-search');
   var fileClear=document.getElementById('file-search-clear');
+  var idInput=document.getElementById('id-search');
+  var idClear=document.getElementById('id-search-clear');
   var countEl=document.getElementById('search-count');
 
-  fnInput.addEventListener('input',runSearch);
-  fileInput.addEventListener('input',runSearch);
+  function getActiveTier(){var b=document.querySelector('.tier-tab.active');return b?b.dataset.tier:'high';}
+  function getActivePanel(){return document.querySelector('.tier-panel:not(.hidden)');}
+
+  [fnInput,fileInput,idInput].forEach(function(el){el.addEventListener('input',runSearch);});
   fnClear.addEventListener('click',function(){fnInput.value='';runSearch();fnInput.focus();});
   fileClear.addEventListener('click',function(){fileInput.value='';runSearch();fileInput.focus();});
+  idClear.addEventListener('click',function(){idInput.value='';runSearch();idInput.focus();});
 
   function runSearch(){
     var fnTerm=fnInput.value.trim().toLowerCase();
     var fileTerm=fileInput.value.trim().toLowerCase();
+    var idTerm=idInput.value.trim().toLowerCase();
     fnClear.style.display=fnTerm?'block':'none';
     fileClear.style.display=fileTerm?'block':'none';
-    var searching=fnTerm||fileTerm;
+    idClear.style.display=idTerm?'block':'none';
+    var tier=getActiveTier();
+    var panel=getActivePanel();
+    if(!panel) return;
+    var searching=fnTerm||fileTerm||idTerm;
     if(!searching){
-      document.querySelectorAll('tr.cl-row').forEach(function(r){r.classList.remove('search-hidden');});
-      document.querySelectorAll('tr.cl-detail').forEach(function(d){
+      panel.querySelectorAll('tr.cl-row').forEach(function(r){r.classList.remove('search-hidden');});
+      panel.querySelectorAll('tr.cl-detail').forEach(function(d){
         d.classList.remove('search-hidden');
         d.querySelectorAll('table.members tr').forEach(function(mr){mr.classList.remove('member-hidden','member-match');});
         d.querySelectorAll('.fn-name mark,.fn-file mark').forEach(function(m){m.outerHTML=m.textContent;});
@@ -1218,10 +1584,24 @@ function toggleRow(idx) {
       countEl.textContent='';return;
     }
     var mc=0,mf=0;
-    document.querySelectorAll('tr.cl-row').forEach(function(row){
+    panel.querySelectorAll('tr.cl-row').forEach(function(row){
+      // ID filter: if an ID term is given and this row doesn't match, hide immediately
+      if(idTerm && !row.dataset.stableid.toLowerCase().includes(idTerm)){
+        row.classList.add('search-hidden');
+        var det=document.getElementById('detail-'+tier+'-'+row.dataset.idx);
+        if(det){det.classList.add('search-hidden');det.classList.remove('open');}
+        row.classList.remove('open');
+        return;
+      }
       var idx=row.dataset.idx;
-      var det=document.getElementById('detail-'+idx);
-      var memberRows=det.querySelectorAll('table.members tbody tr');
+      var det=document.getElementById('detail-'+tier+'-'+idx);
+      // If only ID term matched (no fn/file term), show the row without expanding
+      if(idTerm && !fnTerm && !fileTerm){
+        row.classList.remove('search-hidden');
+        if(det) det.classList.remove('search-hidden');
+        mc++;return;
+      }
+      var memberRows=det?det.querySelectorAll('table.members tbody tr'):[];
       var hit=false;
       memberRows.forEach(function(mr){
         mr.querySelectorAll('.fn-name mark,.fn-file mark').forEach(function(m){m.outerHTML=m.textContent;});
@@ -1236,30 +1616,74 @@ function toggleRow(idx) {
           if(fileTerm){var rf=fileEl.textContent,lf=rf.toLowerCase().indexOf(fileTerm);if(lf!==-1)fileEl.innerHTML=esc(rf.slice(0,lf))+'<mark style="background:rgba(96,165,250,.35);border-radius:2px;padding:0 1px">'+esc(rf.slice(lf,lf+fileTerm.length))+'</mark>'+esc(rf.slice(lf+fileTerm.length));}
         }else{mr.classList.add('member-hidden');mr.classList.remove('member-match');}
       });
-      if(hit){row.classList.remove('search-hidden');det.classList.remove('search-hidden');det.classList.add('open');row.classList.add('open');mc++;}
-      else{row.classList.add('search-hidden');det.classList.add('search-hidden');det.classList.remove('open');row.classList.remove('open');}
+      if(hit){row.classList.remove('search-hidden');if(det){det.classList.remove('search-hidden');det.classList.add('open');}row.classList.add('open');mc++;}
+      else{row.classList.add('search-hidden');if(det){det.classList.add('search-hidden');det.classList.remove('open');}row.classList.remove('open');}
     });
-    countEl.textContent=mf>0?(mf+' fn'+(mf!==1?'s':'')+' in '+mc+' cluster'+(mc!==1?'s':'')):'no matches';
+    countEl.textContent=mf>0?(mf+' fn'+(mf!==1?'s':'')+' in '+mc+' cluster'+(mc!==1?'s':'')):(mc>0?mc+' cluster'+(mc!==1?'s':''):'no matches');
   }
+
+  window.runSearch = runSearch; // expose so switchTab can re-apply after tab change
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 })();
 
-(function(){
-  function applyQuadFilter(){
-    var q={};
-    document.querySelectorAll('.quad-cb').forEach(function(cb){if(cb.checked)q[cb.dataset.quad]=true;});
-    document.querySelectorAll('tr.cl-row').forEach(function(row){
-      var vis=!!q[row.dataset.quadrant];
-      row.classList.toggle('quad-hidden',!vis);
-      var det=document.getElementById('detail-'+row.dataset.idx);
-      if(det){det.classList.toggle('quad-hidden',!vis);if(!vis){det.classList.remove('open');row.classList.remove('open');}}
-    });
-    document.querySelectorAll('.quad-filter-item').forEach(function(item){
-      var cb=item.querySelector('.quad-cb');item.classList.toggle('inactive',cb&&!cb.checked);
-    });
+
+// ── jump to cluster from deviation table ──────────────────────────────────────
+function jumpToCluster(stableId) {
+  var tiers = ['high', 'medium', 'low'];
+  for (var i = 0; i < tiers.length; i++) {
+    var tier = tiers[i];
+    var row = document.querySelector('#tbl-' + tier + ' tr.cl-row[data-stableid="' + stableId + '"]');
+    if (!row) continue;
+    switchTab(tier);
+    var idx = row.dataset.idx;
+    var det = document.getElementById('detail-' + tier + '-' + idx);
+    if (det && !det.classList.contains('open')) {
+      det.classList.add('open');
+      row.classList.add('open');
+    }
+    setTimeout(function(r){ r.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
+    return;
   }
-  document.querySelectorAll('.quad-cb').forEach(function(cb){cb.addEventListener('change',applyQuadFilter);});
+}
+
+// ── potential outlier tooltip ──────────────────────────────────────────────────
+(function(){
+  var tt=document.getElementById('pot-tooltip');
+  var tb=document.getElementById('pot-tt-body');
+  var current=null;
+
+  window.showPotTooltip=function(e,el){
+    e.stopPropagation();
+    if(current===el){hideTt();return;}
+    current=el;
+    var names=(el.dataset.names||'').split('|').filter(function(s){return s.trim();});
+    tb.innerHTML='';
+    names.forEach(function(n){
+      var d=document.createElement('div');
+      d.className='pot-tt-item';
+      // format: "FuncName#short/path#line" → show as "FuncName · path:line"
+      var parts=n.split('#');
+      d.textContent=parts[0]+(parts[1]?' · '+parts[1]+(parts[2]?':'+parts[2]:''):'');
+      tb.appendChild(d);
+    });
+    tt.classList.add('visible');
+    positionTt(e);
+  };
+
+  function positionTt(e){
+    var x=e.clientX+12, y=e.clientY+12;
+    var w=tt.offsetWidth||240, h=tt.offsetHeight||100;
+    if(x+w>window.innerWidth-8) x=e.clientX-w-8;
+    if(y+h>window.innerHeight-8) y=e.clientY-h-8;
+    tt.style.left=x+'px';
+    tt.style.top=y+'px';
+  }
+
+  function hideTt(){tt.classList.remove('visible');current=null;}
+  document.addEventListener('click',function(e){if(!tt.contains(e.target)&&e.target!==current)hideTt();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')hideTt();});
 })();
+
 </script>
 </body>
 </html>`

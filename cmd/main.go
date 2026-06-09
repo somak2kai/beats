@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -48,6 +49,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
 	fmt.Fprintln(os.Stderr, "  beats query   cluster <page> --repo <path> [--format compact|text]")
 	fmt.Fprintln(os.Stderr, "  beats update  cluster <idx> --repo <path> --idiom <str> --verdict <str> --canonical <pkg/Fn> --action <str> --confidence <high|medium|low> --questions <q1|q2|...>")
+	fmt.Fprintln(os.Stderr, "  beats update  page --repo <path> --file <tsv>  (batch: one DB open for the whole page)")
 	fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
 	fmt.Fprintln(os.Stderr, "  beats version")
 }
@@ -183,12 +185,34 @@ func runQuery(args []string) {
 //	SHAPE:<token sequence>
 //	M:<name>|<package>|<absolute_file_path>|<start_line>
 //	---
+//
+// At most compactMaxMembers members are printed to keep token usage bounded;
+// the SIZE field always reflects the true cluster size.
+const compactMaxMembers = 3
+
 func printClusterCompact(idx int, cl ds.Cluster, shape string, score float64) {
-	quad := quadrantCode(cl.Coherence, cl.CallCoherence)
-	fmt.Printf("IDX:%d SIZE:%d SCORE:%.3f QUAD:%s\n", idx, cl.Size, score, strings.ToUpper(quad))
+	hiImp := cl.Coherence >= 0.60
+	hiCall := cl.CallCoherence >= 0.60
+	var quad string
+	switch {
+	case hiImp && hiCall:
+		quad = "HH"
+	case hiImp && !hiCall:
+		quad = "HL"
+	case !hiImp && hiCall:
+		quad = "LH"
+	default:
+		quad = "LL"
+	}
+	fmt.Printf("IDX:%d SIZE:%d SCORE:%.3f QUAD:%s\n", idx, cl.Size, score, quad)
 	fmt.Printf("SHAPE:%s\n", shape)
+	shown := 0
 	for _, m := range cl.Members {
+		if shown >= compactMaxMembers {
+			break
+		}
 		fmt.Printf("M:%s|%s|%s|%d\n", m.Name, m.Package, m.FileMeta.Path, m.Start_line)
+		shown++
 	}
 	fmt.Println("---")
 }
@@ -218,16 +242,19 @@ func printClusterText(idx int, cl ds.Cluster, shape string, score float64) {
 	fmt.Println()
 }
 
-// runUpdate handles: beats update cluster <idx> --repo <path> --idiom ... etc.
-// It loads the cluster at the given index, applies the LLM-provided enrichment
-// fields, and writes it back. Safe to call in parallel across different indexes.
+// runUpdate dispatches beats update cluster | page.
 func runUpdate(args []string) {
 	if len(args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: beats update cluster <idx> --repo <path> [enrichment flags]")
+		fmt.Fprintln(os.Stderr, "       beats update page --repo <path> --file <tsv>")
 		os.Exit(1)
 	}
+	if args[0] == "page" {
+		runUpdatePage(args[1:])
+		return
+	}
 	if args[0] != "cluster" {
-		fmt.Fprintf(os.Stderr, "unknown update target %q — only 'cluster' is supported\n", args[0])
+		fmt.Fprintf(os.Stderr, "unknown update target %q — only 'cluster' or 'page' is supported\n", args[0])
 		os.Exit(1)
 	}
 
@@ -296,6 +323,114 @@ func runUpdate(args []string) {
 	}
 
 	fmt.Printf("cluster %d updated\n", idx)
+}
+
+// runUpdatePage handles: beats update page --repo <path> --file <tsv>
+//
+// TSV format (one cluster per line, tab-separated, no header):
+//
+//	IDX\tIDIOM\tVERDICT\tCANONICAL\tACTION\tCONFIDENCE\tQUESTIONS
+//
+// QUESTIONS is pipe-separated within the field.
+// Opens BadgerDB exactly once for the whole batch — much faster than calling
+// beats update cluster N times (avoids N process-starts and N DB open/close cycles).
+func runUpdatePage(args []string) {
+	fs := flag.NewFlagSet("update-page", flag.ExitOnError)
+	repo := fs.String("repo", "", "Path to the repository (same value passed to beats init)")
+	file := fs.String("file", "", "Path to the TSV enrichment file")
+	_ = fs.Parse(args)
+
+	if *repo == "" || *file == "" {
+		fmt.Fprintln(os.Stderr, "beats update page: --repo and --file are required")
+		os.Exit(1)
+	}
+
+	f, err := os.Open(*file)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "beats update page: cannot open %s: %v\n", *file, err)
+		os.Exit(1)
+	}
+	defer f.Close() //nolint:errcheck
+
+	dbPath := filepath.Join(os.TempDir(), "badger", *repo)
+	bDb := db.NewBadgerXDb(dbPath)
+	defer bDb.Close() //nolint:errcheck
+
+	updated, failed := 0, 0
+	scanner := newTSVScanner(f)
+	for scanner.Scan() {
+		fields := strings.SplitN(scanner.Text(), "\t", 7)
+		if len(fields) < 7 || fields[0] == "" {
+			continue
+		}
+		idx, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "beats update page: invalid idx %q, skipping\n", fields[0])
+			failed++
+			continue
+		}
+
+		cl, err := bDb.LoadClusterByIndex(db.TierIdentified, idx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "beats update page: cannot load cluster %d: %v\n", idx, err)
+			failed++
+			continue
+		}
+
+		applyEnrichment(&cl, fields[1], fields[2], fields[3], fields[4], fields[5], fields[6])
+
+		if err := bDb.StoreClusterByIndex(db.TierIdentified, idx, cl); err != nil {
+			fmt.Fprintf(os.Stderr, "beats update page: cannot write cluster %d: %v\n", idx, err)
+			failed++
+			continue
+		}
+		updated++
+	}
+
+	if failed > 0 {
+		fmt.Fprintf(os.Stderr, "WARNING: %d update(s) failed\n", failed)
+	}
+	fmt.Printf("%d cluster(s) updated\n", updated)
+	if failed > 0 {
+		os.Exit(1)
+	}
+}
+
+// applyEnrichment writes non-empty enrichment fields onto a cluster in place.
+func applyEnrichment(cl *ds.Cluster, idiom, verdict, canonical, action, confidence, questions string) {
+	if idiom != "" {
+		cl.SemanticIdiom = idiom
+	}
+	if verdict != "" {
+		cl.Verdict = verdict
+	}
+	if canonical != "" {
+		cl.CanonicalMember = canonical
+	}
+	if action != "" {
+		cl.SuggestedAction = action
+	}
+	if confidence != "" {
+		cl.Confidence = confidence
+	}
+	if questions != "" {
+		qs := strings.Split(questions, "|")
+		filtered := qs[:0]
+		for _, q := range qs {
+			q = strings.TrimSpace(q)
+			if q != "" {
+				filtered = append(filtered, q)
+			}
+		}
+		cl.SearchQuestions = filtered
+	}
+}
+
+// newTSVScanner returns a line scanner with a large buffer to handle long question fields.
+func newTSVScanner(f *os.File) *bufio.Scanner {
+	s := bufio.NewScanner(f)
+	s.Buffer(make([]byte, 256*1024), 256*1024)
+	return s
 }
 
 // clusterAvgScore returns the mean per-member pairwise ∛(seq×imp×call) score.

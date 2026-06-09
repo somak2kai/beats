@@ -46,7 +46,9 @@ type FunctionMeta struct {
 	Imports       []string // packages imported by the file this function lives in
 	DirectImports []string // packages this function actually references (subset)
 	GeneratedCode bool
-	TestCode      bool // true when the file this function lives in imports a test framework
+	TestCode      bool   // true when the file this function lives in imports a test framework
+	IsConstructor bool   // true for New* functions whose entire body is a single composite-literal return
+	Body          string // full source text of the function including signature, captured at parse time
 }
 
 type StructuralFeatures struct {
@@ -138,9 +140,8 @@ type ClusterCandidate struct {
 	SeqScore   float64 // token-sequence similarity
 	ImpScore   float64 // DirectImports Jaccard
 	CallScore  float64 // CallTargets Jaccard
-	ArithScore float64 // (SeqScore + ImpScore + CallScore) / 3
-	ZScore     float64 // (mean_C - arithScore) / max(std_C, 0.05); < 2 → plausible fit
-	Idiom      string  // SemanticIdiom of the candidate cluster (if enriched)
+	ArithScore float64
+	Idiom      string // SemanticIdiom of the candidate cluster (if enriched)
 }
 
 // OrphanedFunction is a function that did not join any cluster during
@@ -148,13 +149,14 @@ type ClusterCandidate struct {
 // clusters it came closest to.
 type OrphanedFunction struct {
 	Meta       FunctionMeta
-	Candidates []ClusterCandidate // sorted by ZScore ascending (best fit first)
+	Candidates []ClusterCandidate
 }
 
 type Cluster struct {
 	SeqKey        string // canonical string key of the token sequence
 	ShapeHash     string // SHA-256 prefix of SeqKey — stable identity across runs (16 hex chars)
 	TokenSeq      []int
+	CommonSeq     []int   // LCS of all member token sequences — structural skeleton shared by every member
 	ShapeVariants [][]int // token seqs of absorbed clusters (non-empty after CollapseToFamilies)
 	Members       []FunctionMeta
 	Size          int
@@ -164,6 +166,13 @@ type Cluster struct {
 	CallCoherence float64      // mean pairwise Jaccard of CallTargets
 	IsPrimitive   bool         // true if cluster is too common to be meaningful (IDF stop-word)
 	Label         string       // filled later by labelling pass
+
+	// Conformity tier — stamped by clusterClassifier during beats init.
+	// Derived from the standard deviation of internal pairwise arithmetic scores.
+	Tier string
+
+	// CompositeScore is the ranking signal of the cluster, based on members within this cluster.
+	CompositeScore float64
 
 	// LLM enrichment — populated by beats update cluster, empty until then
 	SemanticIdiom   string   // 3–6 word name for the structural idiom, e.g. "webhook config deserializer"

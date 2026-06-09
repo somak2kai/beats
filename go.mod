@@ -6,6 +6,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/somak2kai/badgerx v0.1.2
 	github.com/sourcegraph/scip v0.5.2
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.20.0
 )
 
@@ -24,6 +25,7 @@ require (
 	github.com/cockroachdb/redact v1.1.3 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v24.0.4+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v24.0.4+incompatible // indirect
@@ -55,6 +57,7 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.7.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pseudomuto/protoc-gen-doc v1.5.1 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
