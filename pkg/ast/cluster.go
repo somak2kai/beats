@@ -3,7 +3,6 @@ package ast
 import (
 	"crypto/sha256"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"log/slog"
 	"math"
@@ -1187,92 +1186,4 @@ func seqString(seq []int) string {
 		parts[i] = tokenName(t)
 	}
 	return strings.Join(parts, " ")
-}
-
-// WriteClusters writes a compact, LLM-readable context file from a slice of
-// labellable clusters (non-primitive, size >= 4, seq length >= 3).
-// Pass repo name and total corpus size for the header.
-func WriteClusters(w io.Writer, repo string, clusters []ds.Cluster) error {
-	fmt.Fprintf(w, "repo: %s\n", repo)                         //nolint:errcheck
-	fmt.Fprintf(w, "labellable_clusters: %d\n", len(clusters)) //nolint:errcheck
-	fmt.Fprintf(w, "\n")                                       //nolint:errcheck
-
-	for i, cl := range clusters {
-		fmt.Fprintf(w, "---\n")                               //nolint:errcheck
-		fmt.Fprintf(w, "cluster: %d\n", i+1)                  //nolint:errcheck
-		fmt.Fprintf(w, "id: %s\n", cl.ShapeHash)              //nolint:errcheck
-		fmt.Fprintf(w, "size: %d\n", cl.Size)                 //nolint:errcheck
-		fmt.Fprintf(w, "coherence: %.2f\n", cl.Coherence)     //nolint:errcheck
-		fmt.Fprintf(w, "shape: %s\n", seqString(cl.TokenSeq)) //nolint:errcheck
-		for _, v := range cl.ShapeVariants {
-			fmt.Fprintf(w, "shape_variant: %s\n", seqString(v)) //nolint:errcheck
-		}
-
-		p := cl.Profile
-
-		// rates — only emit non-zero ones to save tokens
-		var rates []string
-		if p.ContextParamRate > 0 {
-			rates = append(rates, fmt.Sprintf("ctx=%.0f%%", p.ContextParamRate*100))
-		}
-		if p.ErrorReturnRate > 0 {
-			rates = append(rates, fmt.Sprintf("err=%.0f%%", p.ErrorReturnRate*100))
-		}
-		if p.DeferRate > 0 {
-			rates = append(rates, fmt.Sprintf("defer=%.0f%%", p.DeferRate*100))
-		}
-		if p.GoroutineRate > 0 {
-			rates = append(rates, fmt.Sprintf("go=%.0f%%", p.GoroutineRate*100))
-		}
-		if len(rates) > 0 {
-			fmt.Fprintf(w, "rates: %s\n", strings.Join(rates, " ")) //nolint:errcheck
-		}
-
-		//nolint:errcheck
-		fmt.Fprintf(w, "cyclo: %d-%d (mean %.1f p75 %.0f p95 %.0f)\n",
-			p.CycloMin, p.CycloMax, p.CycloMean, p.CycloP75, p.CycloP95)
-		//nolint:errcheck
-		fmt.Fprintf(w, "nesting: p50 %.0f p75 %.0f p95 %.0f\n",
-			p.NestingP50, p.NestingP75, p.NestingP95)
-		//nolint:errcheck
-		fmt.Fprintf(w, "calls: p50 %.0f p75 %.0f p95 %.0f\n",
-			p.CallsP50, p.CallsP75, p.CallsP95)
-		if p.EarlyReturnsP50 > 0 || p.EarlyReturnsP75 > 0 {
-			//nolint:errcheck
-			fmt.Fprintf(w, "early_returns: p50 %.0f p75 %.0f p95 %.0f\n",
-				p.EarlyReturnsP50, p.EarlyReturnsP75, p.EarlyReturnsP95)
-		}
-		if p.DeferCountP50 > 0 || p.DeferCountP75 > 0 {
-			//nolint:errcheck
-			fmt.Fprintf(w, "defer_count: p50 %.0f p75 %.0f p95 %.0f\n",
-				p.DeferCountP50, p.DeferCountP75, p.DeferCountP95)
-		}
-
-		if len(p.TopImports) > 0 {
-			fmt.Fprintf(w, "imports: %s\n", strings.Join(p.TopImports, ", ")) //nolint:errcheck
-		}
-		if len(p.TopCallTargets) > 0 {
-			fmt.Fprintf(w, "top_calls: %s\n", strings.Join(p.TopCallTargets, ", ")) //nolint:errcheck
-		}
-
-		// representatives — package.Name  file:line
-		if len(cl.Members) > 0 {
-			fmt.Fprintf(w, "representatives:\n") //nolint:errcheck
-			reps := Representatives(cl, 3)
-			for _, m := range reps {
-				fmt.Fprintf(w, "  %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line) //nolint:errcheck
-			}
-		}
-
-		fmt.Fprintf(w, "label: {}\n") //nolint:errcheck
-		fmt.Fprintf(w, "\n")          //nolint:errcheck
-	}
-
-	return nil
-}
-
-func shaValue(s string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return h.Sum32()
 }

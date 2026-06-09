@@ -179,9 +179,9 @@ func TestShortPath(t *testing.T) {
 		want string
 	}{
 		{"/a/b/c/d/e", "c/d/e"},
-		{"/a/b/c", "a/b/c"},   // leading slash produces 4 parts → last 3 joined without slash
-		{"/a/b", "/a/b"},     // fewer than 3 → return original
-		{"a", "a"},           // single segment
+		{"/a/b/c", "a/b/c"}, // leading slash produces 4 parts → last 3 joined without slash
+		{"/a/b", "/a/b"},    // fewer than 3 → return original
+		{"a", "a"},          // single segment
 		{"", ""},
 	}
 	for _, tc := range cases {

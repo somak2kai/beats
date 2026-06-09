@@ -29,8 +29,8 @@ const (
 	TK_CALL // plain local call: drawBlock(...), delete(...), make(...)
 	TK_FUNCLIT
 	TK_ASSIGN
-	TK_CALL_PKG    // package-qualified call: fmt.Sprintf(...), xorm.In(...)
-	TK_CALL_METHOD // method or chained call: rref.LinkName(), w.Close(), a.b.Method()
+	TK_CALL_PKG      // package-qualified call: fmt.Sprintf(...), xorm.In(...)
+	TK_CALL_METHOD   // method or chained call: rref.LinkName(), w.Close(), a.b.Method()
 	TK_COMPOSITE_LIT // composite/struct literal: T{...} or &T{...}
 	TK_BINARY_OP     // binary expression: a||b, a&&b, a==b, a+b, etc.
 	TK_TYPE_ASSERT   // type assertion: x.(T) or x.(type) in type switch

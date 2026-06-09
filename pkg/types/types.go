@@ -15,9 +15,11 @@ type PkgToFileMeta map[string][]FileMeta
 
 // ParamInfo describes a single function parameter.
 type ParamInfo struct {
-	TypeName    string
-	IsFuncType  bool // parameter type is a function
-	IsInterface bool // parameter type is an interface
+	TypeName string
+	// parameter type is a function
+	IsFuncType bool
+	// parameter type is an interface
+	IsInterface bool
 }
 
 // ReturnInfo describes a single return value.
@@ -28,65 +30,93 @@ type ReturnInfo struct {
 
 // FunctionMeta carries metadata about individual functions found in go files.
 type FunctionMeta struct {
-	Name          string
-	Package       string
-	FileMeta      FileMeta
-	Start_line    int
-	End_line      int
-	LineCount     int
-	IsMethod      bool
-	IsExported    bool
-	Receiver      string // receiver type for methods, empty for functions
-	Params        []ParamInfo
-	Returns       []ReturnInfo
-	Features      StructuralFeatures
-	TokenSeq      []int
-	TokenSeqHash  []int64
-	CallTargets   []string
-	Imports       []string // packages imported by the file this function lives in
-	DirectImports []string // packages this function actually references (subset)
+	Name       string
+	Package    string
+	FileMeta   FileMeta
+	Start_line int
+	End_line   int
+	LineCount  int
+	IsMethod   bool
+	IsExported bool
+	// receiver type for methods, empty for functions
+	Receiver     string
+	Params       []ParamInfo
+	Returns      []ReturnInfo
+	Features     StructuralFeatures
+	TokenSeq     []int
+	TokenSeqHash []int64
+	// outgoing calls of this function
+	CallTargets []string
+	// packages imported by the file this function lives in
+	Imports []string
+	// packages this function actually references (subset)
+	DirectImports []string
+	// auto code generated such as proto generated code
 	GeneratedCode bool
-	TestCode      bool   // true when the file this function lives in imports a test framework
-	IsConstructor bool   // true for New* functions whose entire body is a single composite-literal return
-	Body          string // full source text of the function including signature, captured at parse time
+	// true when the file this function lives in imports a test framework
+	TestCode bool
+	// true for New* functions whose entire body is a single composite-literal return
+	IsConstructor bool
+	// full source text of the function including signature, captured at parse time
+	Body string
 }
 
 type StructuralFeatures struct {
-	// complexity
-	CyclomaticComplexity int // 1 + decision points
-	BranchingDepth       int // max nesting of branching constructs
-	NestingDepth         int // max nesting of any scope-opening construct
-	EarlyReturns         int // returns before the final return statement
+	// complexity 1 + decision points
+	CyclomaticComplexity int
+	// max nesting of branching constructs
+	BranchingDepth int
+	// max nesting of any scope-opening construct
+	NestingDepth int
+	// returns before the final return statement
+	EarlyReturns int
 
 	// control flow counts
 	ControlFlow ControlFlowCounts
 
-	// call profile
-	OutboundCalls    int // total call expression count
-	FuncLiteralCount int // anonymous functions defined inline
-	GoroutineSpawns  int // alias for ControlFlow.Go, explicit for clarity
+	// call profile total call expression count
+	OutboundCalls int
+	// anonymous functions defined inline
+	FuncLiteralCount int
+	// alias for ControlFlow.Go, explicit for clarity
+	GoroutineSpawns int
 
 	// parameter shape
-	ParamCount      int
-	ReturnCount     int
-	HasFuncParam    bool // accepts a function parameter
-	HasContextParam bool // accepts context.Context
-	HasErrorReturn  bool // returns error as last return value
+	ParamCount  int
+	ReturnCount int
+	// accepts a function parameter
+	HasFuncParam bool
+	// accepts context.Context
+	HasContextParam bool
+	// returns error as last return value
+	HasErrorReturn bool
 }
 
 type ControlFlowCounts struct {
-	If       int // if and else-if branches
-	For      int // traditional for loops
-	Range    int // range loops
-	Switch   int // switch and type-switch statements
-	Select   int // select statements (channel multiplexing)
-	Return   int // all return statements
-	Defer    int // deferred function calls
-	Go       int // goroutine spawns
-	Send     int // channel send operations
-	Continue int // continue statements
-	Break    int // break statements
-	Goto     int // goto statements (rare but notable)
+	// if and else-if branches
+	If int
+	// traditional for loops
+	For int
+	// range loops
+	Range int
+	// switch and type-switch statements
+	Switch int
+	// select statements (channel multiplexing)
+	Select int
+	// all return statements
+	Return int
+	// deferred function calls
+	Defer int
+	// goroutine spawns
+	Go int
+	// channel send operations
+	Send int
+	// continue statements
+	Continue int
+	// break statements
+	Break int
+	// goto statements (rare but notable)
+	Goto int
 }
 
 type ClusterProfile struct {
@@ -97,8 +127,8 @@ type ClusterProfile struct {
 
 	CallsMin, CallsMax int
 	CallsMean          float64
-
-	DeferRate        float64 // fraction of members with at least one defer
+	// fraction of members with at least one defer
+	DeferRate        float64
 	EarlyReturnRate  float64
 	ContextParamRate float64
 	ErrorReturnRate  float64
@@ -111,24 +141,29 @@ type ClusterProfile struct {
 	CallsP50, CallsP75, CallsP95                      float64
 	EarlyReturnsP50, EarlyReturnsP75, EarlyReturnsP95 float64
 	DeferCountP50, DeferCountP75, DeferCountP95       float64
-
-	TopImports     []string // most frequent DirectImports across members
-	TopCallTargets []string // most frequent CallTargets across members
+	// most frequent DirectImports across members
+	TopImports []string
+	// most frequent CallTargets across members
+	TopCallTargets []string
 }
 
 // RankedMember is a cluster member with its arithmetic-mean pairwise score.
 // Used to track the top-3 most representative members (medoids).
 type RankedMember struct {
-	Meta  FunctionMeta
-	Score float64 // arithmetic mean of (seqS + impS + callS) / 3 against all other members
+	Meta FunctionMeta
+	// arithmetic mean of (seqS + impS + callS) / 3 against all other members
+	Score float64
 }
 
 // ClusterStats holds summary statistics computed during agglomeration, stored
 // alongside the cluster so orphan analysis can use them without recomputing.
 type ClusterStats struct {
-	MeanScore float64        // arithmetic mean of all pairwise arithmetic scores
-	StdScore  float64        // sample std deviation; floored at 0.05 in Z-score calc
-	Top3      []RankedMember // up to 3 members with highest mean pairwise score (medoids)
+	// arithmetic mean of all pairwise arithmetic scores
+	MeanScore float64
+	// sample std deviation; floored at 0.05 in Z-score calc
+	StdScore float64
+	// up to 3 members with highest mean pairwise score (medoids)
+	Top3 []RankedMember
 }
 
 // ClusterCandidate is a cluster that an orphaned function has some affinity
@@ -137,11 +172,15 @@ type ClusterStats struct {
 type ClusterCandidate struct {
 	ClusterIdx int
 	ShapeHash  string
-	SeqScore   float64 // token-sequence similarity
-	ImpScore   float64 // DirectImports Jaccard
-	CallScore  float64 // CallTargets Jaccard
+	// token-sequence similarity
+	SeqScore float64
+	// DirectImports Jaccard
+	ImpScore float64
+	// CallTargets Jaccard
+	CallScore  float64
 	ArithScore float64
-	Idiom      string // SemanticIdiom of the candidate cluster (if enriched)
+	// SemanticIdiom of the candidate cluster (if enriched)
+	Idiom string
 }
 
 // OrphanedFunction is a function that did not join any cluster during
@@ -153,19 +192,26 @@ type OrphanedFunction struct {
 }
 
 type Cluster struct {
-	SeqKey        string // canonical string key of the token sequence
-	ShapeHash     string // SHA-256 prefix of SeqKey — stable identity across runs (16 hex chars)
-	TokenSeq      []int
-	CommonSeq     []int   // LCS of all member token sequences — structural skeleton shared by every member
-	ShapeVariants [][]int // token seqs of absorbed clusters (non-empty after CollapseToFamilies)
-	Members       []FunctionMeta
-	Size          int
-	Profile       ClusterProfile
-	Stats         ClusterStats // summary statistics for orphan Z-score analysis
-	Coherence     float64      // mean pairwise Jaccard of DirectImports
-	CallCoherence float64      // mean pairwise Jaccard of CallTargets
-	IsPrimitive   bool         // true if cluster is too common to be meaningful (IDF stop-word)
-	Label         string       // filled later by labelling pass
+	// canonical string key of the token sequence
+	SeqKey string
+	// SHA-256 prefix of SeqKey — stable identity across runs (16 hex chars)
+	ShapeHash string
+	TokenSeq  []int
+	// LCS of all member token sequences — structural skeleton shared by every member
+	CommonSeq []int
+	Members   []FunctionMeta
+	Size      int
+	Profile   ClusterProfile
+	// summary statistics for the cluster.
+	Stats ClusterStats
+	// mean pairwise Jaccard of DirectImports
+	Coherence float64
+	// mean pairwise Jaccard of CallTargets
+	CallCoherence float64
+	// true if cluster is too common to be meaningful (IDF stop-word)
+	IsPrimitive bool
+	// filled later by labelling pass
+	Label string
 
 	// Conformity tier — stamped by clusterClassifier during beats init.
 	// Derived from the standard deviation of internal pairwise arithmetic scores.
@@ -173,13 +219,13 @@ type Cluster struct {
 
 	// CompositeScore is the ranking signal of the cluster, based on members within this cluster.
 	CompositeScore float64
-
+	Confidence     string // "high" | "medium" | "low"
+	// TODO remove
 	// LLM enrichment — populated by beats update cluster, empty until then
 	SemanticIdiom   string   // 3–6 word name for the structural idiom, e.g. "webhook config deserializer"
 	Verdict         string   // one-sentence description of what the cluster represents
 	CanonicalMember string   // pkg/FuncName of the most representative member
 	SuggestedAction string   // suggested action: "none", or a short attention-candidate note
-	Confidence      string   // "high" | "medium" | "low"
 	SearchQuestions []string // 5–8 natural-language questions a developer might ask whose answer is this cluster
 }
 
@@ -188,26 +234,6 @@ type Index struct {
 	Postings  map[int64][]string
 	DocFreq   map[int64]int // how many functions contain this hash
 	TotalDocs int
-}
-
-// MemberScore holds the cluster membership probability distribution for a
-// single function. Computed after clustering by scoring the function against
-// every non-primitive collapsed cluster using the three-term scoring function:
-//
-//	score(f, C) = shape_match + import_jaccard + call_target_jaccard
-//
-// Scores are normalised to probabilities via softmax. High Entropy means the
-// function fits multiple clusters (boundary candidate). Low Entropy means it
-// clearly belongs to one cluster.
-type MemberScore struct {
-	FunctionID string // stable 16-hex identity: sha256(pkg.name@path:line)
-	Package    string
-	Name       string
-	FilePath   string
-	Line       int
-	Probs      map[string]float64 // clusterShapeHash → P(C_i | f)
-	WinnerID   string             // shapeHash of the highest-probability cluster
-	Entropy    float64            // H = -Σ p·log(p); high = boundary candidate
 }
 
 func PopulateIndex(fMeta []FunctionMeta) Index {
