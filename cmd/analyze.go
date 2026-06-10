@@ -119,18 +119,18 @@ type RepoReport struct {
 	GeneratedAt         string
 	TotalClusters       int
 	FunctionsInClusters int
-	CorpusSize          int         // total functions analysed (including those not in any cluster)
-	MeanCoherence       float64     // mean import Jaccard across clusters
-	MeanCallCoherence   float64     // mean call target Jaccard across clusters
-	MeanAvgScore        float64     // mean avg pairwise cbrt score across clusters
+	CorpusSize          int          // total functions analysed (including those not in any cluster)
+	MeanCoherence       float64      // mean import Jaccard across clusters
+	MeanCallCoherence   float64      // mean call target Jaccard across clusters
+	MeanAvgScore        float64      // mean avg pairwise cbrt score across clusters
 	ScoreDist           []DistBucket // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
-	ScoreExplain        string      // data-driven interpretation of the score distribution shape
+	ScoreExplain        string       // data-driven interpretation of the score distribution shape
 	SizeDist            []DistBucket // size histogram: 3–4, 5–9, 10+
-	SizeExplain         string      // data-driven interpretation of the size distribution shape
+	SizeExplain         string       // data-driven interpretation of the size distribution shape
 	// Package coverage — always populated; top 20 packages by total functions.
 	PackageCoverage []PackageCoverageRow
 	// Outlier signal charts — nil when TotalOutliers == 0.
-	DeltaDirectionDist []DeltaBucket    // negative-only / positive-only / mixed / no-delta
+	DeltaDirectionDist []DeltaBucket     // negative-only / positive-only / mixed / no-delta
 	TokenFreqDist      []TokenFreqBucket // top token types missing from outliers vs peers
 	// Tier-split cluster lists — each sorted by ConfidenceScore descending.
 	HighClusters   []ClusterRow
