@@ -15,6 +15,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// beatsDBPath returns the stable BadgerDB path for a given repo.
+// Uses ~/.beats/badger/<repo> so the path is consistent across all shell contexts.
+func beatsDBPath(repo string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir() // fallback, should never happen
+	}
+	return filepath.Join(home, ".beats", "badger", repo)
+}
+
 var (
 	_ command   = (*dbCleaner)(nil)
 	_ skippable = (*dbCleaner)(nil)
@@ -66,7 +76,7 @@ type State struct {
 // dbCleaner removes the BadgerDB directory for the repository, if exists, before the
 // pipeline runs.
 func (d *dbCleaner) execute() error {
-	dbPath := filepath.Join(os.TempDir(), "badger", d.state.RepositoryPath)
+	dbPath := beatsDBPath(d.state.RepositoryPath)
 	if err := os.RemoveAll(dbPath); err != nil {
 		slog.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
 		return err
@@ -125,7 +135,7 @@ func (i *indexCommand) execute() error {
 
 func (w *indexPersistor) execute() error {
 
-	tmp := filepath.Join(os.TempDir(), "badger", w.state.RepositoryPath)
+	tmp := beatsDBPath(w.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 	for k, v := range w.state.Index.Postings {
@@ -261,7 +271,7 @@ func (c *clusterClassifier) execute() error {
 }
 
 func (c *identifyClusterPersistor) execute() error {
-	tmp := filepath.Join(os.TempDir(), "badger", c.state.RepositoryPath)
+	tmp := beatsDBPath(c.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
@@ -305,7 +315,7 @@ func (p *orphanPersistor) execute() error {
 	if len(p.state.OrphanedFunctions) == 0 {
 		return nil
 	}
-	tmp := filepath.Join(os.TempDir(), "badger", p.state.RepositoryPath)
+	tmp := beatsDBPath(p.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 

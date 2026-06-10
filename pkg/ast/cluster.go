@@ -147,12 +147,10 @@ func IdentifyClusters(fns []ds.FunctionMeta) ([]ds.Cluster, []ds.FunctionMeta, e
 	if len(fns) == 0 {
 		return nil, nil, nil
 	}
-	sortKeys := make([]string, len(fns))
-	for i, fn := range fns {
-		sortKeys[i] = fn.Package + "/" + fn.Name
-	}
 	sort.Slice(fns, func(a, b int) bool {
-		return sortKeys[a] < sortKeys[b]
+		ka := fns[a].Package + "/" + fns[a].Name
+		kb := fns[b].Package + "/" + fns[b].Name
+		return ka < kb
 	})
 
 	primitiveThreshold := float64(len(fns)) * 0.05

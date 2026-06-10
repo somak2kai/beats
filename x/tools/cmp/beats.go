@@ -41,15 +41,17 @@ func loadClusters(path string) ([]ds.Cluster, error) {
 }
 
 // badgerPathForRepo returns the BadgerDB path beats writes for a given repo,
-// mirroring the logic in cmd/cmd.go: filepath.Join(os.TempDir(), "badger", repoPath).
-// Using os.TempDir() here ensures the path is correct regardless of platform —
-// on macOS $TMPDIR is /var/folders/…/T/, not /tmp, and it differs per user/machine.
+// mirroring the logic in cmd/cmd.go: ~/.beats/badger/<repoPath>.
 func badgerPathForRepo(repoPath string) string {
-	return filepath.Join(os.TempDir(), "badger", repoPath)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	return filepath.Join(home, ".beats", "badger", repoPath)
 }
 
 // loadClustersFromBadger takes a repo path (e.g. /Users/alice/src/myrepo),
-// resolves the beats BadgerDB location via os.TempDir(), and returns all clusters
+// resolves the beats BadgerDB location via os.UserHomeDir(), and returns all clusters
 // stored under the TierIdentified prefix.
 func loadClustersFromBadger(repoPath string) ([]ds.Cluster, error) {
 	dbPath := badgerPathForRepo(repoPath)

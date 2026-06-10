@@ -1,6 +1,6 @@
 # beats plugin
 
-Structural fingerprinting and LLM-enriched cluster analysis for Go codebases.
+Structural fingerprinting and outlier analysis for Go codebases.
 
 ## What it does
 
@@ -10,18 +10,23 @@ vocabulary-independent sequence (control flow, call types, return arity) and
 clusters functions that share the same structural pattern regardless of naming
 or domain.
 
+Clusters represent *settled conventions* — recurring patterns the codebase has
+organically converged on. Functions that came close to a cluster but did not
+meet the threshold to join are *structural outliers*. These are the functions
+worth reviewing: they look like they should follow a convention but deviate in
+a specific, measurable way.
+
 This plugin wires that pipeline into Claude so you can run it conversationally
-and get each cluster automatically enriched with:
+and get a peer-grounded LLM analysis of every outlier:
 
-- **Idiom name** — a 3–6 word label for the structural convention
-- **Verdict** — one sentence on what the cluster represents
-- **Canonical member** — the best example to point a new engineer at
-- **Suggested action** — "none" or a specific refactoring note
-- **Confidence** — high / medium / low
-- **Search questions** — 5–8 natural-language questions that map to this pattern
-  (used for semantic structural search in coding agents)
-
-The result is an interactive HTML report at `<repo>/.beats/report.html`.
+- **Signal** — the exact structural delta (token, import, call, or cyclo) that
+  separates the function from its closest cluster
+- **Peer comparison** — Claude reads the actual bodies of cluster members to
+  ground every verdict in real code, not abstract metrics
+- **Verdict** — Needs Attention or Expected Variation, with a one-sentence
+  explanation tied to the structural gap
+- **HTML report** — an interactive browser report at `<repo>/.beats/report.html`
+  with cluster exploration, outlier diffs, and package coverage charts
 
 ## Requirements
 
@@ -32,17 +37,43 @@ The result is an interactive HTML report at `<repo>/.beats/report.html`.
 
 ## Skills
 
-### `beats-analyze`
+### `beats-analyze` — full mode
 
-Trigger: say `"run beats on <path>"`, `"fingerprint my Go repo"`, or `/beats-analyze`.
+Trigger: `"run beats on <path>"`, `"beats init"`, `"fingerprint my Go repo"`, or `/beats`.
 
 Runs the full pipeline:
 1. Verifies `beats` is installed (offers to install if not)
-2. `beats init --repo <path>` — indexes and clusters all functions
-3. Pages through clusters via `beats query --format compact`
-4. Reads representative source files and generates enrichment per cluster
-5. `beats update cluster <idx>` — writes metadata back to the database
-6. `beats analyze --repo <path>` — regenerates the HTML report with all enrichment
+2. `beats init --repo <path>` — indexes all functions and identifies structural clusters
+3. `beats query outlier --format json` — retrieves structural outliers
+4. `beats query cluster shape <hash>` — fetches peer function bodies for each outlier's closest cluster
+5. LLM analysis grounded in peer bodies — classifies each outlier as Needs Attention or Expected Variation
+6. `beats analyze --repo <path>` — generates the interactive HTML report
+
+### `beats-analyze` — mini mode
+
+Trigger: `"mini fingerprint"`, `"analyze fingerprint"`, `"fingerprint query"`, or `"beats query"`.
+
+Assumes `beats` is already installed and the repo is already indexed. Skips
+install verification, `beats init`, and HTML report generation. Runs only the
+query + peer fetch + LLM analysis. Faster and lower token cost — useful for
+re-analysing after a targeted `beats init` run you did yourself.
+
+## What the analysis looks for
+
+Each outlier is compared structurally to its closest cluster. The LLM asks one
+question per signal dimension:
+
+> Does the function body explain this deviation from its peers?
+
+If yes → Expected Variation (intentional, domain-justified).
+If no → Needs Attention (structural gap that peers don't share).
+
+When all deltas are `none`, the LLM reads peer bodies directly and asks whether
+the function is missing something peers consistently do — or does something they
+consistently avoid.
+
+The analysis does **not** do general code review. It only flags what can be
+directly traced to a structural delta.
 
 ## Source
 

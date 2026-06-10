@@ -56,10 +56,10 @@ type ClusterRow struct {
 
 // OutlierDiff describes how one orphaned function diverges from its closest cluster.
 type OutlierDiff struct {
-	Name           string
-	Package        string
-	FilePath       string
-	Line           int
+	Name     string
+	Package  string
+	FilePath string
+	Line     int
 	// orphan cyclomatic complexity minus cluster mean; positive = more complex, negative = simpler
 	CycloDelta     float64
 	TokenShape     string   // orphan's full token sequence — compare visually to cluster LCS in header
@@ -89,12 +89,29 @@ type DistBucket struct {
 	Width int // 0–100, for CSS bar width %
 }
 
-// TierConfidenceRow is one bar in the per-tier confidence-score chart.
-type TierConfidenceRow struct {
+// PackageCoverageRow is one package in the clustered-vs-outlier coverage chart.
+type PackageCoverageRow struct {
+	Package      string
+	Clustered    int // functions belonging to a cluster
+	Outliers     int // persisted structural outliers
+	Total        int
+	ClusteredPct int // 0–100, for CSS bar width
+	OutliersPct  int // 0–100, for CSS bar width
+}
+
+// DeltaBucket is one bar in the outlier delta-direction chart.
+type DeltaBucket struct {
 	Label string
-	Score float64
-	Width int    // 0–100 relative to the highest-scoring tier
-	Color string // CSS variable, e.g. "var(--green)"
+	Count int
+	Width int    // 0–100
+	Color string // CSS variable
+}
+
+// TokenFreqBucket is one token type in the negative-delta token frequency chart.
+type TokenFreqBucket struct {
+	Token string
+	Count int
+	Width int // 0–100
 }
 
 type RepoReport struct {
@@ -102,15 +119,19 @@ type RepoReport struct {
 	GeneratedAt         string
 	TotalClusters       int
 	FunctionsInClusters int
-	CorpusSize          int                 // total functions analysed (including those not in any cluster)
-	MeanCoherence       float64             // mean import Jaccard across clusters
-	MeanCallCoherence   float64             // mean call target Jaccard across clusters
-	MeanAvgScore        float64             // mean avg pairwise cbrt score across clusters
-	ScoreDist           []DistBucket        // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
-	ScoreExplain        string              // data-driven interpretation of the score distribution shape
-	SizeDist            []DistBucket        // size histogram: 2, 3–4, 5–9, 10+
-	SizeExplain         string              // data-driven interpretation of the size distribution shape
-	TierConfidenceDist  []TierConfidenceRow // mean confidence score per tier
+	CorpusSize          int         // total functions analysed (including those not in any cluster)
+	MeanCoherence       float64     // mean import Jaccard across clusters
+	MeanCallCoherence   float64     // mean call target Jaccard across clusters
+	MeanAvgScore        float64     // mean avg pairwise cbrt score across clusters
+	ScoreDist           []DistBucket // score histogram: 0.55–0.65, 0.65–0.75, 0.75–0.85, 0.85–0.95, 0.95–1.00
+	ScoreExplain        string      // data-driven interpretation of the score distribution shape
+	SizeDist            []DistBucket // size histogram: 3–4, 5–9, 10+
+	SizeExplain         string      // data-driven interpretation of the size distribution shape
+	// Package coverage — always populated; top 20 packages by total functions.
+	PackageCoverage []PackageCoverageRow
+	// Outlier signal charts — nil when TotalOutliers == 0.
+	DeltaDirectionDist []DeltaBucket    // negative-only / positive-only / mixed / no-delta
+	TokenFreqDist      []TokenFreqBucket // top token types missing from outliers vs peers
 	// Tier-split cluster lists — each sorted by ConfidenceScore descending.
 	HighClusters   []ClusterRow
 	MediumClusters []ClusterRow
@@ -122,7 +143,7 @@ type RepoReport struct {
 // ── entry point ───────────────────────────────────────────────────────────────
 
 func runAnalyze(repo string) error {
-	dbPath := filepath.Join(os.TempDir(), "badger", repo)
+	dbPath := beatsDBPath(repo)
 	bDb := db.NewBadgerXDb(dbPath)
 	defer bDb.Close() //nolint:errcheck
 
@@ -656,34 +677,128 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 	attachPotentials(medRows)
 	attachPotentials(lowRows)
 
-	// ── tier confidence score distribution ───────────────────────────────────
-	meanConfidenceForTier := func(rs []ClusterRow) float64 {
-		if len(rs) == 0 {
-			return 0
+	// ── package coverage ─────────────────────────────────────────────────────
+	pkgClustered := make(map[string]int)
+	for _, c := range clusters {
+		if c.IsPrimitive {
+			continue
 		}
-		var sum float64
-		for _, r := range rs {
-			sum += r.ConfidenceScore
+		for _, m := range c.Members {
+			pkgClustered[m.Package]++
 		}
-		return sum / float64(len(rs))
 	}
-	highMeanConf := meanConfidenceForTier(highRows)
-	medMeanConf := meanConfidenceForTier(medRows)
-	lowMeanConf := meanConfidenceForTier(lowRows)
-	maxConf := math.Max(highMeanConf, math.Max(medMeanConf, lowMeanConf))
-	if maxConf == 0 {
-		maxConf = 1
+	pkgOutliers := make(map[string]int)
+	for _, o := range orphanedFns {
+		pkgOutliers[o.Meta.Package]++
 	}
-	tierConfDist := []TierConfidenceRow{
-		{Label: "High Structural Confidence Score", Score: highMeanConf, Width: int(highMeanConf / maxConf * 100), Color: "var(--green)"},
-		{Label: "Medium Structural Confidence Score", Score: medMeanConf, Width: int(medMeanConf / maxConf * 100), Color: "var(--yellow)"},
-		{Label: "Low Structural Confidence Score", Score: lowMeanConf, Width: int(lowMeanConf / maxConf * 100), Color: "var(--red)"},
+	allPkgs := make(map[string]struct{})
+	for p := range pkgClustered {
+		allPkgs[p] = struct{}{}
+	}
+	for p := range pkgOutliers {
+		allPkgs[p] = struct{}{}
+	}
+	pkgCovRows := make([]PackageCoverageRow, 0, len(allPkgs))
+	for p := range allPkgs {
+		cl := pkgClustered[p]
+		ol := pkgOutliers[p]
+		total := cl + ol
+		pkgCovRows = append(pkgCovRows, PackageCoverageRow{
+			Package:   p,
+			Clustered: cl,
+			Outliers:  ol,
+			Total:     total,
+		})
+	}
+	sort.Slice(pkgCovRows, func(i, j int) bool {
+		return pkgCovRows[i].Total > pkgCovRows[j].Total
+	})
+	if len(pkgCovRows) > 20 {
+		pkgCovRows = pkgCovRows[:20]
+	}
+	if len(pkgCovRows) > 0 {
+		maxTotal := pkgCovRows[0].Total
+		for i := range pkgCovRows {
+			r := &pkgCovRows[i]
+			r.ClusteredPct = r.Clustered * 100 / maxTotal
+			r.OutliersPct = r.Outliers * 100 / maxTotal
+		}
 	}
 
+	// ── outlier signal charts (only when outliers exist) ─────────────────────
 	outlierGroups := buildOutlierGroups(clusters, orphanedFns)
 	totalOutliers := 0
 	for _, g := range outlierGroups {
 		totalOutliers += len(g.Outliers)
+	}
+
+	var deltaDirectionDist []DeltaBucket
+	var tokenFreqDist []TokenFreqBucket
+
+	if totalOutliers > 0 {
+		negOnly, posOnly, mixed, noDelta := 0, 0, 0, 0
+		tokenCounts := make(map[string]int)
+
+		for _, g := range outlierGroups {
+			for _, o := range g.Outliers {
+				hasNeg := len(o.TokensRemoved)+len(o.ImportsRemoved)+len(o.CallsRemoved) > 0
+				hasPos := len(o.TokensAdded)+len(o.ImportsAdded)+len(o.CallsAdded) > 0
+				switch {
+				case hasNeg && hasPos:
+					mixed++
+				case hasNeg:
+					negOnly++
+				case hasPos:
+					posOnly++
+				default:
+					noDelta++
+				}
+				for _, t := range o.TokensRemoved {
+					tokenCounts[t]++
+				}
+			}
+		}
+
+		maxDir := negOnly
+		for _, v := range []int{posOnly, mixed, noDelta} {
+			if v > maxDir {
+				maxDir = v
+			}
+		}
+		if maxDir == 0 {
+			maxDir = 1
+		}
+		deltaDirectionDist = []DeltaBucket{
+			{Label: "Missing from peers (−)", Count: negOnly, Width: negOnly * 100 / maxDir, Color: "var(--red)"},
+			{Label: "Extends peers (+)", Count: posOnly, Width: posOnly * 100 / maxDir, Color: "var(--accent3)"},
+			{Label: "Mixed (+ and −)", Count: mixed, Width: mixed * 100 / maxDir, Color: "var(--yellow)"},
+			{Label: "No delta", Count: noDelta, Width: noDelta * 100 / maxDir, Color: "var(--muted)"},
+		}
+
+		type kv struct {
+			token string
+			count int
+		}
+		var tokenSlice []kv
+		for t, c := range tokenCounts {
+			tokenSlice = append(tokenSlice, kv{t, c})
+		}
+		sort.Slice(tokenSlice, func(i, j int) bool {
+			return tokenSlice[i].count > tokenSlice[j].count
+		})
+		if len(tokenSlice) > 10 {
+			tokenSlice = tokenSlice[:10]
+		}
+		if len(tokenSlice) > 0 {
+			maxTok := tokenSlice[0].count
+			for _, kv := range tokenSlice {
+				tokenFreqDist = append(tokenFreqDist, TokenFreqBucket{
+					Token: kv.token,
+					Count: kv.count,
+					Width: kv.count * 100 / maxTok,
+				})
+			}
+		}
 	}
 
 	return RepoReport{
@@ -698,7 +813,9 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 		ScoreExplain:        buildScoreExplain(scoreCounts),
 		SizeDist:            sizeDist,
 		SizeExplain:         buildSizeExplain(sizeCounts),
-		TierConfidenceDist:  tierConfDist,
+		PackageCoverage:     pkgCovRows,
+		DeltaDirectionDist:  deltaDirectionDist,
+		TokenFreqDist:       tokenFreqDist,
 		HighClusters:        highRows,
 		MediumClusters:      medRows,
 		LowClusters:         lowRows,
@@ -1200,7 +1317,7 @@ table.members tr.member-hidden{display:none;}
   </details>
 
   <div class="dist-section">
-    <div class="dist-grid" style="grid-template-columns:1fr 1fr 1fr;">
+    <div class="dist-grid" style="grid-template-columns:1fr 1fr;">
       <div>
         <div class="dist-title">Score distribution — avg pairwise ∛(seq × imp × call)</div>
 {{range .ScoreDist}}
@@ -1223,19 +1340,63 @@ table.members tr.member-hidden{display:none;}
 {{end}}
         <p class="dist-explain">{{.SizeExplain}}</p>
       </div>
-      <div>
-        <div class="dist-title">Mean confidence score by tier</div>
-{{range .TierConfidenceDist}}
-        <div class="dist-row">
-          <span class="dist-label" style="min-width:120px;font-family:inherit;">{{.Label}}</span>
-          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%;background:{{.Color}}"></div></div>
-          <span class="dist-count">{{f2 .Score}}</span>
-        </div>
-{{end}}
-        <p class="dist-explain">Mean confidence score per conformity tier. Higher tiers score higher because the tier-confidence weight (1.0 / 0.6 / 0.3) multiplies the same formula — this chart confirms the ranking is working as intended.</p>
-      </div>
     </div>
   </div>
+
+  <details class="legend" style="margin-bottom:20px;">
+    <summary>Potential Outlier Charts</summary>
+    <div style="padding:4px 16px 12px;">
+
+  <div class="dist-section">
+    <div class="dist-title">Package coverage — clustered vs outliers (top 20 by volume)</div>
+    <div style="margin-top:8px;">
+{{range .PackageCoverage}}
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">{{.Package}}</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:{{.ClusteredPct}}%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:{{.OutliersPct}}%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">{{.Clustered}} / {{.Outliers}}</span>
+      </div>
+{{end}}
+      <p class="dist-explain" style="margin-top:8px;">
+        <span style="color:var(--accent3);">■</span> clustered &nbsp;
+        <span style="color:var(--red);">■</span> structural outliers &nbsp;·&nbsp;
+        counts shown as clustered / outliers per package.
+      </p>
+    </div>
+  </div>
+
+{{if .DeltaDirectionDist}}
+  <div class="dist-section" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div>
+      <div class="dist-title">Outlier delta direction</div>
+{{range .DeltaDirectionDist}}
+      <div class="dist-row">
+        <span class="dist-label">{{.Label}}</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%;background:{{.Color}}"></div></div>
+        <span class="dist-count">{{.Count}}</span>
+      </div>
+{{end}}
+      <p class="dist-explain">Functions missing something peers have (−) are the strongest bug signal. Functions that extend peers (+) are usually intentional.</p>
+    </div>
+    <div>
+      <div class="dist-title">Token types missing from outliers vs peers</div>
+{{range .TokenFreqDist}}
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">{{.Token}}</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:{{.Width}}%;background:var(--red)"></div></div>
+        <span class="dist-count">{{.Count}}</span>
+      </div>
+{{end}}
+      <p class="dist-explain">Token types most frequently absent in outliers compared to their cluster peers — dominant types suggest a systemic missing pattern.</p>
+    </div>
+  </div>
+{{end}}
+
+    </div>
+  </details>
 
 {{if .OutlierGroups}}
   <details class="legend" style="margin-bottom:20px;">

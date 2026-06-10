@@ -1,0 +1,23 @@
+{
+  "name": "beats",
+  "description": "Structural fingerprinting and outlier analysis for Go codebases.",
+  "owner": {
+    "name": "somak2kai"
+  },
+  "plugins": [
+    {
+      "name": "beats",
+      "displayName": "beats — Go structural fingerprinting",
+      "source": "./beats.plugin",
+      "description": "Indexes a Go repository by structural shape, identifies outlier functions that deviate from established patterns, and delivers a peer-grounded LLM analysis (Needs Attention vs Expected Variation) with an interactive HTML report.",
+      "author": {
+        "name": "somak2kai"
+      },
+      "homepage": "https://github.com/somak2kai/beats",
+      "repository": "https://github.com/somak2kai/beats",
+      "license": "MIT",
+      "keywords": ["golang", "static-analysis", "structural-patterns", "fingerprinting", "outlier-detection", "code-review"],
+      "category": "code-quality"
+    }
+  ]
+}

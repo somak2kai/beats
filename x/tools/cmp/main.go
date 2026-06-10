@@ -51,7 +51,7 @@ func main() {
 
 	if *scipFile == "" || *repoRoot == "" || (*clusterFile == "" && *badgerPath == "") {
 		fmt.Fprintln(os.Stderr, "usage: cmp --scip=index.scip --repo=/path/to/repo (--clusters=cluster.json | --badger=/path/to/repo)")
-		fmt.Fprintln(os.Stderr, "       --badger       preferred: repo path — DB location resolved via os.TempDir() automatically")
+		fmt.Fprintln(os.Stderr, "       --badger       preferred: repo path — DB location resolved via os.UserHomeDir() automatically")
 		fmt.Fprintln(os.Stderr, "       --clusters     legacy: load clusters from a JSONL file written by ClusterWriter")
 		fmt.Fprintln(os.Stderr, "       --quorum=0.6   consensus-ref match threshold (default 0.6)")
 		fmt.Fprintln(os.Stderr, "       --min-size=4   skip clusters smaller than N (default 4)")

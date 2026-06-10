@@ -21,6 +21,8 @@ func main() {
 		runInit(os.Args[2:])
 	case "analyze":
 		runAnalyzeCmd(os.Args[2:])
+	case "query":
+		runQuery(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("beats %s\n", Version)
 	default:
@@ -33,9 +35,8 @@ func main() {
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: beats <command> [flags]")
 	fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
-	fmt.Fprintln(os.Stderr, "  beats query   cluster <page> --repo <path> [--format compact|text]")
-	fmt.Fprintln(os.Stderr, "  beats update  cluster <idx> --repo <path> --idiom <str> --verdict <str> --canonical <pkg/Fn> --action <str> --confidence <high|medium|low> --questions <q1|q2|...>")
-	fmt.Fprintln(os.Stderr, "  beats update  page --repo <path> --file <tsv>  (batch: one DB open for the whole page)")
+	fmt.Fprintln(os.Stderr, "  beats query   outlier              --repo <path> [--format text|json]")
+	fmt.Fprintln(os.Stderr, "  beats query   cluster shape <hash> --repo <path> [--format text|json]")
 	fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
 	fmt.Fprintln(os.Stderr, "  beats version")
 }
