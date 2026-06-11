@@ -233,38 +233,4 @@ The report shows all clusters sorted by combined coherence, with per-cluster mem
 </details>
 
 ---
-
-<details>
-<summary><strong>📊 Report Analyser</strong></summary>
-<br>
-
-The `analyzer/` package contains a Python script for parsing and summarising beats HTML reports in the terminal.
-
-→ **[analyzer/README.md](analyzer/README.md)**
-
-What it covers:
-- How to run `analyze_report.py` against any beats report
-- Coherence quadrant reference table
-- Sample output from a real analysis run (Gitea, ~500 clusters)
-
-</details>
-
----
-
-<details>
-<summary><strong>🔬 SCIP Validation Tool</strong></summary>
-<br>
-
-The `x/tools/cmp/` package contains a comparison tool that validates beats clusters against [SCIP](https://github.com/sourcegraph/scip) (Sourcegraph Code Intelligence Protocol) reference data. It computes precision, recall, and F1 per cluster to measure how well the structural fingerprint aligns with semantic reference graphs.
-
-→ **[x/tools/cmp/README.md](x/tools/cmp/README.md)**
-
-What it covers:
-- Installing and running `scip-go` on a repository
-- Running the beats vs SCIP comparison
-- How to interpret recall, precision, and F1 in the beats context
-- Why low precision is expected (and desirable) behaviour
-
-</details>
-
----
+❤️
