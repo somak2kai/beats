@@ -25,24 +25,6 @@ builds:
     ldflags:
       - -s -w -X main.Version={{.Version}}
 
-  - id: beats-cmp
-    binary: beats-cmp
-    main: ./x/tools/cmp
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
-    ldflags:
-      - -s -w
-
 archives:
   - id: beats-archive
     builds:
