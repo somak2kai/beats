@@ -63,6 +63,84 @@ The output is *N* clusters, each with a **coherence value** — a measure of how
 | **High Import Cohesion** | Tight domain-local pattern — shares both package context and call vocabulary. Most actionable. | Domain-cohesive, structurally diverse — shared package domain, divergent calls. May benefit from splitting. |
 | **Low Import Cohesion** | Cross-cutting structural pattern — different domains, same structural role (e.g. cron registration, adapters). | Likely noise — coincidental structural similarity rather than convention. Treat with scepticism. |
 
+### Potential outliers
+
+Functions that came structurally close to a cluster — but didn't meet the similarity threshold to join — are **potential outliers**. They look like they should follow a convention but deviate in a specific, measurable way.
+
+For each outlier, beats surfaces the exact gap between the function and its closest cluster:
+
+- **Token delta** — token types present in the outlier but absent from the cluster's common subsequence, or vice versa. A `+IF` means the outlier has an extra branch peers don't; a `−DEFER` means it's missing a cleanup step they all share.
+- **Import delta** — packages the outlier uses that peers don't, or packages peers consistently use that this function omits.
+- **Call delta** — specific call targets (e.g. `errors.Is`, `sync.Mutex.Lock`) that peers share but the outlier skips, or that the outlier adds beyond the cluster norm.
+- **Cyclomatic delta** — how much more or less complex the outlier is relative to the cluster mean.
+
+The HTML report groups outliers by their closest cluster and visualises the signal across three charts:
+
+- **Package coverage** — the top 20 packages by function count, split into clustered (settled convention) vs outliers (structural ad-hoc). Surfaces which areas of the codebase have converged on patterns and which haven't.
+- **Delta direction** — breaks all outliers into three buckets: missing something peers have (strongest signal), extending beyond peers, or both. A repo dominated by the "missing" bucket has more structural drift worth reviewing.
+- **Token frequency** — the top 10 token types most commonly absent from outliers compared to their peer clusters. A dominant type appearing across many outliers (e.g. `DEFER`, `IF`) signals a systemic gap rather than a one-off.
+
+beats also writes `<repo>/.beats/outlier.md` after indexing — a pre-computed document with every outlier, its deltas, and the full bodies of its closest cluster's peer functions. This is what the Claude skill reads to triage outliers without issuing any further queries.
+
+Remember, beats is a lens - not a prescription.
+
+---
+
+<details>
+<summary><strong>🤖 Analyse with Claude</strong></summary>
+<br>
+
+beats ships a Claude plugin that wires the outlier triage into a conversational skill.
+
+### Install the plugin
+
+Inside Claude Code or Cowork, add the marketplace and install:
+
+```
+/plugin marketplace add somak2kai/beats
+/plugin install beats@beats
+```
+
+
+### Recommended workflow — index outside Claude, analyse inside
+
+> **Index in your terminal, triage in Claude.** This is the lowest-cost way to run beats.
+
+`beats init` does pure computation — parsing, clustering, writing the database. It produces no output that needs LLM reasoning. Running it inside Claude wastes tokens on a step that doesn't benefit from them.
+
+**Step 1 — index in your terminal:**
+
+```bash
+beats init --repo /path/to/your/go/repo
+```
+
+This writes `<repo>/.beats/outlier.md` and `<repo>/.beats/report.html`. No Claude involved.
+
+**Step 2 — triage in Claude:**
+
+> `mini fingerprint`
+
+Tell Claude the repo path when prompted. Claude reads `outlier.md` directly and outputs the full triage — no indexing, no repeated database queries, just analysis.
+
+This keeps Claude's token budget focused entirely on the one step that actually needs it.
+
+### Full mode (all-in-one)
+
+If you prefer to run everything through Claude in one command:
+
+> `run beats on /path/to/your/go/repo`
+
+Claude will handle install verification, `beats init`, triage, and the HTML report. Convenient, but costs more tokens since indexing runs inside the Claude session.
+
+### What the LLM analysis does
+
+For each outlier, Claude matches its `closest cluster` hash to the peer cluster in `outlier.md` and reads the actual function bodies of every cluster member. It then asks one question per structural signal:
+
+> *Does the function body explain this deviation from its peers?*
+
+If yes → Expected Variation. If no → Needs Attention. The verdict is always tied to a specific delta — a token type, import, call target, or cyclo difference — not a general code quality opinion.
+
+</details>
 
 ---
 
