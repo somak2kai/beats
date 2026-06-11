@@ -530,7 +530,13 @@ func buildOutlierGroups(clusters []ds.Cluster, orphans []ds.OrphanedFunction) []
 	}
 	groups = filtered
 
+	tierOrder := map[string]int{"high": 0, "medium": 1, "low": 2}
 	sort.Slice(groups, func(i, j int) bool {
+		ti := tierOrder[groups[i].Tier]
+		tj := tierOrder[groups[j].Tier]
+		if ti != tj {
+			return ti < tj
+		}
 		return groups[i].ClusterID < groups[j].ClusterID
 	})
 	return groups
@@ -736,7 +742,7 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 	var tokenFreqDist []TokenFreqBucket
 
 	if totalOutliers > 0 {
-		negOnly, posOnly, mixed, noDelta := 0, 0, 0, 0
+		negOnly, posOnly, mixed := 0, 0, 0
 		tokenCounts := make(map[string]int)
 
 		for _, g := range outlierGroups {
@@ -750,8 +756,6 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 					negOnly++
 				case hasPos:
 					posOnly++
-				default:
-					noDelta++
 				}
 				for _, t := range o.TokensRemoved {
 					tokenCounts[t]++
@@ -760,7 +764,7 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 		}
 
 		maxDir := negOnly
-		for _, v := range []int{posOnly, mixed, noDelta} {
+		for _, v := range []int{posOnly, mixed} {
 			if v > maxDir {
 				maxDir = v
 			}
@@ -772,7 +776,6 @@ func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFu
 			{Label: "Missing from peers (−)", Count: negOnly, Width: negOnly * 100 / maxDir, Color: "var(--red)"},
 			{Label: "Extends peers (+)", Count: posOnly, Width: posOnly * 100 / maxDir, Color: "var(--accent3)"},
 			{Label: "Mixed (+ and −)", Count: mixed, Width: mixed * 100 / maxDir, Color: "var(--yellow)"},
-			{Label: "No delta", Count: noDelta, Width: noDelta * 100 / maxDir, Color: "var(--muted)"},
 		}
 
 		type kv struct {

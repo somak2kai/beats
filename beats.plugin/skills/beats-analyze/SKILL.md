@@ -2,9 +2,9 @@
 name: beats-analyze
 description: >
   Runs beats structural fingerprinting on a Go repository and uses LLM analysis
-  to surface outlier functions that may need developer attention — functions
+  to triage outlier functions that may need developer attention — functions
   that deviate structurally from established codebase patterns in ways that
-  could indicate bugs or architectural inconsistencies. Use this skill whenever
+  could indicate requires developer attention. Use this skill whenever
   the user says "run beats", "analyze this repo", "find structural outliers",
   "beats init", "fingerprint my Go code", or "/beats". Also handles lightweight
   query-only mode (no init, no HTML report) when the user says "mini fingerprint",
@@ -19,7 +19,7 @@ Two modes depending on trigger:
   the repo, queries outliers, analyzes, generates HTML report.
 - **Mini mode** (`mini fingerprint`, `analyze fingerprint`, `fingerprint query`,
   `beats query`) — assumes beats is installed and the repo is already indexed.
-  Skips Steps 1–2 and Step 5. Go straight to Step 3.
+  Skips Steps 1–2. Go straight to Step 3.
 
 > **Critical**: Run every beats command using the **Bash tool directly**. Never
 > delegate to a sub-agent or plugin. beats writes its database to `~/.beats/`
@@ -87,7 +87,7 @@ Capture the full JSON output. This returns an array of outlier functions — eac
 one did not fit any established structural cluster but came close to one or more.
 
 If the array is empty, tell the user: "No structural outliers found — all
-functions fit established patterns." Then skip to Step 5.
+functions fit established patterns." Then stop.
 
 ---
 
@@ -109,26 +109,35 @@ From the outlier JSON, collect all **unique** `cluster_id` values from
 > truncate it to 6 characters or use the short display form. The command will
 > return "no cluster found" if the hash is shortened.
 
-For each unique cluster_id, run:
+For each unique cluster_id, run **sequentially** (one at a time — the DB
+cannot handle concurrent reads):
 
 ```bash
 beats query cluster shape <full_cluster_id> --repo "$REPO" --format json
 ```
 
-Capture the JSON. This returns the cluster's members with their actual function
-bodies. Store the result keyed by cluster_id.
+**This is pure data collection. Execute every command immediately, one after
+the next, without stopping to reason, summarize, or analyse between commands.
+Do not think between tool calls. Capture the JSON output and move straight to
+the next query. All reasoning happens in step 4b after every cluster has been
+fetched.**
+
+Store each result keyed by cluster_id.
 
 ### 4b — Build the analysis prompt
 
-Construct the following prompt exactly. Use the outlier JSON and the cluster
-JSON from 4a to fill in the values.
+Construct the following prompt internally. Use the outlier JSON and the cluster
+JSON from 4a to fill in the values. **Do not print the prompt, the system
+message, or the user message to the terminal — they are internal reasoning
+inputs only. Output only the final analysis results (Needs Attention /
+Expected Variation sections).**
 
 ---
 
 **System prompt** (use verbatim):
 
 ```
-You are a structural anomaly analyst for Go codebases.
+You are an unbiased Senior Go Architect.
 
 You have been given output from a structural fingerprinting tool called beats.
 beats clusters Go functions by shared AST token sequences, import sets, and
@@ -137,10 +146,11 @@ the codebase. Outliers are functions that came structurally close to a pattern
 but did not meet the threshold to join it.
 
 Your job is to review each outlier and determine whether it warrants developer
-attention.
+attention. The cluster members may be wrong — the outlier may be the one doing
+it right.
 
 For each outlier you have been given the actual bodies of its closest cluster's
-members. Use them as the ground truth for what peers look like.
+members. Use them as reference, not as ground truth.
 
 Ask one question per signal (token, import, call, cyclo), and always ask it
 against the peer bodies:
@@ -220,24 +230,12 @@ and removed are empty arrays, write `none`.
 
 ### 4c — Run the analysis
 
-Send the system prompt and user message. Read the response carefully.
+Reason over the system prompt and user message internally. Output only the
+final **Needs Attention** and **Expected Variation** sections — nothing else.
 
 ---
 
-## Step 5 — Generate the HTML report
-
-*(Skip in mini mode)*
-
-```bash
-beats analyze --repo "$REPO"
-```
-
-This writes `$REPO/.beats/report.html` with the full cluster and outlier data
-visible in the browser.
-
----
-
-## Step 6 — Surface the results
+## Step 5 — Surface the results
 
 Present the LLM analysis output directly to the user — the "Needs Attention"
 and "Expected Variation" sections.
