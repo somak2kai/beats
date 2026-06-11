@@ -37,7 +37,9 @@ Beats finds where the variance is and where it isn't.
 
 ---
 
-## What is beats?
+<details>
+<summary><strong>🔍 What is beats?</strong></summary>
+<br>
 
 beats identifies recurring structural patterns across an entire Go codebase to answer one question: *does the golang code across the repository coalesce to form a structural pattern and if so, how can we identify and evaluate the same?*
 
@@ -80,7 +82,7 @@ Remember, beats is a lens - not a prescription.
 ---
 
 <details>
-<summary><strong>🤖 Analyse with Claude</strong></summary>
+<summary><strong>🤖 Analyze with Claude</strong></summary>
 <br>
 
 beats ships a Claude plugin that wires the outlier triage into a conversational skill.
