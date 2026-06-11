@@ -79,8 +79,9 @@ beats also writes `<repo>/.beats/outlier.md` after indexing — a pre-computed d
 
 Remember, beats is a lens - not a prescription.
 
----
+</details>
 
+---
 <details>
 <summary><strong>🤖 Analyze with Claude</strong></summary>
 <br>
