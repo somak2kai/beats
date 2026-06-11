@@ -110,7 +110,8 @@ func (f *functionMetadata) execute() error {
 
 				meta, err := ast.ParseFile(m)
 				if err != nil {
-					return err
+					slog.Error("unable to parse file", slog.String("file", m.Path))
+					continue
 				}
 				localFncM = append(localFncM, meta...)
 			}
@@ -165,6 +166,9 @@ func (w *indexPersistor) skipInDryRun() bool {
 }
 
 func (a *analyzer) execute() error {
+	if len(a.state.IdentifiedCluster) == 0 || len(a.state.OrphanMetas) == 0 {
+		return nil
+	}
 	return runAnalyze(a.state.RepositoryPath)
 }
 
@@ -301,6 +305,9 @@ func (c *identifyClusterPersistor) skipInDryRun() bool { return true }
 
 func (o *orphanAnalyzer) execute() error {
 
+	if len(o.state.IdentifiedCluster) == 0 || len(o.state.OrphanMetas) == 0 {
+		return nil
+	}
 	result, err := ast.IdentifyOrphans(o.state.OrphanMetas, o.state.IdentifiedCluster)
 	if err != nil {
 		return err
