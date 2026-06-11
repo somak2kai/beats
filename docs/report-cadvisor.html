@@ -238,7 +238,7 @@ table.members tr.member-hidden{display:none;}
   </div>
   <div class="hdr-right">
     structural fingerprinting · ∛(seq × import × call)<br/>
-    2026-06-10 10:49:20
+    2026-06-11 17:08:24
   </div>
 </header>
 
@@ -422,16 +422,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">zfs</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">devicemapper</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">fs</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -449,7 +440,16 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">fs</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">zfs</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">devicemapper</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -539,7 +539,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">tmpfs</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">overlay</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -548,7 +548,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">redis</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">btrfs</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -557,25 +557,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">influxdb</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">bigquery</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">gce</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">elasticsearch</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -585,6 +567,24 @@ table.members tr.member-hidden{display:none;}
 
       <div class="dist-row" style="margin-bottom:4px;">
         <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">netlink</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">intel</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">gce</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -650,64 +650,8 @@ table.members tr.member-hidden{display:none;}
       <tbody>
 
 
-      <tr class="cl-row" data-idx="0" data-stableid="db1847" onclick="toggleRow('high', 0 )">
+      <tr class="cl-row" data-idx="0" data-stableid="814141" onclick="toggleRow('high', 0 )">
         <td class="cl-ordinal">1</td>
-        <td><span class="cl-stableid">db1847</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">db1847652ab28e3a</span></td>
-        <td class="num" style="vertical-align:middle;">5</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">2.88</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:36%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">bigquery</span><span class="pkg-pill">elasticsearch</span><span class="pkg-pill">influxdb</span><span class="pkg-pill">kafka</span><span class="pkg-pill">redis</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-0">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/storage, os</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">bigquery</span></td>
-              <td><span class="fn-file" title="storage/bigquery/bigquery.go">storage/bigquery/bigquery.go</span></td>
-              <td><span class="fn-line">81</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">elasticsearch</span></td>
-              <td><span class="fn-file" title="storage/elasticsearch/elasticsearch.go">storage/elasticsearch/elasticsearch.go</span></td>
-              <td><span class="fn-line">56</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">influxdb</span></td>
-              <td><span class="fn-file" title="storage/influxdb/influxdb.go">storage/influxdb/influxdb.go</span></td>
-              <td><span class="fn-line">111</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">kafka</span></td>
-              <td><span class="fn-file" title="storage/kafka/kafka.go">storage/kafka/kafka.go</span></td>
-              <td><span class="fn-line">97</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">redis</span></td>
-              <td><span class="fn-file" title="storage/redis/redis.go">storage/redis/redis.go</span></td>
-              <td><span class="fn-line">50</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="1" data-stableid="814141" onclick="toggleRow('high', 1 )">
-        <td class="cl-ordinal">2</td>
         <td><span class="cl-stableid">814141</span></td>
         <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">8141417009906073</span></td>
         <td class="num" style="vertical-align:middle;">5</td>
@@ -718,7 +662,7 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">containerd</span><span class="pkg-pill">crio</span><span class="pkg-pill">docker</span><span class="pkg-pill">podman</span><span class="pkg-pill">raw</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-1">
+      <tr class="cl-detail" id="detail-high-0">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
             <span class="detail-meta-item">top imports: <strong>fmt, github.com/opencontainers/cgroups</strong></span>
@@ -762,6 +706,62 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
+      <tr class="cl-row" data-idx="1" data-stableid="db1847" onclick="toggleRow('high', 1 )">
+        <td class="cl-ordinal">2</td>
+        <td><span class="cl-stableid">db1847</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">db1847652ab28e3a</span></td>
+        <td class="num" style="vertical-align:middle;">5</td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">2.88</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:36%"></div></div></div></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">bigquery</span><span class="pkg-pill">elasticsearch</span><span class="pkg-pill">influxdb</span><span class="pkg-pill">kafka</span><span class="pkg-pill">redis</span></div></td>
+        <td style="vertical-align:middle;padding:6px 10px;"></td>
+      </tr>
+      <tr class="cl-detail" id="detail-high-1">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/storage, os</strong></span>
+            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+          </div>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+
+            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">bigquery</span></td>
+              <td><span class="fn-file" title="storage/bigquery/bigquery.go">storage/bigquery/bigquery.go</span></td>
+              <td><span class="fn-line">81</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">elasticsearch</span></td>
+              <td><span class="fn-file" title="storage/elasticsearch/elasticsearch.go">storage/elasticsearch/elasticsearch.go</span></td>
+              <td><span class="fn-line">56</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">influxdb</span></td>
+              <td><span class="fn-file" title="storage/influxdb/influxdb.go">storage/influxdb/influxdb.go</span></td>
+              <td><span class="fn-line">111</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">kafka</span></td>
+              <td><span class="fn-file" title="storage/kafka/kafka.go">storage/kafka/kafka.go</span></td>
+              <td><span class="fn-line">97</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">new</span></td><td><span class="fn-pkg">redis</span></td>
+              <td><span class="fn-file" title="storage/redis/redis.go">storage/redis/redis.go</span></td>
+              <td><span class="fn-line">50</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+          </tbody></table></div>
+
+        </div></td>
+      </tr>
+
       <tr class="cl-row" data-idx="2" data-stableid="ade12f" onclick="toggleRow('high', 2 )">
         <td class="cl-ordinal">3</td>
         <td><span class="cl-stableid">ade12f</span></td>
@@ -790,14 +790,14 @@ table.members tr.member-hidden{display:none;}
             </tr>
 
             <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
-              <td><span class="fn-line">94</span></td>
+              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
+              <td><span class="fn-line">95</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.960</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:96%"></div></div></div></td>
             </tr>
 
             <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
-              <td><span class="fn-line">95</span></td>
+              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
+              <td><span class="fn-line">94</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.960</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:96%"></div></div></div></td>
             </tr>
 
@@ -1258,14 +1258,14 @@ table.members tr.member-hidden{display:none;}
             </tr>
 
             <tr><td><span class="fn-name">Start</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
-              <td><span class="fn-line">64</span></td>
+              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
+              <td><span class="fn-line">65</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
             <tr><td><span class="fn-name">Start</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
-              <td><span class="fn-line">65</span></td>
+              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
+              <td><span class="fn-line">64</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
@@ -1513,7 +1513,7 @@ table.members tr.member-hidden{display:none;}
 
 </div>
 
-<footer>beats · vocabulary-independent structural fingerprinting for Go · 2026-06-10 10:49:20</footer>
+<footer>beats · vocabulary-independent structural fingerprinting for Go · 2026-06-11 17:08:24</footer>
 
 <div id="pot-tooltip"><div class="pot-tt-title">Potential outliers</div><div id="pot-tt-body"></div></div>
 
