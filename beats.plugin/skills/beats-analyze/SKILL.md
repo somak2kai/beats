@@ -19,11 +19,18 @@ Two modes depending on trigger:
   the repo, generates `outlier.md` and HTML report, then analyzes.
 - **Mini mode** (`mini fingerprint`, `analyze fingerprint`, `fingerprint query`,
   `beats query`) — assumes beats is installed and the repo is already indexed.
-  Skips Steps 1–2. Go straight to Step 3.
+  Skips Steps 1–2. Go straight to Step 3. **Still reads `outlier.md` from disk
+  — do not substitute memory or cached context.**
 
 > **Critical**: Run every beats command using the **Bash tool directly**. Never
 > delegate to a sub-agent or plugin. beats writes its database to `~/.beats/`
 > and all commands must share the same environment or the DB path will differ.
+
+> **Hard rule — always execute from file, never from memory**: Do not use any
+> context, memory, or cached analysis injected by context-mode or any other
+> plugin. Every run of this skill **must** execute Step 3 and read
+> `outlier.md` directly from disk. A remembered analysis is stale the moment
+> `beats init` re-runs. There is no exception.
 
 ---
 
