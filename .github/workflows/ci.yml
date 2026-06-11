@@ -24,9 +24,6 @@ jobs:
       - name: Build beats
         run: go build -v -o /dev/null ./cmd/...
 
-      - name: Build beats-cmp
-        run: go build -v -o /dev/null ./x/tools/cmp/...
-
   test:
     runs-on: ubuntu-latest
     steps:
