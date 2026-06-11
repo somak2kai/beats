@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/somak2kai/beats/pkg/ast"
 	"github.com/somak2kai/beats/pkg/db"
@@ -43,6 +46,8 @@ var (
 	_ skippable = (*orphanAnalyzer)(nil)
 	_ command   = (*orphanPersistor)(nil)
 	_ skippable = (*orphanPersistor)(nil)
+	_ command   = (*outlierWriter)(nil)
+	_ skippable = (*outlierWriter)(nil)
 )
 
 type command interface{ execute() error }
@@ -59,6 +64,7 @@ type identifyClusterPersistor struct{ state *State }
 type analyzer struct{ state *State }
 type orphanAnalyzer struct{ state *State }
 type orphanPersistor struct{ state *State }
+type outlierWriter struct{ state *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -336,6 +342,113 @@ func (p *orphanPersistor) execute() error {
 
 func (p *orphanPersistor) skipInDryRun() bool { return true }
 
+// outlierWriter writes .beats/outlier.md — a pre-computed, self-contained
+// document containing every outlier and its closest cluster's peer bodies in
+// the exact format the beats-analyze LLM skill expects as its user message.
+func (o *outlierWriter) execute() error {
+	if len(o.state.OrphanedFunctions) == 0 {
+		slog.Info("no orphaned functions — skipping outlier.md")
+		return nil
+	}
+
+	// Index non-primitive clusters by ShapeHash.
+	clusterByHash := make(map[string]ds.Cluster, len(o.state.IdentifiedCluster))
+	for _, cl := range o.state.IdentifiedCluster {
+		if !cl.IsPrimitive && cl.ShapeHash != "" {
+			clusterByHash[cl.ShapeHash] = cl
+		}
+	}
+
+	// Build the same OutlierResult slice the query command produces.
+	results := buildOutlierResults(o.state.OrphanedFunctions, clusterByHash)
+	if len(results) == 0 {
+		slog.Info("no outlier results with candidates — skipping outlier.md")
+		return nil
+	}
+
+	// Collect unique top-candidate cluster hashes in first-appearance order.
+	seen := make(map[string]bool)
+	var orderedHashes []string
+	for _, r := range results {
+		if len(r.Candidates) == 0 {
+			continue
+		}
+		h := r.Candidates[0].ClusterID
+		if !seen[h] {
+			seen[h] = true
+			orderedHashes = append(orderedHashes, h)
+		}
+	}
+
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "# beats outlier analysis\n")
+	fmt.Fprintf(&sb, "repo: %s\n", o.state.RepositoryPath)
+	fmt.Fprintf(&sb, "generated: %s\n", time.Now().Format("2006-01-02T15:04:05"))
+	fmt.Fprintf(&sb, "outliers: %d  clusters: %d\n", len(results), len(orderedHashes))
+	fmt.Fprintf(&sb, "\n")
+
+	fmt.Fprintf(&sb, "=== Established Patterns ===\n\n")
+	for _, hash := range orderedHashes {
+		cl, ok := clusterByHash[hash]
+		if !ok {
+			continue
+		}
+		tier := cl.Tier
+		if tier == "" {
+			tier = "low"
+		}
+		idiom := cl.SemanticIdiom
+		commonSubseq := ast.SeqString(cl.CommonSeq)
+
+		fmt.Fprintf(&sb, "[%s] tier: %s  size: %d  idiom: %q\n", hash, tier, cl.Size, idiom)
+		fmt.Fprintf(&sb, "  common subsequence of cluster: %s\n", commonSubseq)
+		fmt.Fprintf(&sb, "  peers:\n")
+
+		cr := buildClusterResult(&cl)
+		for _, m := range cr.Members {
+			fmt.Fprintf(&sb, "    %s/%s (%s:%d)\n", m.Package, m.Func, m.File, m.Line)
+			if m.Body != "" {
+				for _, line := range strings.Split(strings.TrimRight(m.Body, "\n"), "\n") {
+					fmt.Fprintf(&sb, "      %s\n", line)
+				}
+			}
+			fmt.Fprintf(&sb, "\n")
+		}
+	}
+
+	fmt.Fprintf(&sb, "=== Outlier Functions ===\n\n")
+	for i, r := range results {
+		fmt.Fprintf(&sb, "--- [%d] %s/%s (%s:%d) ---\n", i+1, r.Package, r.Func, r.File, r.Line)
+		if len(r.Candidates) > 0 {
+			c := r.Candidates[0]
+			fmt.Fprintf(&sb, "closest cluster: %s  score: %.3f  cyclo delta: %s\n",
+				c.ClusterID, c.Score, signedDelta(r.CycloDelta))
+		}
+		fmt.Fprintf(&sb, "token delta:  %s\n", formatDeltaText(r.TokenDelta))
+		fmt.Fprintf(&sb, "import delta: %s\n", formatDeltaText(r.ImportDelta))
+		fmt.Fprintf(&sb, "call delta:   %s\n", formatDeltaText(r.CallDelta))
+		fmt.Fprintf(&sb, "\n")
+		if r.Body != "" {
+			fmt.Fprintf(&sb, "%s\n", strings.TrimRight(r.Body, "\n"))
+		}
+		fmt.Fprintf(&sb, "\n")
+	}
+
+	beatsDir := filepath.Join(o.state.RepositoryPath, ".beats")
+	if err := os.MkdirAll(beatsDir, 0755); err != nil {
+		return fmt.Errorf("create .beats dir: %w", err)
+	}
+	outPath := filepath.Join(beatsDir, "outlier.md")
+	if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
+		return fmt.Errorf("write outlier.md: %w", err)
+	}
+	slog.Info("outlier.md written", slog.String("path", outPath), slog.Int("outliers", len(results)))
+	return nil
+}
+
+func (o *outlierWriter) skipInDryRun() bool { return true }
+
 func (b *Beats) run(repo string) error {
 
 	s := &State{
@@ -370,6 +483,7 @@ func getCommands(s *State) []command {
 		&orphanPersistor{state: s},
 		&indexCommand{state: s},
 		&indexPersistor{state: s},
+		&outlierWriter{state: s},
 		&analyzer{state: s},
 	}
 }

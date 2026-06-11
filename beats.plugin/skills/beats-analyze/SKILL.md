@@ -16,7 +16,7 @@ description: >
 Two modes depending on trigger:
 
 - **Full mode** (`run beats`, `beats init`, etc.) — installs if needed, indexes
-  the repo, queries outliers, analyzes, generates HTML report.
+  the repo, generates `outlier.md` and HTML report, then analyzes.
 - **Mini mode** (`mini fingerprint`, `analyze fingerprint`, `fingerprint query`,
   `beats query`) — assumes beats is installed and the repo is already indexed.
   Skips Steps 1–2. Go straight to Step 3.
@@ -24,12 +24,6 @@ Two modes depending on trigger:
 > **Critical**: Run every beats command using the **Bash tool directly**. Never
 > delegate to a sub-agent or plugin. beats writes its database to `~/.beats/`
 > and all commands must share the same environment or the DB path will differ.
-
-> **HARD RULE — no scripts, no truncation, ever**: Do NOT pipe beats output to
-> python3, node, jq, head, tail, or any other tool. Do NOT write a script to a
-> file and run it. Run beats commands bare and read the full output directly in
-> your context window. Truncating with `head` breaks the JSON array and silently
-> drops outliers. There is no exception.
 
 ---
 
@@ -77,60 +71,62 @@ If the command fails, surface the full error and stop.
 
 ---
 
-## Step 3 — Query structural outliers
+## Step 3 — Read outlier.md
 
 ```bash
-beats query outlier --repo "$REPO" --format json
+cat "$REPO/.beats/outlier.md"
 ```
 
-Capture the full JSON output. This returns an array of outlier functions — each
-one did not fit any established structural cluster but came close to one or more.
+`outlier.md` is written by `beats init` alongside `report.html`. It contains
+every outlier and its closest cluster's full peer bodies, pre-formatted for
+analysis.
 
-If the array is empty, tell the user: "No structural outliers found — all
-functions fit established patterns." Then stop.
+- **File not found**: tell the user: "No potential outliers to triage —
+  `outlier.md` not found in `$REPO/.beats/`. Run `beats init --repo $REPO` to
+  generate it." Then stop.
+- **`outliers: 0` in the header**: tell the user: "No structural outliers found
+  — all functions fit established patterns." Then stop.
+- Otherwise: capture the full file content. This is the user message for Step 4.
 
 ---
 
 ## Step 4 — Analyze outliers with LLM reasoning
 
-This is the core step. You will build a structured prompt from the JSON and
-reason about which outliers warrant developer attention.
+### 4a — Parse the file and cross-reference clusters
 
-**STOP**: Do not write a script to parse the JSON. Read it in your context window
-and build the prompt text manually. No python3, no node, no jq, no shell pipes.
+Before reasoning, read the entire file and understand its two sections.
 
-### 4a — Fetch peer bodies for every cluster
-
-From the outlier JSON, collect all **unique** `cluster_id` values from
-`candidates[0]` across all outliers.
-
-> **CRITICAL**: `cluster_id` is a **full SHA-256 hex string** (32+ characters),
-> e.g. `9cbe48a3f1d2...`. Copy it verbatim from the JSON field. **Never**
-> truncate it to 6 characters or use the short display form. The command will
-> return "no cluster found" if the hash is shortened.
-
-For each unique cluster_id, run **sequentially** (one at a time — the DB
-cannot handle concurrent reads):
-
-```bash
-beats query cluster shape <full_cluster_id> --repo "$REPO" --format json
+**`=== Established Patterns ===`** — one entry per cluster:
+```
+[<full_sha256_hash>] tier: ...  size: ...  idiom: "..."
+  common subsequence of cluster: <token sequence>
+  peers:
+    package/FuncName (file:line)
+      <full function body>
 ```
 
-**This is pure data collection. Execute every command immediately, one after
-the next, without stopping to reason, summarize, or analyse between commands.
-Do not think between tool calls. Capture the JSON output and move straight to
-the next query. All reasoning happens in step 4b after every cluster has been
-fetched.**
+**`=== Outlier Functions ===`** — one entry per outlier:
+```
+--- [N] package/FuncName (file:line) ---
+closest cluster: <full_sha256_hash>  score: ...  cyclo delta: ...
+token delta:  ...
+import delta: ...
+call delta:   ...
 
-Store each result keyed by cluster_id.
+<full function body>
+```
 
-### 4b — Build the analysis prompt
+**Cross-referencing**: For each outlier, the `closest cluster:` field contains a
+full SHA-256 hash. Match it **exactly** (full string, case-sensitive) against the
+`[<hash>]` entries in `=== Established Patterns ===`. The matched entry's
+`peers:` subsection is the reference for that outlier's analysis. If no match is
+found for a hash, skip that outlier.
 
-Construct the following prompt internally. Use the outlier JSON and the cluster
-JSON from 4a to fill in the values. **Do not print the prompt, the system
-message, or the user message to the terminal — they are internal reasoning
-inputs only. Output only the final analysis results (Needs Attention /
-Expected Variation sections).**
+The content of `outlier.md` **is** the user message. Do not reformat, summarise,
+or reconstruct it — use it verbatim.
+
+**Do not print the system message or user message to the terminal — they are
+internal reasoning inputs only. Output only the final analysis results.**
 
 ---
 
@@ -149,8 +145,10 @@ Your job is to review each outlier and determine whether it warrants developer
 attention. The cluster members may be wrong — the outlier may be the one doing
 it right.
 
-For each outlier you have been given the actual bodies of its closest cluster's
-members. Use them as reference, not as ground truth.
+For each outlier in `=== Outlier Functions ===`, find its peer cluster by
+matching the `closest cluster: <hash>` field exactly against the `[<hash>]`
+entries in `=== Established Patterns ===`. The `peers:` bodies under that
+cluster entry are the reference. Use them as reference, not as ground truth.
 
 Ask one question per signal (token, import, call, cyclo), and always ask it
 against the peer bodies:
@@ -199,39 +197,13 @@ Concern: one sentence describing what the structural gap is — not what might h
 
 ---
 
-**User message** (build this from the JSON):
+**User message**: the full content of `outlier.md` read in Step 3, verbatim.
 
-```
-=== Established Patterns ===
+### 4b — Run the analysis
 
-[For each unique cluster_id from candidates[0], one entry:]
-[<cluster_id>] tier: <tier>  size: <size>  idiom: "<idiom or 'unenriched'>"
-  common shape: <common_shape>
-  peers:
-  [For each member in the cluster query result:]
-    <package>/<func> (<file>:<line>)
-    <body>
-
-=== Outlier Functions ===
-
-[For each filtered outlier, numbered:]
---- [N] <package>/<func> (<file>:<line>) ---
-closest cluster: <cluster_id>  score: <score:.3f>  cyclo delta: <cyclo_delta:+.1f>
-token delta:  <token_delta.added as +X>  <token_delta.removed as -X>  (or "none" if empty)
-import delta: <import_delta.added as +X>  <import_delta.removed as -X>  (or "none")
-call delta:   <call_delta.added as +X>  <call_delta.removed as -X>  (or "none")
-
-<body>
-
-```
-
-For the deltas: prefix added items with `+`, removed with `−`. If both added
-and removed are empty arrays, write `none`.
-
-### 4c — Run the analysis
-
-Reason over the system prompt and user message internally. Output only the
-final **Needs Attention** and **Expected Variation** sections — nothing else.
+Reason over the system prompt and the `outlier.md` content internally. Output
+only the final **Needs Attention** and **Expected Variation** sections — nothing
+else.
 
 ---
 
@@ -254,10 +226,10 @@ If you have access to the `present_files` tool, present the report file.
 - **beats init fails:** surface the slog error line. Common causes: non-Go
   files with malformed package clauses (usually harmless), permission errors on
   the temp DB path.
-- **beats query outlier returns no candidates:** normal for very small repos or
-  repos with highly uniform structure.
-- **beats query outlier errors in mini mode:** repo was likely not indexed —
-  tell the user to run `beats init --repo <path>` first, then retry.
+- **outlier.md not found:** repo has not been indexed yet — tell the user to run
+  `beats init --repo <path>` first, then retry.
+- **outlier.md header shows `outliers: 0`:** normal for very small repos or
+  repos with highly uniform structure. No analysis needed.
 - **beats analyze fails:** surface the full error. The DB was just written so
   this is rare.
 - **Binary not found after install:** remind the user to add
