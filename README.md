@@ -21,9 +21,9 @@ beats clusters Go functions by the **skeleton of how they are written** — inde
 
 > Why beats
 
-Every codebase has a rhythm — recurring structural patterns that developers fall into without naming them. Beats finds that pulse. When the rhythm is steady, you have convention. When it's irregular, you have cognitive load.
+Every codebase has a rhythm — recurring structural patterns that developers fall into without naming them. Beats finds that pulse. When the rhythm is steady, you have convention. When it's irregular, you may want to pay attention.
 
-Well the original idea was to evaluate congnitive load of a piece of code. I generally believe, cognitive load in a codebase isn't caused by complexity alone, it's caused by unexplained structural variance. When every function that does X looks different, your brain can't build a model. Beats finds where the variance is and where it isn't.
+Beats finds where the variance is and where it isn't.
 
 ### Reports from sample OSS repositories
 
@@ -55,13 +55,6 @@ No attempt is made to understand *what* a call target does or *what* an import s
 
 These three features — along with some additional metadata — form a **FunctionMetadata** record. <br>
 Beats collects FunctionMetadata across the entire codebase and clusters structurally similar functions. Similarity between two functions is computed as the geometric mean of three signals, each normalized to [0, 1]: token-sequence similarity (1 − normalized Levenshtein distance), Jaccard overlap of imports, and Jaccard overlap of called functions. Using the geometric mean (∛(A·B·C)) rather than a weighted sum means a pair must score well across all three dimensions to be considered similar — a function with high token overlap but no shared imports or calls won't be treated as a match
-
-The output is *N* clusters, each with a **coherence value** — a measure of how tightly packed the function metadata within it are. Coherence is broken into two axes:
-
-| | **High Call Cohesion** | **Low Call Cohesion** |
-|---|---|---|
-| **High Import Cohesion** | Tight domain-local pattern — shares both package context and call vocabulary. Most actionable. | Domain-cohesive, structurally diverse — shared package domain, divergent calls. May benefit from splitting. |
-| **Low Import Cohesion** | Cross-cutting structural pattern — different domains, same structural role (e.g. cron registration, adapters). | Likely noise — coincidental structural similarity rather than convention. Treat with scepticism. |
 
 ### Potential outliers
 
