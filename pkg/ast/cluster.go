@@ -1170,6 +1170,9 @@ var tokenNames = []string{
 	"RETURN", "GO", "SEND", "DEFER", "CONTINUE", "BREAK", "GOTO",
 	"CALL", "FUNCLIT", "ASSIGN", "CALL_PKG", "CALL_METHOD",
 	"COMPOSITE_LIT", "BINARY_OP", "TYPE_ASSERT",
+	// Java-specific (emitted by jbeats)
+	"TRY", "CATCH", "THROW", "FINALLY", "SYNCHRONIZED",
+	"WHILE", "DO_WHILE", "ASSERT_STMT",
 }
 
 func tokenName(t int) string {

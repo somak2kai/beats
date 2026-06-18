@@ -34,6 +34,15 @@ const (
 	TK_COMPOSITE_LIT // composite/struct literal: T{...} or &T{...}
 	TK_BINARY_OP     // binary expression: a||b, a&&b, a==b, a+b, etc.
 	TK_TYPE_ASSERT   // type assertion: x.(T) or x.(type) in type switch
+	// Java-specific tokens (emitted by jbeats, no Go equivalent)
+	TK_TRY          // try block
+	TK_CATCH        // catch block
+	TK_THROW        // throw statement
+	TK_FINALLY      // finally block
+	TK_SYNCHRONIZED // synchronized block
+	TK_WHILE        // while loop (Java)
+	TK_DO_WHILE     // do-while loop (Java)
+	TK_ASSERT_STMT  // assert statement (Java)
 )
 
 func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
