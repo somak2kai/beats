@@ -17,6 +17,10 @@
 beats clusters Go functions by the **skeleton of how they are written** — independent of names, comments, domain vocabulary or semantic meaning. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
 
 📖 [Read the full story on Medium →](https://medium.com/@somaktukai/structural-fingerprint-for-golang-repositories-a-case-study-ae560bafec84)
+
+For some quick easy context here are a couple of PRs that beats raised and merged:<br>
+- https://github.com/kubernetes/kubernetes/pull/139918
+- https://github.com/mattermost/mattermost/pull/37045
 <br>
 
 > Why beats
