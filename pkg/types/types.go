@@ -4,10 +4,18 @@ import (
 	"github.com/google/uuid"
 )
 
+type Language string
+
+const (
+	Language_GOLANG Language = "golang"
+	Language_JAVA   Language = "java"
+)
+
 // FileMeta carrries name and path metadata about golang file.
 type FileMeta struct {
 	Name string
 	Path string
+	Lang Language
 }
 
 // PkgToFileMeta contains package information to file metadata mapping.
@@ -15,17 +23,15 @@ type PkgToFileMeta map[string][]FileMeta
 
 // ParamInfo describes a single function parameter.
 type ParamInfo struct {
-	TypeName string
-	// parameter type is a function
-	IsFuncType bool
-	// parameter type is an interface
-	IsInterface bool
+	TypeName    string `json:"type_name"`
+	IsFuncType  bool   `json:"is_func_type"`
+	IsInterface bool   `json:"is_interface"`
 }
 
 // ReturnInfo describes a single return value.
 type ReturnInfo struct {
-	TypeName string
-	IsError  bool
+	TypeName string `json:"type_name"`
+	IsError  bool   `json:"is_error"`
 }
 
 // FunctionMeta carries metadata about individual functions found in go files.

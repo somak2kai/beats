@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,6 +17,7 @@ import (
 
 	"github.com/somak2kai/beats/pkg/ast"
 	"github.com/somak2kai/beats/pkg/db"
+	"github.com/somak2kai/beats/pkg/hash"
 	ds "github.com/somak2kai/beats/pkg/types"
 	"github.com/somak2kai/beats/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -48,6 +53,7 @@ var (
 	_ skippable = (*orphanPersistor)(nil)
 	_ command   = (*outlierWriter)(nil)
 	_ skippable = (*outlierWriter)(nil)
+	_ command   = (*javafunctionMetadata)(nil)
 )
 
 type command interface{ execute() error }
@@ -55,9 +61,9 @@ type skippable interface{ skipInDryRun() bool }
 type dbCleaner struct{ state *State }
 type fileMetadata struct{ state *State }
 type functionMetadata struct{ state *State }
+type javafunctionMetadata struct{ state *State }
 type indexCommand struct{ state *State }
 type indexPersistor struct{ state *State }
-
 type identifyCluster struct{ state *State }
 type clusterClassifier struct{ state *State }
 type identifyClusterPersistor struct{ state *State }
@@ -113,7 +119,9 @@ func (f *functionMetadata) execute() error {
 		g.Go(func() error {
 			var localFncM []ds.FunctionMeta
 			for _, m := range val {
-
+				if m.Lang != ds.Language_GOLANG {
+					continue
+				}
 				meta, err := ast.ParseFile(m)
 				if err != nil {
 					slog.Error("unable to parse file", slog.String("file", m.Path))
@@ -449,6 +457,76 @@ func (o *outlierWriter) execute() error {
 
 func (o *outlierWriter) skipInDryRun() bool { return true }
 
+// performs the parsing of java files via jbeats. code errors is jbeats is not available and installed in path.
+func (j *javafunctionMetadata) execute() error {
+
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	var mu sync.Mutex
+	for _, val := range j.state.PkgToFileMetadata {
+		val := val
+		g.Go(func() error {
+			var localFncM []ds.FunctionMeta
+			for _, m := range val {
+				if m.Lang != ds.Language_JAVA {
+					continue
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, "/Users/admin/ws/java/jbeats/target/jbeats",
+					fmt.Sprintf("--inp=%s", m.Path),
+					fmt.Sprintf("--repo=%s", j.state.RepositoryPath),
+				)
+
+				out, err := cmd.Output()
+				if err != nil {
+					if perr, ok := errors.AsType[*exec.ExitError](err); ok {
+						slog.Error("unable to execute beats ", slog.String("path", m.Path), slog.Any("error", perr), slog.String("stderr", strings.TrimSpace(string(perr.Stderr))))
+						continue
+					} else {
+						return fmt.Errorf("jbeats failed for %s: %w", m.Path, err)
+					}
+
+				}
+				if len(out) == 0 {
+					return fmt.Errorf("no output was generated for %s", m.Path)
+				}
+				jsonPath := strings.TrimSpace(string(out))
+				if _, err := os.Stat(jsonPath); errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("output file does not exist for %s %s", m.Path, string(out))
+				}
+				data, err := os.ReadFile(jsonPath)
+				if err != nil {
+					return fmt.Errorf("read jbeats output for %s: %w", m.Path, err)
+				}
+				var fileResult ds.JBeatsFileResult
+				if err := json.Unmarshal(data, &fileResult); err != nil {
+					return fmt.Errorf("parse jbeats output for %s: %w", m.Path, err)
+				}
+				for _, fn := range fileResult.Functions {
+					meta := ds.ToFunctionMeta(fn)
+					if meta.TestCode || meta.GeneratedCode {
+						continue
+					}
+					meta.TokenSeqHash = hash.ComputeWindowHash(meta.TokenSeq)
+					localFncM = append(localFncM, meta)
+				}
+				os.Remove(jsonPath) //nolint errcheck
+			}
+			mu.Lock()
+			j.state.FunctionMetadata = append(j.state.FunctionMetadata, localFncM...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		slog.Error("unable to capture file metadata record", slog.Any("error", err))
+		return err
+	}
+	return nil
+}
+
 func (b *Beats) run(repo string) error {
 
 	s := &State{
@@ -476,6 +554,7 @@ func getCommands(s *State) []command {
 		&dbCleaner{state: s},
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
+		&javafunctionMetadata{state: s},
 		&identifyCluster{state: s},
 		&clusterClassifier{state: s},
 		&identifyClusterPersistor{state: s},

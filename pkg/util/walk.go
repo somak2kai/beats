@@ -32,7 +32,7 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 			// continue
 			return nil
 		}
-		if !isGoFile(entry.Name()) {
+		if !IsAcceptedLanguageFile(entry.Name()) {
 			// continue
 			return nil
 		}
@@ -49,7 +49,11 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 			resp[pkg] = []ds.FileMeta{{Name: entry.Name(), Path: path}}
 			return nil
 		}
-		resp[pkg] = append(resp[pkg], ds.FileMeta{Name: entry.Name(), Path: path})
+		lang := ds.Language_GOLANG
+		if strings.HasSuffix(path, ".java") {
+			lang = ds.Language_JAVA
+		}
+		resp[pkg] = append(resp[pkg], ds.FileMeta{Name: entry.Name(), Path: path, Lang: lang})
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("unable to collect file metadata err: %w", err)
@@ -57,8 +61,8 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 	return resp, nil
 }
 
-func isGoFile(file string) bool {
-	return strings.HasSuffix(file, ".go")
+func IsAcceptedLanguageFile(file string) bool {
+	return strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".java")
 }
 
 // skip proto generated files/ test and mock files.
