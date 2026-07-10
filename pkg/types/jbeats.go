@@ -2,27 +2,27 @@ package ds
 
 // JBeatsFunctionMeta mirrors the per-function JSON output from jbeats.
 type JBeatsFunctionMeta struct {
-	Name          string      `json:"name"`
-	PackageName   string      `json:"package_name"`
-	FileName      string      `json:"file_name"`
-	FilePath      string      `json:"file_path"`
-	StartLine     int         `json:"start_line"`
-	EndLine       int         `json:"end_line"`
-	LineCount     int         `json:"line_count"`
-	IsMethod      bool        `json:"is_method"`
-	IsExported    bool        `json:"is_exported"`
-	Receiver      string      `json:"receiver"`
-	Params        []ParamInfo `json:"params"`
+	Name          string       `json:"name"`
+	PackageName   string       `json:"package_name"`
+	FileName      string       `json:"file_name"`
+	FilePath      string       `json:"file_path"`
+	StartLine     int          `json:"start_line"`
+	EndLine       int          `json:"end_line"`
+	LineCount     int          `json:"line_count"`
+	IsMethod      bool         `json:"is_method"`
+	IsExported    bool         `json:"is_exported"`
+	Receiver      string       `json:"receiver"`
+	Params        []ParamInfo  `json:"params"`
 	Returns       []ReturnInfo `json:"returns"`
-	TokenSeq      []int       `json:"token_seq"`
-	TokenSeqHash  []int64     `json:"token_seq_hash"`
-	CallTargets   []string    `json:"call_targets"`
-	DirectImports []string    `json:"direct_imports"`
-	Imports       []string    `json:"imports"`
-	GeneratedCode bool        `json:"generated_code"`
-	TestCode      bool        `json:"test_code"`
-	IsConstructor bool        `json:"is_constructor"`
-	Body          string      `json:"body"`
+	TokenSeq      []int        `json:"token_seq"`
+	TokenSeqHash  []int64      `json:"token_seq_hash"`
+	CallTargets   []string     `json:"call_targets"`
+	DirectImports []string     `json:"direct_imports"`
+	Imports       []string     `json:"imports"`
+	GeneratedCode bool         `json:"generated_code"`
+	TestCode      bool         `json:"test_code"`
+	IsConstructor bool         `json:"is_constructor"`
+	Body          string       `json:"body"`
 }
 
 // JBeatsFileResult mirrors the top-level JSON output from jbeats for a single file.
