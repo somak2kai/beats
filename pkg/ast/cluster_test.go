@@ -276,7 +276,7 @@ func TestCompleteLinkageCheck_AllPairsAboveThreshold(t *testing.T) {
 		{1, 2}: 0.76,
 		{1, 3}: 0.78,
 	}
-	if !completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores) {
+	if !completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true — all cross-cluster pairs are above threshold")
 	}
 }
@@ -288,7 +288,7 @@ func TestCompleteLinkageCheck_MissingPairFails(t *testing.T) {
 		{1, 2}: 0.70,
 		{1, 3}: 0.60,
 	}
-	if completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores) {
+	if completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected false — missing pair is treated as score 0")
 	}
 }
@@ -300,7 +300,7 @@ func TestCompleteLinkageCheck_OnePairBelowThreshold(t *testing.T) {
 		{1, 2}: 0.70,
 		{1, 3}: 0.60,
 	}
-	if completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores) {
+	if completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected false — one cross-cluster pair is below threshold")
 	}
 }
@@ -309,14 +309,14 @@ func TestCompleteLinkageCheck_NormalisesIndexOrder(t *testing.T) {
 	// membA=[3], membB=[0]: a=3, b=0 → after swap i=0, j=3.
 	// Score is stored under key {0,3} — the check must normalise before lookup.
 	scores := map[pairKey]float64{{0, 3}: 0.80}
-	if !completeLinkageCheck([]int{3}, []int{0}, scores) {
+	if !completeLinkageCheckCfg([]int{3}, []int{0}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true — check must normalise (a,b) to (min,max) before lookup")
 	}
 }
 
 func TestCompleteLinkageCheck_SingletonClusters(t *testing.T) {
 	scores := map[pairKey]float64{{0, 1}: 0.80}
-	if !completeLinkageCheck([]int{0}, []int{1}, scores) {
+	if !completeLinkageCheckCfg([]int{0}, []int{1}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true for singleton clusters with a passing score")
 	}
 }

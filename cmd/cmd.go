@@ -140,6 +140,7 @@ func (f *functionMetadata) execute() error {
 		slog.Error("unable to capture file metadata record", slog.Any("error", err))
 		return err
 	}
+	slog.Info("parsed golang functions", slog.Int("total", len(f.state.FunctionMetadata)))
 	return nil
 }
 
@@ -189,7 +190,9 @@ func (a *analyzer) execute() error {
 func (m *analyzer) skipInDryRun() bool { return true }
 
 func (c *identifyCluster) execute() error {
-	clusters, orphans, err := ast.IdentifyClusters(c.state.FunctionMetadata)
+	cfg := ast.DefaultClusterConfig()
+
+	clusters, orphans, err := ast.IdentifyClustersWithConfig(c.state.FunctionMetadata, cfg)
 	if err != nil {
 		return err
 	}

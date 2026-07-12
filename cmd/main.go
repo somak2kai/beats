@@ -23,6 +23,8 @@ func main() {
 		runAnalyzeCmd(os.Args[2:])
 	case "query":
 		runQuery(os.Args[2:])
+	case "calibrate":
+		runCalibrate(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("beats %s\n", Version)
 	default:
@@ -34,10 +36,11 @@ func main() {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: beats <command> [flags]")
-	fmt.Fprintln(os.Stderr, "  beats init    --repo <path> [--dry-run]")
-	fmt.Fprintln(os.Stderr, "  beats query   outlier              --repo <path> [--format text|json]")
-	fmt.Fprintln(os.Stderr, "  beats query   cluster shape <hash> --repo <path> [--format text|json]")
-	fmt.Fprintln(os.Stderr, "  beats analyze --repo <path>")
+	fmt.Fprintln(os.Stderr, "  beats init      --repo <path> [--dry-run]")
+	fmt.Fprintln(os.Stderr, "  beats query     outlier              --repo <path> [--format text|json]")
+	fmt.Fprintln(os.Stderr, "  beats query     cluster shape <hash> --repo <path> [--format text|json]")
+	fmt.Fprintln(os.Stderr, "  beats analyze   --repo <path>")
+	fmt.Fprintln(os.Stderr, "  beats calibrate --repo <path> [--bootstraps N]")
 	fmt.Fprintln(os.Stderr, "  beats version")
 }
 
