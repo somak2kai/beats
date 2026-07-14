@@ -45,14 +45,15 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 		if err != nil {
 			return err
 		}
-		if _, ok := resp[pkg]; !ok {
-			resp[pkg] = []ds.FileMeta{{Name: entry.Name(), Path: path}}
-			return nil
-		}
 		lang := ds.Language_GOLANG
 		if strings.HasSuffix(path, ".java") {
 			lang = ds.Language_JAVA
 		}
+		if _, ok := resp[pkg]; !ok {
+			resp[pkg] = []ds.FileMeta{{Name: entry.Name(), Path: path, Lang: lang}}
+			return nil
+		}
+
 		resp[pkg] = append(resp[pkg], ds.FileMeta{Name: entry.Name(), Path: path, Lang: lang})
 		return nil
 	}); err != nil {
