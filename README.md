@@ -20,7 +20,9 @@ beats clusters Go functions by the **skeleton of how they are written** — inde
 
 For some quick easy context here are a couple of PRs that beats raised and merged:<br>
 - https://github.com/kubernetes/kubernetes/pull/139918
+- https://github.com/grafana/k6/pull/6147
 - https://github.com/mattermost/mattermost/pull/37045
+- https://github.com/rancher/rancher/pull/55552
 <br>
 
 > Why beats
