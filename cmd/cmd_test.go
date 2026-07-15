@@ -322,6 +322,36 @@ func TestTokenSetDiff_Sorted(t *testing.T) {
 	}
 }
 
+func TestTokenSetDiff_DuplicateTokenInLCS(t *testing.T) {
+	// Regression: orphan has CATCH once, cluster LCS has CATCH twice (two catch blocks).
+	// A pure type-presence (set) diff would report nothing because CATCH ∈ both.
+	// Multiset diff must report one CATCH as removed.
+	orphan := []int{ast.TK_CATCH}
+	lcs := []int{ast.TK_CATCH, ast.TK_CATCH}
+	added, removed := tokenSetDiff(orphan, lcs)
+	if len(added) != 0 {
+		t.Errorf("added: expected empty, got %v", added)
+	}
+	catchName := ast.TokenName(ast.TK_CATCH)
+	if len(removed) != 1 || removed[0] != catchName {
+		t.Errorf("removed: expected [%q], got %v", catchName, removed)
+	}
+}
+
+func TestTokenSetDiff_DuplicateTokenInOrphan(t *testing.T) {
+	// Symmetric case: orphan has CATCH twice, cluster LCS has it once → one CATCH added.
+	orphan := []int{ast.TK_CATCH, ast.TK_CATCH}
+	lcs := []int{ast.TK_CATCH}
+	added, removed := tokenSetDiff(orphan, lcs)
+	catchName := ast.TokenName(ast.TK_CATCH)
+	if len(added) != 1 || added[0] != catchName {
+		t.Errorf("added: expected [%q], got %v", catchName, added)
+	}
+	if len(removed) != 0 {
+		t.Errorf("removed: expected empty, got %v", removed)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // coherenceBadgeClass
 // ---------------------------------------------------------------------------

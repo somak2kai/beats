@@ -557,7 +557,7 @@ func getCommands(s *State) []command {
 		&dbCleaner{state: s},
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
-		&javafunctionMetadata{state: s},
+		// &javafunctionMetadata{state: s}, for now commented till i figure out few more results.
 		&identifyCluster{state: s},
 		&clusterClassifier{state: s},
 		&identifyClusterPersistor{state: s},

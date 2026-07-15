@@ -370,24 +370,35 @@ func buildSizeExplain(b [3]int) string {
 	}
 }
 
-// tokenSetDiff returns token type names in orphan but not in lcs (added) and vice versa. Set-based.
+// tokenSetDiff returns token type names that differ between orphan and lcs by count (multiset
+// semantics). A token that appears N times in orphan and M times in lcs contributes |N-M| entries
+// to added (if N>M) or removed (if M>N). This catches structural differences such as a missing
+// CATCH block that would be invisible to a pure type-presence (set) diff.
 func tokenSetDiff(orphanSeq, lcsSeq []int) (added, removed []string) {
-	orphanSet := make(map[int]bool, len(orphanSeq))
+	orphanCounts := make(map[int]int, len(orphanSeq))
 	for _, t := range orphanSeq {
-		orphanSet[t] = true
+		orphanCounts[t]++
 	}
-	lcsSet := make(map[int]bool, len(lcsSeq))
+	lcsCounts := make(map[int]int, len(lcsSeq))
 	for _, t := range lcsSeq {
-		lcsSet[t] = true
+		lcsCounts[t]++
 	}
-	for t := range orphanSet {
-		if !lcsSet[t] {
-			added = append(added, ast.TokenName(t))
+	// Collect all token types seen in either sequence.
+	allTypes := make(map[int]bool, len(orphanCounts)+len(lcsCounts))
+	for t := range orphanCounts {
+		allTypes[t] = true
+	}
+	for t := range lcsCounts {
+		allTypes[t] = true
+	}
+	for t := range allTypes {
+		o, l := orphanCounts[t], lcsCounts[t]
+		name := ast.TokenName(t)
+		for i := 0; i < o-l; i++ {
+			added = append(added, name)
 		}
-	}
-	for t := range lcsSet {
-		if !orphanSet[t] {
-			removed = append(removed, ast.TokenName(t))
+		for i := 0; i < l-o; i++ {
+			removed = append(removed, name)
 		}
 	}
 	sort.Strings(added)
