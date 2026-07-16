@@ -43,8 +43,8 @@ var (
 	_ skippable = (*indexPersistor)(nil)
 	_ command   = (*identifyCluster)(nil)
 	_ command   = (*clusterClassifier)(nil)
-	_ command   = (*identifyClusterPersistor)(nil)
-	_ skippable = (*identifyClusterPersistor)(nil)
+	_ command   = (*clusterPersistor)(nil)
+	_ skippable = (*clusterPersistor)(nil)
 	_ command   = (*analyzer)(nil)
 	_ skippable = (*analyzer)(nil)
 	_ command   = (*orphanAnalyzer)(nil)
@@ -66,7 +66,7 @@ type indexCommand struct{ state *State }
 type indexPersistor struct{ state *State }
 type identifyCluster struct{ state *State }
 type clusterClassifier struct{ state *State }
-type identifyClusterPersistor struct{ state *State }
+type clusterPersistor struct{ state *State }
 type analyzer struct{ state *State }
 type orphanAnalyzer struct{ state *State }
 type orphanPersistor struct{ state *State }
@@ -82,6 +82,15 @@ type State struct {
 	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
 	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
 	RepositoryPath    string
+	Index             ds.Index
+	Java              StateJava
+}
+
+type StateJava struct {
+	FunctionMetadata  []ds.FunctionMeta
+	IdentifiedCluster []ds.Cluster
+	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
+	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
 	Index             ds.Index
 }
 
@@ -146,6 +155,7 @@ func (f *functionMetadata) execute() error {
 
 func (i *indexCommand) execute() error {
 	i.state.Index = ds.PopulateIndex(i.state.FunctionMetadata)
+	i.state.Java.Index = ds.PopulateIndex(i.state.Java.FunctionMetadata)
 	return nil
 }
 
@@ -154,25 +164,35 @@ func (w *indexPersistor) execute() error {
 	tmp := beatsDBPath(w.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
-	for k, v := range w.state.Index.Postings {
-		if err := bDb.StorePostings(k, v); err != nil {
-			slog.Error("unable to save inverted index", slog.Any("error", err))
-			return err
-		}
-	}
 
-	for k, v := range w.state.Index.DocFreq {
-		if err := bDb.StoreDocFreq(k, v); err != nil {
-			slog.Error("unable to save document frequency", slog.Any("error", err))
-			return err
+	store := func(index ds.Index, lang ds.Language) error {
+		for k, v := range index.Postings {
+			if err := bDb.StorePostings(k, lang, v); err != nil {
+				slog.Error("unable to save inverted index", slog.Any("error", err))
+				return err
+			}
 		}
-	}
 
-	for k, v := range w.state.Index.FuncMeta {
-		if err := bDb.StoreFunctionMeta(k, v); err != nil {
-			slog.Error("unable to save function metadata", slog.Any("error", err))
-			return err
+		for k, v := range index.DocFreq {
+			if err := bDb.StoreDocFreq(k, lang, v); err != nil {
+				slog.Error("unable to save document frequency", slog.Any("error", err))
+				return err
+			}
 		}
+
+		for k, v := range index.FuncMeta {
+			if err := bDb.StoreFunctionMeta(k, lang, v); err != nil {
+				slog.Error("unable to save function metadata", slog.Any("error", err))
+				return err
+			}
+		}
+		return nil
+	}
+	if err := store(w.state.Index, ds.Language_GOLANG); err != nil {
+		return err
+	}
+	if err := store(w.state.Java.Index, ds.Language_JAVA); err != nil {
+		return err
 	}
 	return nil
 }
@@ -181,7 +201,9 @@ func (w *indexPersistor) skipInDryRun() bool {
 }
 
 func (a *analyzer) execute() error {
-	if len(a.state.IdentifiedCluster) == 0 || len(a.state.OrphanMetas) == 0 {
+	goHasData := len(a.state.IdentifiedCluster) > 0 && len(a.state.OrphanMetas) > 0
+	javaHasData := len(a.state.Java.IdentifiedCluster) > 0 && len(a.state.Java.OrphanMetas) > 0
+	if !goHasData && !javaHasData {
 		return nil
 	}
 	return runAnalyze(a.state.RepositoryPath)
@@ -191,16 +213,35 @@ func (m *analyzer) skipInDryRun() bool { return true }
 
 func (c *identifyCluster) execute() error {
 	cfg := ast.DefaultClusterConfig()
+	cluster := func(fMeta []ds.FunctionMeta, lang ds.Language) ([]ds.Cluster, []ds.FunctionMeta, error) {
+		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		return clusters, orphans, nil
+	}
 
-	clusters, orphans, err := ast.IdentifyClustersWithConfig(c.state.FunctionMetadata, cfg)
+	cl, o, err := cluster(c.state.FunctionMetadata, ds.Language_GOLANG)
 	if err != nil {
 		return err
 	}
-	c.state.IdentifiedCluster = clusters
-	c.state.OrphanMetas = orphans
-	slog.Info("identified clusters",
-		slog.Int("count", len(clusters)),
-		slog.Int("orphans", len(orphans)),
+	c.state.IdentifiedCluster = cl
+	c.state.OrphanMetas = o
+
+	clj, oj, err := cluster(c.state.Java.FunctionMetadata, ds.Language_JAVA)
+	if err != nil {
+		return err
+	}
+	c.state.Java.IdentifiedCluster = clj
+	c.state.Java.OrphanMetas = oj
+
+	slog.Info("identified golang clusters",
+		slog.Int("count", len(c.state.IdentifiedCluster)),
+		slog.Int("orphans", len(c.state.OrphanMetas)),
+	)
+	slog.Info("identified java clusters",
+		slog.Int("count", len(c.state.Java.IdentifiedCluster)),
+		slog.Int("orphans", len(c.state.Java.OrphanMetas)),
 	)
 	return nil
 }
@@ -262,92 +303,135 @@ func clusterCompositeScore(size, numPackages int, tier string, meanScore, import
 // cluster in State after IdentifyClusters has run. It must execute before
 // identifyClusterPersistor so the values are saved to the DB.
 func (c *clusterClassifier) execute() error {
-	var high, medium, low int
-	for i := range c.state.IdentifiedCluster {
-		cl := &c.state.IdentifiedCluster[i]
-		if cl.IsPrimitive {
-			continue
+
+	classify := func(cluster []ds.Cluster, lang ds.Language) {
+
+		var high, medium, low int
+		for _, cl := range cluster {
+			if cl.IsPrimitive {
+				continue
+			}
+			cl.Tier = clusterTier(cl.Stats.StdScore)
+			pkgSet := make(map[string]struct{}, len(cl.Members))
+			for _, m := range cl.Members {
+				pkgSet[m.Package] = struct{}{}
+			}
+			cl.CompositeScore = clusterCompositeScore(cl.Size, len(pkgSet), cl.Tier, cl.Stats.MeanScore, cl.Coherence, cl.CallCoherence)
+			switch cl.Tier {
+			case "high":
+				high++
+			case "medium":
+				medium++
+			default:
+				low++
+			}
 		}
-		cl.Tier = clusterTier(cl.Stats.StdScore)
-		pkgSet := make(map[string]struct{}, len(cl.Members))
-		for _, m := range cl.Members {
-			pkgSet[m.Package] = struct{}{}
-		}
-		cl.CompositeScore = clusterCompositeScore(cl.Size, len(pkgSet), cl.Tier, cl.Stats.MeanScore, cl.Coherence, cl.CallCoherence)
-		switch cl.Tier {
-		case "high":
-			high++
-		case "medium":
-			medium++
-		default:
-			low++
+		if lang == ds.Language_GOLANG {
+			slog.Info("golang clusters classified",
+				slog.Int("high", high),
+				slog.Int("medium", medium),
+				slog.Int("low", low),
+			)
+		} else {
+			slog.Info("java clusters classified",
+				slog.Int("high", high),
+				slog.Int("medium", medium),
+				slog.Int("low", low),
+			)
 		}
 	}
-	slog.Info("clusters classified",
-		slog.Int("high", high),
-		slog.Int("medium", medium),
-		slog.Int("low", low),
-	)
+	classify(c.state.IdentifiedCluster, ds.Language_GOLANG)
+	classify(c.state.Java.IdentifiedCluster, ds.Language_JAVA)
+
 	return nil
 }
 
-func (c *identifyClusterPersistor) execute() error {
+func (c *clusterPersistor) execute() error {
 	tmp := beatsDBPath(c.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
-	for idx, cl := range c.state.IdentifiedCluster {
-		if cl.IsPrimitive {
-			continue
+	persist := func(clusters []ds.Cluster, lang ds.Language) error {
+
+		for idx, cl := range clusters {
+			if cl.IsPrimitive {
+				continue
+			}
+			if err := bDb.StoreClusterByIndex(db.TierIdentified, idx, string(lang), cl); err != nil {
+				slog.Error("unable to save identified cluster",
+					slog.Int("index", idx),
+					slog.String("shape_hash", cl.ShapeHash),
+					slog.Any("error", err),
+				)
+				return err
+			}
 		}
-		if err := bDb.StoreClusterByIndex(db.TierIdentified, idx, cl); err != nil {
-			slog.Error("unable to save identified cluster",
-				slog.Int("index", idx),
-				slog.String("shape_hash", cl.ShapeHash),
-				slog.Any("error", err),
-			)
-			return err
-		}
+		return nil
 	}
-	count := len(c.state.IdentifiedCluster)
-	if err := bDb.StoreClusterCount(db.TierIdentified, count); err != nil {
-		slog.Error("unable to save cluster count", slog.Any("error", err))
+	if err := persist(c.state.IdentifiedCluster, ds.Language_GOLANG); err != nil {
 		return err
 	}
-	slog.Info("identified clusters persisted", slog.Int("count", count))
+	if err := persist(c.state.Java.IdentifiedCluster, ds.Language_JAVA); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (c *identifyClusterPersistor) skipInDryRun() bool { return true }
+func (c *clusterPersistor) skipInDryRun() bool { return true }
 
 func (o *orphanAnalyzer) execute() error {
 
-	if len(o.state.IdentifiedCluster) == 0 || len(o.state.OrphanMetas) == 0 {
-		return nil
+	analyze := func(cltrs []ds.Cluster, orphans []ds.FunctionMeta) ([]ds.OrphanedFunction, error) {
+
+		if len(cltrs) == 0 || len(orphans) == 0 {
+			return nil, nil
+		}
+		result, err := ast.IdentifyOrphans(orphans, cltrs)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
-	result, err := ast.IdentifyOrphans(o.state.OrphanMetas, o.state.IdentifiedCluster)
+
+	r, err := analyze(o.state.IdentifiedCluster, o.state.OrphanMetas)
 	if err != nil {
 		return err
 	}
-	o.state.OrphanedFunctions = result
+	o.state.OrphanedFunctions = r
+
+	rj, err := analyze(o.state.Java.IdentifiedCluster, o.state.Java.OrphanMetas)
+	if err != nil {
+		return err
+	}
+	o.state.Java.OrphanedFunctions = rj
+
 	return nil
 }
 
 func (o *orphanAnalyzer) skipInDryRun() bool { return false }
 
 func (p *orphanPersistor) execute() error {
-	if len(p.state.OrphanedFunctions) == 0 {
-		return nil
-	}
+
 	tmp := beatsDBPath(p.state.RepositoryPath)
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
-
-	if err := bDb.StoreOrphanedFunctions(p.state.OrphanedFunctions); err != nil {
-		slog.Error("unable to persist orphaned functions", slog.Any("error", err))
+	store := func(orphans []ds.OrphanedFunction, lang ds.Language) error {
+		if len(orphans) == 0 {
+			return nil
+		}
+		if err := bDb.StoreOrphanedFunctions(orphans, lang); err != nil {
+			slog.Error("unable to persist orphaned functions", slog.String("language", string(lang)), slog.Any("error", err))
+			return err
+		}
+		return nil
+	}
+	if err := store(p.state.OrphanedFunctions, ds.Language_GOLANG); err != nil {
 		return err
 	}
-	slog.Info("orphaned functions persisted", slog.Int("count", len(p.state.OrphanedFunctions)))
+	if err := store(p.state.Java.OrphanedFunctions, ds.Language_JAVA); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -357,21 +441,23 @@ func (p *orphanPersistor) skipInDryRun() bool { return true }
 // document containing every outlier and its closest cluster's peer bodies in
 // the exact format the beats-analyze LLM skill expects as its user message.
 func (o *outlierWriter) execute() error {
-	if len(o.state.OrphanedFunctions) == 0 {
+	allOrphans := append(o.state.OrphanedFunctions, o.state.Java.OrphanedFunctions...)
+	if len(allOrphans) == 0 {
 		slog.Info("no orphaned functions — skipping outlier.md")
 		return nil
 	}
 
-	// Index non-primitive clusters by ShapeHash.
-	clusterByHash := make(map[string]ds.Cluster, len(o.state.IdentifiedCluster))
-	for _, cl := range o.state.IdentifiedCluster {
+	// Index non-primitive clusters by ShapeHash (both Go and Java).
+	allClusters := append(o.state.IdentifiedCluster, o.state.Java.IdentifiedCluster...)
+	clusterByHash := make(map[string]ds.Cluster, len(allClusters))
+	for _, cl := range allClusters {
 		if !cl.IsPrimitive && cl.ShapeHash != "" {
 			clusterByHash[cl.ShapeHash] = cl
 		}
 	}
 
 	// Build the same OutlierResult slice the query command produces.
-	results := buildOutlierResults(o.state.OrphanedFunctions, clusterByHash)
+	results := buildOutlierResults(allOrphans, clusterByHash)
 	if len(results) == 0 {
 		slog.Info("no outlier results with candidates — skipping outlier.md")
 		return nil
@@ -466,6 +552,7 @@ func (j *javafunctionMetadata) execute() error {
 	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
+	j.state.Java = StateJava{FunctionMetadata: make([]ds.FunctionMeta, 0)}
 	for _, val := range j.state.PkgToFileMetadata {
 		val := val
 		g.Go(func() error {
@@ -517,7 +604,7 @@ func (j *javafunctionMetadata) execute() error {
 				os.Remove(jsonPath) //nolint errcheck
 			}
 			mu.Lock()
-			j.state.FunctionMetadata = append(j.state.FunctionMetadata, localFncM...)
+			j.state.Java.FunctionMetadata = append(j.state.Java.FunctionMetadata, localFncM...)
 			mu.Unlock()
 			return nil
 		})
@@ -527,6 +614,7 @@ func (j *javafunctionMetadata) execute() error {
 		slog.Error("unable to capture file metadata record", slog.Any("error", err))
 		return err
 	}
+	slog.Info("total number of java functions", slog.Int("count", len(j.state.Java.FunctionMetadata)))
 	return nil
 }
 
@@ -557,10 +645,10 @@ func getCommands(s *State) []command {
 		&dbCleaner{state: s},
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
-		// &javafunctionMetadata{state: s}, for now commented till i figure out few more results.
+		&javafunctionMetadata{state: s},
 		&identifyCluster{state: s},
 		&clusterClassifier{state: s},
-		&identifyClusterPersistor{state: s},
+		&clusterPersistor{state: s},
 		&orphanAnalyzer{state: s},
 		&orphanPersistor{state: s},
 		&indexCommand{state: s},

@@ -57,18 +57,18 @@ func (d *BadgerXDb) Close() error {
 	return d.db.Close()
 }
 
-func (d *BadgerXDb) StoreFunctionMeta(id string, fn ds.FunctionMeta) error {
-	key := append([]byte("fncId:"), []byte(id)...)
+func (d *BadgerXDb) StoreFunctionMeta(id string, lang ds.Language, fn ds.FunctionMeta) error {
+	key := append([]byte("fncId:"+string(lang)+":"), []byte(id)...)
 	return d.db.Update(key, fn)
 }
 
-func (d *BadgerXDb) StorePostings(hash int64, fnId []string) error {
-	key := append([]byte("post:"), int64ToBytes(hash)...)
+func (d *BadgerXDb) StorePostings(hash int64, lang ds.Language, fnId []string) error {
+	key := append([]byte("post:"+string(lang)+":"), int64ToBytes(hash)...)
 	return d.db.Update(key, fnId)
 }
 
-func (d *BadgerXDb) StoreDocFreq(hash int64, count int) error {
-	key := append([]byte("freq:"), int64ToBytes(hash)...)
+func (d *BadgerXDb) StoreDocFreq(hash int64, lang ds.Language, count int) error {
+	key := append([]byte("freq:"+string(lang)+":"), int64ToBytes(hash)...)
 	return d.db.Update(key, count)
 }
 
@@ -80,14 +80,14 @@ func (d *BadgerXDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
 // StoreClusterByIndex stores a cluster under a zero-padded numeric key so that
 // clusters can be retrieved by sequential index without knowing the shape hash.
 // Key format: cluster:<tier>:<10-digit-index>  e.g. cluster:identified:0000000042
-func (d *BadgerXDb) StoreClusterByIndex(tier string, idx int, c ds.Cluster) error {
-	key := fmt.Sprintf("cluster:%s:%05d", tier, idx)
+func (d *BadgerXDb) StoreClusterByIndex(tier string, idx int, lang string, c ds.Cluster) error {
+	key := fmt.Sprintf("cluster:%s:%s:%05d", tier, lang, idx)
 	return d.db.Update([]byte(key), c)
 }
 
 // LoadClusterByIndex retrieves a single cluster by tier and numeric index.
-func (d *BadgerXDb) LoadClusterByIndex(tier string, idx int) (ds.Cluster, error) {
-	key := fmt.Sprintf("cluster:%s:%05d", tier, idx)
+func (d *BadgerXDb) LoadClusterByIndex(tier string, lang string, idx int) (ds.Cluster, error) {
+	key := fmt.Sprintf("cluster:%s:%s:%05d", tier, lang, idx)
 	var c ds.Cluster
 	err := d.db.View([]byte(key), &c)
 	return c, err
@@ -125,15 +125,15 @@ func int64ToBytes(hash int64) []byte {
 
 // StoreOrphanedFunctions persists the full slice of OrphanedFunction values.
 // Key: meta:orphans
-func (d *BadgerXDb) StoreOrphanedFunctions(orphans []ds.OrphanedFunction) error {
-	return d.db.Update([]byte("meta:orphans"), orphans)
+func (d *BadgerXDb) StoreOrphanedFunctions(orphans []ds.OrphanedFunction, lang ds.Language) error {
+	return d.db.Update([]byte("meta:orphans:"+string(lang)), orphans)
 }
 
 // LoadOrphanedFunctions retrieves the orphaned functions slice, or returns an
 // empty slice when none have been stored yet.
-func (d *BadgerXDb) LoadOrphanedFunctions() ([]ds.OrphanedFunction, error) {
+func (d *BadgerXDb) LoadOrphanedFunctions(lang ds.Language) ([]ds.OrphanedFunction, error) {
 	var orphans []ds.OrphanedFunction
-	err := d.db.View([]byte("meta:orphans"), &orphans)
+	err := d.db.View([]byte("meta:orphans:"+string(lang)), &orphans)
 	if err != nil {
 		// Key not found is not an error — orphan analysis may not have run yet
 		return nil, nil

@@ -37,12 +37,12 @@ func TestStoreFunctionMeta_RoundTrip(t *testing.T) {
 		DirectImports: []string{"fmt", "os"},
 		CallTargets:   []string{"fmt.Println"},
 	}
-	if err := bdb.StoreFunctionMeta("fn-001", fn); err != nil {
+	if err := bdb.StoreFunctionMeta("fn-001", ds.Language_GOLANG, fn); err != nil {
 		t.Fatalf("StoreFunctionMeta: %v", err)
 	}
 
 	var got ds.FunctionMeta
-	key := append([]byte("fncId:"), []byte("fn-001")...)
+	key := append([]byte("fncId:golang:"), []byte("fn-001")...)
 	if err := bdb.db.View(key, &got); err != nil {
 		t.Fatalf("View FunctionMeta: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestStoreCluster_DifferentTiersSameHash(t *testing.T) {
 func TestStorePostings_NoError(t *testing.T) {
 	bdb := newTestDb(t)
 	ids := []string{"fn-001", "fn-002", "fn-003"}
-	if err := bdb.StorePostings(12345, ids); err != nil {
+	if err := bdb.StorePostings(12345, ds.Language_GOLANG, ids); err != nil {
 		t.Fatalf("StorePostings: %v", err)
 	}
 }
@@ -142,10 +142,10 @@ func TestStorePostings_NoError(t *testing.T) {
 func TestStorePostings_RoundTrip(t *testing.T) {
 	bdb := newTestDb(t)
 	ids := []string{"fn-001", "fn-002"}
-	if err := bdb.StorePostings(99, ids); err != nil {
+	if err := bdb.StorePostings(99, ds.Language_GOLANG, ids); err != nil {
 		t.Fatalf("StorePostings: %v", err)
 	}
-	key := append([]byte("post:"), int64ToBytes(99)...)
+	key := append([]byte("post:golang:"), int64ToBytes(99)...)
 	var got []string
 	if err := bdb.db.View(key, &got); err != nil {
 		t.Fatalf("View postings: %v", err)
@@ -159,17 +159,17 @@ func TestStorePostings_RoundTrip(t *testing.T) {
 
 func TestStoreDocFreq_NoError(t *testing.T) {
 	bdb := newTestDb(t)
-	if err := bdb.StoreDocFreq(77777, 42); err != nil {
+	if err := bdb.StoreDocFreq(77777, ds.Language_GOLANG, 42); err != nil {
 		t.Fatalf("StoreDocFreq: %v", err)
 	}
 }
 
 func TestStoreDocFreq_RoundTrip(t *testing.T) {
 	bdb := newTestDb(t)
-	if err := bdb.StoreDocFreq(88888, 17); err != nil {
+	if err := bdb.StoreDocFreq(88888, ds.Language_GOLANG, 17); err != nil {
 		t.Fatalf("StoreDocFreq: %v", err)
 	}
-	key := append([]byte("freq:"), int64ToBytes(88888)...)
+	key := append([]byte("freq:golang:"), int64ToBytes(88888)...)
 	var got int
 	if err := bdb.db.View(key, &got); err != nil {
 		t.Fatalf("View docfreq: %v", err)

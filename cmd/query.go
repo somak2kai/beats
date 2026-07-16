@@ -107,7 +107,9 @@ func runQueryOutlier(args []string) {
 	bDb := openQueryDB(*repo)
 	defer bDb.Close() //nolint:errcheck
 
-	orphans, err := bDb.LoadOrphanedFunctions()
+	goOrphans, err := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
+	javaOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	orphans := append(goOrphans, javaOrphans...)
 	if err != nil || len(orphans) == 0 {
 		fmt.Fprintln(os.Stderr, "no orphaned functions found — run beats init first")
 		return

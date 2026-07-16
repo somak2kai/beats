@@ -167,7 +167,9 @@ func runAnalyze(repo string) error {
 
 	slog.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
-	orphans, _ := bDb.LoadOrphanedFunctions() // best-effort; nil if not yet computed
+	goOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
+	javaOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	orphans := append(goOrphans, javaOrphans...) // best-effort; nil if not yet computed
 
 	report := buildReport(repo, clusters, orphans)
 
