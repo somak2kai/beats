@@ -12,7 +12,7 @@
 
 # beats
 
-> Measure the structural fingerprint of a Go codebase.
+> Measure the structural fingerprint of a Go/Java codebase.
 
 beats clusters Go and Java functions by the **skeleton of how they are written** — independent of names, comments, domain vocabulary or semantic meaning. The goal is to find meaningful patterns in code by looking at what it does structurally, not what it means semantically.
 
