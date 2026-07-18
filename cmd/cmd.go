@@ -563,7 +563,7 @@ func (j *javafunctionMetadata) execute() error {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, "/Users/admin/ws/java/jbeats/target/jbeats",
+				cmd := exec.CommandContext(ctx, "./jbeats",
 					fmt.Sprintf("--inp=%s", m.Path),
 					fmt.Sprintf("--repo=%s", j.state.RepositoryPath),
 				)
