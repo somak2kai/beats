@@ -18,12 +18,15 @@ beats clusters Go and Java functions by the **skeleton of how they are written**
 
 📖 [Read the full story on Medium →](https://medium.com/@somaktukai/structural-fingerprint-for-golang-repositories-a-case-study-ae560bafec84)
 
-For some quick easy context here are a couple of PRs that beats raised and merged:<br>
-- https://github.com/kubernetes/kubernetes/pull/139918
-- https://github.com/grafana/k6/pull/6147
-- https://github.com/mattermost/mattermost/pull/37045
-- https://github.com/rancher/rancher/pull/55552
-<br>
+For some quick easy context here are a couple of PRs that beats raised and merged:
+
+| PR | Description |
+|---|---|
+| [kubernetes/kubernetes#139918](https://github.com/kubernetes/kubernetes/pull/139918) | CronJob controller missed `queue.Forget` on the `(nil, nil)` sync path, leaving stale rate-limiter backoff |
+| [grafana/k6#6147](https://github.com/grafana/k6/pull/6147) | Fixed a data race and TOCTOU inconsistency in route operation |
+| [apache/rocketmq#10631](https://github.com/apache/rocketmq/pull/10631) | Fixed a data race and TOCTOU inconsistency |
+| [mattermost/mattermost#37045](https://github.com/mattermost/mattermost/pull/37045) | Fixed a panic from accessing `options.Etag` outside its nil guard |
+| [rancher/rancher#55552](https://github.com/rancher/rancher/pull/55552) | Added missing validation for empty project id/zone in GKE disk type lister |
 
 > Why beats
 
