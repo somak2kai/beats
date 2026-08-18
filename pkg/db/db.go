@@ -46,7 +46,7 @@ func NewBadgerXDb(path string) *BadgerXDb {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &BadgerXDb{badgerx.NewBadgerXDb(db, badgerx.WithCompressor(&badgerx.DefaultNoOpCompressor{}))}
+	return &BadgerXDb{badgerx.NewBadgerXDb(db, badgerx.WithCompressor(&badgerx.SnappyCompressor{}))}
 }
 
 func (d *BadgerDb) Close() error {
