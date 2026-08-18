@@ -49,6 +49,7 @@ jobs:
       - name: Install beats
         run: |
           brew tap somak2kai/tap
+          brew trust somak2kai/tap
           brew install beats
           beats --version || true
 
@@ -121,4 +122,4 @@ jobs:
 
       - name: Log out from GHCR
         if: always()
-        run: oras logout ghcr.io
+        run: command -v oras && oras logout ghcr.io || true
