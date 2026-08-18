@@ -11,7 +11,7 @@
 #
 # Tag scheme:
 #   <branch>-<YYYY-MM-DD>   — immutable, one per run
-#   <branch>-latest         — rolling, always points to newest run
+#   <branch>-<short-sha>    — commit-pinned, ties snapshot to exact source
 #
 # Supply-chain: every third-party action is pinned to a full commit SHA.
 
@@ -79,7 +79,8 @@ jobs:
           echo "date=$DATE"                                      >> "$GITHUB_OUTPUT"
           echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"       >> "$GITHUB_OUTPUT"
           echo "tag=${{ env.BRANCH }}-${DATE}"                   >> "$GITHUB_OUTPUT"
-          echo "rolling=${{ env.BRANCH }}-latest"                >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "rolling=${{ env.BRANCH }}-$(git rev-parse --short HEAD)"                >> "$GITHUB_OUTPUT"
 
       # ── 6. Push to GHCR via ORAS ──────────────────────────────────────
       - name: Set up ORAS
