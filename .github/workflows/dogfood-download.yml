@@ -1,0 +1,110 @@
+# Companion workflow for dogfood.yml — search for and retrieve a
+# previously archived BadgerDB snapshot from GHCR.
+#
+# Uses the same tag scheme:  <branch>-<YYYY-MM-DD>  or  <branch>-latest
+#
+# Authentication:
+#   Within this repo → GITHUB_TOKEN (keyless, automatic).
+#   From another repo → store a fine-grained PAT (read:packages scope)
+#   as a secret and replace secrets.GITHUB_TOKEN below.
+
+name: Dogfood Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch name used in the dogfood run"
+        required: true
+        default: "main"
+      date:
+        description: "Date of the run (YYYY-MM-DD) or 'latest'"
+        required: true
+        default: "latest"
+      mode:
+        description: "What to do"
+        required: true
+        type: choice
+        options:
+          - download   # pull the artifact and attach to this run
+          - list-tags  # show every available tag
+          - inspect    # fetch and display the manifest annotations
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  ARTIFACT_REPO: ghcr.io/somak2kai/beats/dogfood-db
+
+jobs:
+  retrieve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Log in to GHCR
+        run: oras login ghcr.io -u "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}"
+
+      # ── List tags ─────────────────────────────────────────────────────
+      - name: List available tags
+        if: inputs.mode == 'list-tags'
+        run: |
+          echo "### Available tags" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          oras repo tags "${{ env.ARTIFACT_REPO }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Resolve the OCI tag from inputs ───────────────────────────────
+      - name: Resolve tag
+        if: inputs.mode != 'list-tags'
+        id: tag
+        run: |
+          if [ "${{ inputs.date }}" = "latest" ]; then
+            TAG="${{ inputs.branch }}-latest"
+          else
+            TAG="${{ inputs.branch }}-${{ inputs.date }}"
+          fi
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG}"
+
+      # ── Inspect ───────────────────────────────────────────────────────
+      - name: Inspect manifest annotations
+        if: inputs.mode == 'inspect'
+        run: |
+          echo "### Manifest for \`${{ steps.tag.outputs.value }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          oras manifest fetch "${{ env.ARTIFACT_REPO }}:${{ steps.tag.outputs.value }}" \
+            | jq . | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Download ──────────────────────────────────────────────────────
+      - name: Pull artifact
+        if: inputs.mode == 'download'
+        run: |
+          mkdir -p output
+          oras pull "${{ env.ARTIFACT_REPO }}:${{ steps.tag.outputs.value }}" -o ./output
+          echo "Downloaded files:"
+          ls -lh ./output/
+
+      - name: Show metadata
+        if: inputs.mode == 'download'
+        run: |
+          echo "### Downloaded \`${{ steps.tag.outputs.value }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          oras manifest fetch "${{ env.ARTIFACT_REPO }}:${{ steps.tag.outputs.value }}" \
+            | jq '.annotations' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload as workflow artifact
+        if: inputs.mode == 'download'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: beats-dogfood-db-${{ steps.tag.outputs.value }}
+          path: ./output/
+          retention-days: 7
+
+      - name: Log out from GHCR
+        if: always()
+        run: oras logout ghcr.io

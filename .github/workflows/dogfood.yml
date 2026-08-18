@@ -1,0 +1,124 @@
+# Dogfood: run beats against its own repository daily and archive the
+# resulting BadgerDB snapshot as an OCI artifact on GHCR.
+#
+# Schedule : 18:00 IST (12:30 UTC) every day.
+# Protection: The GHCR package inherits the repository's visibility
+#             (private by default). Within this repo's workflows the
+#             auto-generated GITHUB_TOKEN provides keyless read/write
+#             access.  External consumers need a fine-grained PAT with
+#             read:packages scope — see dogfood-download.yml for the
+#             retrieval pattern.
+#
+# Tag scheme:
+#   <branch>-<YYYY-MM-DD>   — immutable, one per run
+#   <branch>-latest         — rolling, always points to newest run
+#
+# Supply-chain: every third-party action is pinned to a full commit SHA.
+
+name: Dogfood
+
+on:
+  schedule:
+    # 18:00 IST = 12:30 UTC
+    - cron: "30 12 * * *"
+  workflow_dispatch: # allow manual re-runs for testing
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  ARTIFACT_REPO: ghcr.io/somak2kai/beats/dogfood-db
+  BRANCH: main
+
+jobs:
+  dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      # ── 1. Clone the beats repo (full history for accurate analysis) ──
+      - name: Checkout beats
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: ${{ env.BRANCH }}
+          fetch-depth: 0
+
+      # ── 2. Install beats CLI via Homebrew ─────────────────────────────
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4
+
+      - name: Install beats
+        run: |
+          brew tap somak2kai/tap
+          brew install beats
+          beats --version || true
+
+      # ── 3. Run beats init against the checked-out repo ────────────────
+      - name: Run beats init
+        run: beats init --repo "$GITHUB_WORKSPACE"
+
+      # ── 4. Package the BadgerDB directory ─────────────────────────────
+      # beats stores badgerdb at  ~/.beats/badger/<repo-path>
+      - name: Tar BadgerDB
+        run: |
+          DB_ROOT="$HOME/.beats"
+          if [ ! -d "$DB_ROOT" ]; then
+            echo "::error::beats database directory not found at $DB_ROOT"
+            exit 1
+          fi
+          echo "Database contents:"
+          find "$DB_ROOT" -type f | head -40
+          tar -czf beats-dogfood-db.tar.gz -C "$HOME" .beats/
+          echo "Archive size: $(du -h beats-dogfood-db.tar.gz | cut -f1)"
+
+      # ── 5. Compute metadata for annotations and tags ──────────────────
+      - name: Prepare metadata
+        id: meta
+        run: |
+          DATE="$(date -u +%Y-%m-%d)"
+          echo "date=$DATE"                                      >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"       >> "$GITHUB_OUTPUT"
+          echo "tag=${{ env.BRANCH }}-${DATE}"                   >> "$GITHUB_OUTPUT"
+          echo "rolling=${{ env.BRANCH }}-latest"                >> "$GITHUB_OUTPUT"
+
+      # ── 6. Push to GHCR via ORAS ──────────────────────────────────────
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Log in to GHCR
+        run: oras login ghcr.io -u "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Push artifact
+        run: |
+          oras push "${{ env.ARTIFACT_REPO }}:${{ steps.meta.outputs.tag }}" \
+            --artifact-type "application/vnd.beats.dogfood.v1" \
+            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --annotation "org.opencontainers.image.created=${{ steps.meta.outputs.timestamp }}" \
+            --annotation "dev.beats.repo=${{ github.repository }}" \
+            --annotation "dev.beats.branch=${{ env.BRANCH }}" \
+            --annotation "dev.beats.date=${{ steps.meta.outputs.date }}" \
+            --annotation "dev.beats.run-id=${{ github.run_id }}" \
+            "beats-dogfood-db.tar.gz:application/vnd.beats.dogfood.db.v1.tar+gzip"
+
+          # Point the rolling tag at the same manifest
+          oras tag "${{ env.ARTIFACT_REPO }}:${{ steps.meta.outputs.tag }}" \
+            "${{ steps.meta.outputs.rolling }}"
+
+      - name: Summary
+        run: |
+          echo "### Dogfood artifact pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Registry | \`${{ env.ARTIFACT_REPO }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Date tag | \`${{ steps.meta.outputs.tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rolling tag | \`${{ steps.meta.outputs.rolling }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run ID | \`${{ github.run_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pull with:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "oras pull ${{ env.ARTIFACT_REPO }}:${{ steps.meta.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out from GHCR
+        if: always()
+        run: oras logout ghcr.io
