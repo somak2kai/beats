@@ -13,6 +13,9 @@
 #   <branch>-<YYYY-MM-DD>   — immutable, one per run
 #   <branch>-<short-sha>    — commit-pinned, ties snapshot to exact source
 #
+# Package naming: ghcr.io/<owner>/<repo-name>-compressed-db
+# Portable across repos — copy this workflow to any repo and it adapts.
+#
 # Supply-chain: every third-party action is pinned to a full commit SHA.
 
 name: Dogfood
@@ -28,7 +31,7 @@ permissions:
   packages: write
 
 env:
-  ARTIFACT_REPO: ghcr.io/somak2kai/beats/dogfood-db
+  ARTIFACT_REPO: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-compressed-db
   BRANCH: main
 
 jobs:
@@ -68,8 +71,8 @@ jobs:
           fi
           echo "Database contents:"
           find "$DB_ROOT" -type f | head -40
-          tar -czf beats-dogfood-db.tar.gz -C "$HOME" .beats/
-          echo "Archive size: $(du -h beats-dogfood-db.tar.gz | cut -f1)"
+          tar -czf ${{ github.event.repository.name }}-compressed-db.tar.gz -C "$HOME" .beats/
+          echo "Archive size: $(du -h ${{ github.event.repository.name }}-compressed-db.tar.gz | cut -f1)"
 
       # ── 5. Compute metadata for annotations and tags ──────────────────
       - name: Prepare metadata
@@ -99,7 +102,7 @@ jobs:
             --annotation "dev.beats.branch=${{ env.BRANCH }}" \
             --annotation "dev.beats.date=${{ steps.meta.outputs.date }}" \
             --annotation "dev.beats.run-id=${{ github.run_id }}" \
-            "beats-dogfood-db.tar.gz:application/vnd.beats.dogfood.db.v1.tar+gzip"
+            "${{ github.event.repository.name }}-compressed-db.tar.gz:application/vnd.beats.dogfood.db.v1.tar+gzip"
 
           # Point the rolling tag at the same manifest
           oras tag "${{ env.ARTIFACT_REPO }}:${{ steps.meta.outputs.tag }}" \
