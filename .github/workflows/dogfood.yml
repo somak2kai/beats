@@ -110,7 +110,7 @@ jobs:
 
       - name: Ensure package is private
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: |
           PKG_NAME="${{ github.event.repository.name }}-compressed-db"
           gh api --method PATCH \
