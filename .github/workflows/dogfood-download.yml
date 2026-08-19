@@ -88,6 +88,21 @@ jobs:
           echo "Downloaded files:"
           ls -lh ./output/
 
+      - name: Decrypt archive
+        if: inputs.mode == 'download'
+        env:
+          DB_ENCRYPTION_KEY: ${{ secrets.DB_ENCRYPTION_KEY }}
+        run: |
+          cd output
+          for f in *.tar.gz; do
+            echo "Decrypting $f"
+            openssl enc -d -aes-256-cbc -pbkdf2 \
+              -in "$f" -out "${f}.dec" \
+              -pass env:DB_ENCRYPTION_KEY
+            mv "${f}.dec" "$f"
+          done
+          echo "Archive decrypted"
+
       - name: Show metadata
         if: inputs.mode == 'download'
         run: |

@@ -2,12 +2,6 @@
 # resulting BadgerDB snapshot as an OCI artifact on GHCR.
 #
 # Schedule : 18:00 IST (12:30 UTC) every day.
-# Protection: The GHCR package inherits the repository's visibility
-#             (private by default). Within this repo's workflows the
-#             auto-generated GITHUB_TOKEN provides keyless read/write
-#             access.  External consumers need a fine-grained PAT with
-#             read:packages scope — see dogfood-download.yml for the
-#             retrieval pattern.
 #
 # Tag scheme:
 #   <branch>-<YYYY-MM-DD>   — immutable, one per run
@@ -74,6 +68,19 @@ jobs:
           tar -czf ${{ github.event.repository.name }}-compressed-db.tar.gz -C "$HOME" .beats/
           echo "Archive size: $(du -h ${{ github.event.repository.name }}-compressed-db.tar.gz | cut -f1)"
 
+      # ── 4b. Encrypt the archive ────────────────────────────────────
+      - name: Encrypt archive
+        env:
+          DB_ENCRYPTION_KEY: ${{ secrets.DB_ENCRYPTION_KEY }}
+        run: |
+          ARCHIVE="${{ github.event.repository.name }}-compressed-db.tar.gz"
+          openssl enc -aes-256-cbc -salt -pbkdf2 \
+            -in "$ARCHIVE" -out "${ARCHIVE}.enc" \
+            -pass env:DB_ENCRYPTION_KEY
+          rm "$ARCHIVE"
+          mv "${ARCHIVE}.enc" "$ARCHIVE"
+          echo "Archive encrypted (AES-256-CBC)"
+
       # ── 5. Compute metadata for annotations and tags ──────────────────
       - name: Prepare metadata
         id: meta
@@ -108,17 +115,6 @@ jobs:
           oras tag "${{ env.ARTIFACT_REPO }}:${{ steps.meta.outputs.tag }}" \
             "${{ steps.meta.outputs.rolling }}"
 
-      - name: Ensure package is private
-        env:
-          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-        run: |
-          PKG_NAME="${{ github.event.repository.name }}-compressed-db"
-          gh api --method PATCH \
-            "/user/packages/container/${PKG_NAME}" \
-            --field visibility=private \
-            && echo "Package visibility set to private" \
-            || echo "::warning::Could not set visibility via GITHUB_TOKEN. Add a PAT with write:packages scope as PACKAGES_TOKEN secret."
-        continue-on-error: true
 
       - name: Summary
         run: |
