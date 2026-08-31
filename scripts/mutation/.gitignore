@@ -1,0 +1,4 @@
+out/
+sample/*.go.[0-9]*
+sample/report.json
+sample/mutago-*.json
