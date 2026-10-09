@@ -24,9 +24,9 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 			return err
 		}
 		if entry.IsDir() {
-
-			// quick/dirty way to remove all vendored code.
-			if strings.EqualFold(entry.Name(), "vendor") {
+			name := entry.Name()
+			// skip vendored code and npm dependency trees.
+			if strings.EqualFold(name, "vendor") || name == "node_modules" {
 				return filepath.SkipDir
 			}
 			// continue
@@ -41,6 +41,10 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 			// continue
 			return nil
 		}
+		if isSkippableTsFile(entry.Name()) {
+			// continue
+			return nil
+		}
 		pkg, err := filepath.Rel(root, filepath.Dir(path))
 		if err != nil {
 			return err
@@ -48,6 +52,8 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 		lang := ds.Language_GOLANG
 		if strings.HasSuffix(path, ".java") {
 			lang = ds.Language_JAVA
+		} else if strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".tsx") {
+			lang = ds.Language_TYPESCRIPT
 		}
 		if _, ok := resp[pkg]; !ok {
 			resp[pkg] = []ds.FileMeta{{Name: entry.Name(), Path: path, Lang: lang}}
@@ -63,7 +69,14 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 }
 
 func IsAcceptedLanguageFile(file string) bool {
-	return strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".java")
+	if strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".java") {
+		return true
+	}
+	// Accept .ts and .tsx but not declaration files (.d.ts)
+	if (strings.HasSuffix(file, ".ts") || strings.HasSuffix(file, ".tsx")) && !strings.HasSuffix(file, ".d.ts") {
+		return true
+	}
+	return false
 }
 
 // skip proto generated files/ test and mock files.
@@ -76,4 +89,14 @@ func isSkippableGoFile(file string) bool {
 		strings.HasSuffix(file, "invalid.go") ||
 		strings.HasPrefix(file, "mock_") ||
 		strings.HasPrefix(file, "zz_generated")
+}
+
+// skip TypeScript test, spec, and story files.
+func isSkippableTsFile(file string) bool {
+	return strings.HasSuffix(file, ".test.ts") ||
+		strings.HasSuffix(file, ".test.tsx") ||
+		strings.HasSuffix(file, ".spec.ts") ||
+		strings.HasSuffix(file, ".spec.tsx") ||
+		strings.HasSuffix(file, ".stories.ts") ||
+		strings.HasSuffix(file, ".stories.tsx")
 }

@@ -43,6 +43,14 @@ const (
 	TK_WHILE        // while loop (Java)
 	TK_DO_WHILE     // do-while loop (Java)
 	TK_ASSERT_STMT  // assert statement (Java)
+	// TypeScript-specific tokens (emitted by tbeats)
+	TK_AWAIT            // await expression
+	TK_OPTIONAL_CHAIN   // optional chaining (?.)
+	TK_NULLISH_COALESCE // nullish coalescing (??)
+	TK_TYPE_GUARD       // type guard (instanceof / typeof narrowing)
+	TK_AS_EXPRESSION    // type assertion via 'as'
+	TK_ENUM_DECL        // enum declaration
+	TK_DECORATOR        // decorator (@)
 )
 
 func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {

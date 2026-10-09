@@ -7,8 +7,9 @@ import (
 type Language string
 
 const (
-	Language_GOLANG Language = "golang"
-	Language_JAVA   Language = "java"
+	Language_GOLANG     Language = "golang"
+	Language_JAVA       Language = "java"
+	Language_TYPESCRIPT Language = "typescript"
 )
 
 // FileMeta carrries name and path metadata about golang file.

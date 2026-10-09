@@ -54,6 +54,7 @@ var (
 	_ command   = (*outlierWriter)(nil)
 	_ skippable = (*outlierWriter)(nil)
 	_ command   = (*javafunctionMetadata)(nil)
+	_ command   = (*tsfunctionMetadata)(nil)
 )
 
 type command interface{ execute() error }
@@ -62,6 +63,7 @@ type dbCleaner struct{ state *State }
 type fileMetadata struct{ state *State }
 type functionMetadata struct{ state *State }
 type javafunctionMetadata struct{ state *State }
+type tsfunctionMetadata struct{ state *State }
 type indexCommand struct{ state *State }
 type indexPersistor struct{ state *State }
 type identifyCluster struct{ state *State }
@@ -84,9 +86,18 @@ type State struct {
 	RepositoryPath    string
 	Index             ds.Index
 	Java              StateJava
+	TypeScript        StateTypeScript
 }
 
 type StateJava struct {
+	FunctionMetadata  []ds.FunctionMeta
+	IdentifiedCluster []ds.Cluster
+	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
+	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
+	Index             ds.Index
+}
+
+type StateTypeScript struct {
 	FunctionMetadata  []ds.FunctionMeta
 	IdentifiedCluster []ds.Cluster
 	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
@@ -156,6 +167,7 @@ func (f *functionMetadata) execute() error {
 func (i *indexCommand) execute() error {
 	i.state.Index = ds.PopulateIndex(i.state.FunctionMetadata)
 	i.state.Java.Index = ds.PopulateIndex(i.state.Java.FunctionMetadata)
+	i.state.TypeScript.Index = ds.PopulateIndex(i.state.TypeScript.FunctionMetadata)
 	return nil
 }
 
@@ -194,6 +206,9 @@ func (w *indexPersistor) execute() error {
 	if err := store(w.state.Java.Index, ds.Language_JAVA); err != nil {
 		return err
 	}
+	if err := store(w.state.TypeScript.Index, ds.Language_TYPESCRIPT); err != nil {
+		return err
+	}
 	return nil
 }
 func (w *indexPersistor) skipInDryRun() bool {
@@ -203,7 +218,8 @@ func (w *indexPersistor) skipInDryRun() bool {
 func (a *analyzer) execute() error {
 	goHasData := len(a.state.IdentifiedCluster) > 0 && len(a.state.OrphanMetas) > 0
 	javaHasData := len(a.state.Java.IdentifiedCluster) > 0 && len(a.state.Java.OrphanMetas) > 0
-	if !goHasData && !javaHasData {
+	tsHasData := len(a.state.TypeScript.IdentifiedCluster) > 0 && len(a.state.TypeScript.OrphanMetas) > 0
+	if !goHasData && !javaHasData && !tsHasData {
 		return nil
 	}
 	return runAnalyze(a.state.RepositoryPath)
@@ -235,6 +251,13 @@ func (c *identifyCluster) execute() error {
 	c.state.Java.IdentifiedCluster = clj
 	c.state.Java.OrphanMetas = oj
 
+	clts, ots, err := cluster(c.state.TypeScript.FunctionMetadata, ds.Language_TYPESCRIPT)
+	if err != nil {
+		return err
+	}
+	c.state.TypeScript.IdentifiedCluster = clts
+	c.state.TypeScript.OrphanMetas = ots
+
 	slog.Info("identified golang clusters",
 		slog.Int("count", len(c.state.IdentifiedCluster)),
 		slog.Int("orphans", len(c.state.OrphanMetas)),
@@ -242,6 +265,10 @@ func (c *identifyCluster) execute() error {
 	slog.Info("identified java clusters",
 		slog.Int("count", len(c.state.Java.IdentifiedCluster)),
 		slog.Int("orphans", len(c.state.Java.OrphanMetas)),
+	)
+	slog.Info("identified typescript clusters",
+		slog.Int("count", len(c.state.TypeScript.IdentifiedCluster)),
+		slog.Int("orphans", len(c.state.TypeScript.OrphanMetas)),
 	)
 	return nil
 }
@@ -326,22 +353,15 @@ func (c *clusterClassifier) execute() error {
 				low++
 			}
 		}
-		if lang == ds.Language_GOLANG {
-			slog.Info("golang clusters classified",
-				slog.Int("high", high),
-				slog.Int("medium", medium),
-				slog.Int("low", low),
-			)
-		} else {
-			slog.Info("java clusters classified",
-				slog.Int("high", high),
-				slog.Int("medium", medium),
-				slog.Int("low", low),
-			)
-		}
+		slog.Info(string(lang)+" clusters classified",
+			slog.Int("high", high),
+			slog.Int("medium", medium),
+			slog.Int("low", low),
+		)
 	}
 	classify(c.state.IdentifiedCluster, ds.Language_GOLANG)
 	classify(c.state.Java.IdentifiedCluster, ds.Language_JAVA)
+	classify(c.state.TypeScript.IdentifiedCluster, ds.Language_TYPESCRIPT)
 
 	return nil
 }
@@ -372,6 +392,9 @@ func (c *clusterPersistor) execute() error {
 		return err
 	}
 	if err := persist(c.state.Java.IdentifiedCluster, ds.Language_JAVA); err != nil {
+		return err
+	}
+	if err := persist(c.state.TypeScript.IdentifiedCluster, ds.Language_TYPESCRIPT); err != nil {
 		return err
 	}
 	return nil
@@ -405,6 +428,12 @@ func (o *orphanAnalyzer) execute() error {
 	}
 	o.state.Java.OrphanedFunctions = rj
 
+	rts, err := analyze(o.state.TypeScript.IdentifiedCluster, o.state.TypeScript.OrphanMetas)
+	if err != nil {
+		return err
+	}
+	o.state.TypeScript.OrphanedFunctions = rts
+
 	return nil
 }
 
@@ -431,6 +460,9 @@ func (p *orphanPersistor) execute() error {
 	if err := store(p.state.Java.OrphanedFunctions, ds.Language_JAVA); err != nil {
 		return err
 	}
+	if err := store(p.state.TypeScript.OrphanedFunctions, ds.Language_TYPESCRIPT); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -442,13 +474,15 @@ func (p *orphanPersistor) skipInDryRun() bool { return true }
 // the exact format the beats-analyze LLM skill expects as its user message.
 func (o *outlierWriter) execute() error {
 	allOrphans := append(o.state.OrphanedFunctions, o.state.Java.OrphanedFunctions...)
+	allOrphans = append(allOrphans, o.state.TypeScript.OrphanedFunctions...)
 	if len(allOrphans) == 0 {
 		slog.Info("no orphaned functions — skipping outlier.md")
 		return nil
 	}
 
-	// Index non-primitive clusters by ShapeHash (both Go and Java).
+	// Index non-primitive clusters by ShapeHash (Go, Java, and TypeScript).
 	allClusters := append(o.state.IdentifiedCluster, o.state.Java.IdentifiedCluster...)
+	allClusters = append(allClusters, o.state.TypeScript.IdentifiedCluster...)
 	clusterByHash := make(map[string]ds.Cluster, len(allClusters))
 	for _, cl := range allClusters {
 		if !cl.IsPrimitive && cl.ShapeHash != "" {
@@ -563,7 +597,7 @@ func (j *javafunctionMetadata) execute() error {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, "./jbeats",
+				cmd := exec.CommandContext(ctx, "/Users/admin/ws/java/jbeats/target/jbeats",
 					fmt.Sprintf("--inp=%s", m.Path),
 					fmt.Sprintf("--repo=%s", j.state.RepositoryPath),
 				)
@@ -618,6 +652,78 @@ func (j *javafunctionMetadata) execute() error {
 	return nil
 }
 
+// performs the parsing of typescript files via tbeats. code errors if tbeats is not available and installed in path.
+func (t *tsfunctionMetadata) execute() error {
+
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	var mu sync.Mutex
+	t.state.TypeScript = StateTypeScript{FunctionMetadata: make([]ds.FunctionMeta, 0)}
+	for _, val := range t.state.PkgToFileMetadata {
+		val := val
+		g.Go(func() error {
+			var localFncM []ds.FunctionMeta
+			for _, m := range val {
+				if m.Lang != ds.Language_TYPESCRIPT {
+					continue
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, "/Users/admin/ws/ts/tbeats/dist/tbeats_darwin_arm64_v8.0/tbeats",
+					fmt.Sprintf("--inp=%s", m.Path),
+					fmt.Sprintf("--repo=%s", t.state.RepositoryPath),
+				)
+
+				out, err := cmd.Output()
+				if err != nil {
+					if perr, ok := errors.AsType[*exec.ExitError](err); ok {
+						slog.Error("unable to execute tbeats", slog.String("path", m.Path), slog.Any("error", perr), slog.String("stderr", strings.TrimSpace(string(perr.Stderr))))
+						continue
+					} else {
+						return fmt.Errorf("tbeats failed for %s: %w", m.Path, err)
+					}
+
+				}
+				if len(out) == 0 {
+					return fmt.Errorf("no output was generated for %s", m.Path)
+				}
+				jsonPath := strings.TrimSpace(string(out))
+				if _, err := os.Stat(jsonPath); errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("output file does not exist for %s %s", m.Path, string(out))
+				}
+				data, err := os.ReadFile(jsonPath)
+				if err != nil {
+					return fmt.Errorf("read tbeats output for %s: %w", m.Path, err)
+				}
+				var fileResult ds.TBeatsFileResult
+				if err := json.Unmarshal(data, &fileResult); err != nil {
+					return fmt.Errorf("parse tbeats output for %s: %w", m.Path, err)
+				}
+				for _, fn := range fileResult.Functions {
+					meta := ds.TsToFunctionMeta(fn)
+					if meta.TestCode || meta.GeneratedCode {
+						continue
+					}
+					meta.TokenSeqHash = hash.ComputeWindowHash(meta.TokenSeq)
+					localFncM = append(localFncM, meta)
+				}
+				os.Remove(jsonPath) //nolint errcheck
+			}
+			mu.Lock()
+			t.state.TypeScript.FunctionMetadata = append(t.state.TypeScript.FunctionMetadata, localFncM...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		slog.Error("unable to capture file metadata record", slog.Any("error", err))
+		return err
+	}
+	slog.Info("total number of typescript functions", slog.Int("count", len(t.state.TypeScript.FunctionMetadata)))
+	return nil
+}
+
 func (b *Beats) run(repo string) error {
 
 	s := &State{
@@ -646,6 +752,7 @@ func getCommands(s *State) []command {
 		&fileMetadata{state: s},
 		&functionMetadata{state: s},
 		&javafunctionMetadata{state: s},
+		&tsfunctionMetadata{state: s},
 		&identifyCluster{state: s},
 		&clusterClassifier{state: s},
 		&clusterPersistor{state: s},

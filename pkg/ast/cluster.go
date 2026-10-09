@@ -1264,6 +1264,9 @@ var tokenNames = []string{
 	// Java-specific (emitted by jbeats)
 	"TRY", "CATCH", "THROW", "FINALLY", "SYNCHRONIZED",
 	"WHILE", "DO_WHILE", "ASSERT_STMT",
+	// TypeScript-specific (emitted by tbeats)
+	"AWAIT", "OPTIONAL_CHAIN", "NULLISH_COALESCE", "TYPE_GUARD",
+	"AS_EXPRESSION", "ENUM_DECL", "DECORATOR",
 }
 
 func tokenName(t int) string {

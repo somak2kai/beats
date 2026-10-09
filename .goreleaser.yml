@@ -79,6 +79,7 @@ brews:
     license: "MIT"
     dependencies:
       - name: "somak2kai/tap/jbeats"
+      - name: "somak2kai/tap/tbeats"
     install: |
       bin.install "beats"
     test: |
