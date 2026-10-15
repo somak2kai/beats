@@ -2,6 +2,9 @@ package main
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/somak2kai/beats/pkg/ast"
@@ -511,5 +514,30 @@ func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 	}
 	if groups[0].Outliers[0].Name != "myFunc" {
 		t.Errorf("outlier name: expected %q, got %q", "myFunc", groups[0].Outliers[0].Name)
+	}
+}
+
+func TestBeatsDBPath_FlatAndStable(t *testing.T) {
+	root, err := beatsDBPath("/")
+	if err == nil {
+		t.Fatalf("expected error for root repo, got %q", root)
+	}
+
+	wd, _ := os.Getwd()
+	dot, err := beatsDBPath(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, _ := beatsDBPath(wd)
+	if dot != abs {
+		t.Errorf("'.' and abs path differ: %q vs %q", dot, abs)
+	}
+
+	parent, _ := beatsDBPath("..")
+	if parent == dot || strings.HasPrefix(dot, parent+string(filepath.Separator)) {
+		t.Errorf("parent DB %q must not equal or contain child DB %q", parent, dot)
+	}
+	if filepath.Dir(parent) != filepath.Dir(dot) {
+		t.Errorf("DBs must be siblings: %q vs %q", parent, dot)
 	}
 }

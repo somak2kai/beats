@@ -89,7 +89,11 @@ func runExport(args []string) {
 		os.Exit(1)
 	}
 
-	bDb := openQueryDB(*repo)
+	bDb, err := openQueryDB(*repo)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats export:", err)
+		os.Exit(1)
+	}
 	defer bDb.Close() //nolint:errcheck
 
 	clusters, _ := queryScanClusters(bDb)

@@ -104,7 +104,11 @@ func runQueryOutlier(args []string) {
 		os.Exit(1)
 	}
 
-	bDb := openQueryDB(*repo)
+	bDb, err := openQueryDB(*repo)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats query outlier:", err)
+		os.Exit(1)
+	}
 	defer bDb.Close() //nolint:errcheck
 
 	goOrphans, err := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
@@ -251,7 +255,11 @@ func runQueryCluster(hashPrefix string, args []string) {
 		os.Exit(1)
 	}
 
-	bDb := openQueryDB(*repo)
+	bDb, err := openQueryDB(*repo)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats query cluster:", err)
+		os.Exit(1)
+	}
 	defer bDb.Close() //nolint:errcheck
 
 	clusters, _ := queryScanClusters(bDb)
@@ -344,8 +352,12 @@ func printClusterText(r ClusterResult) {
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
-func openQueryDB(repo string) *db.BadgerXDb {
-	return db.NewBadgerXDb(beatsDBPath(repo))
+func openQueryDB(repo string) (*db.BadgerXDb, error) {
+	p, err := beatsDBPath(repo)
+	if err != nil {
+		return nil, err
+	}
+	return db.NewBadgerXDb(p), nil
 }
 
 // queryScanClusters tries TierIdentified first, falls back to TierCollapsed.

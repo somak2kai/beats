@@ -24,13 +24,23 @@ import (
 )
 
 // beatsDBPath returns the stable BadgerDB path for a given repo.
-// Uses ~/.beats/badger/<repo> so the path is consistent across all shell contexts.
-func beatsDBPath(repo string) string {
+func beatsDBPath(repo string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = os.TempDir() // fallback, should never happen
 	}
-	return filepath.Join(home, ".beats", "badger", repo)
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return "", fmt.Errorf("resolve repo path %q: %w", repo, err)
+	}
+	if runtime.GOOS == "windows" {
+		abs = strings.ReplaceAll(abs, ":", "") // ':' is not allowed in a Windows folder name
+	}
+	name := strings.ReplaceAll(abs, string(filepath.Separator), "_")
+	if strings.Trim(name, "_") == "" {
+		return "", fmt.Errorf("refusing to use %q as a repo path", repo)
+	}
+	return filepath.Join(home, ".beats", "badger", name), nil
 }
 
 var (
@@ -97,7 +107,10 @@ type StateJava struct {
 // dbCleaner removes the BadgerDB directory for the repository, if exists, before the
 // pipeline runs.
 func (d *dbCleaner) execute() error {
-	dbPath := beatsDBPath(d.state.RepositoryPath)
+	dbPath, err := beatsDBPath(d.state.RepositoryPath)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dbPath); err != nil {
 		slog.Error("failed to clear badger db", slog.String("path", dbPath), slog.Any("error", err))
 		return err
@@ -161,7 +174,10 @@ func (i *indexCommand) execute() error {
 
 func (w *indexPersistor) execute() error {
 
-	tmp := beatsDBPath(w.state.RepositoryPath)
+	tmp, err := beatsDBPath(w.state.RepositoryPath)
+	if err != nil {
+		return err
+	}
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
@@ -347,7 +363,10 @@ func (c *clusterClassifier) execute() error {
 }
 
 func (c *clusterPersistor) execute() error {
-	tmp := beatsDBPath(c.state.RepositoryPath)
+	tmp, err := beatsDBPath(c.state.RepositoryPath)
+	if err != nil {
+		return err
+	}
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
@@ -412,7 +431,10 @@ func (o *orphanAnalyzer) skipInDryRun() bool { return false }
 
 func (p *orphanPersistor) execute() error {
 
-	tmp := beatsDBPath(p.state.RepositoryPath)
+	tmp, err := beatsDBPath(p.state.RepositoryPath)
+	if err != nil {
+		return err
+	}
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 	store := func(orphans []ds.OrphanedFunction, lang ds.Language) error {

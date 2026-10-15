@@ -143,7 +143,10 @@ type RepoReport struct {
 // ── entry point ───────────────────────────────────────────────────────────────
 
 func runAnalyze(repo string) error {
-	dbPath := beatsDBPath(repo)
+	dbPath, err := beatsDBPath(repo)
+	if err != nil {
+		return err
+	}
 	bDb := db.NewBadgerXDb(dbPath)
 	defer bDb.Close() //nolint:errcheck
 
