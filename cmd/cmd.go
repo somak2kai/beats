@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -87,21 +88,21 @@ type Beats struct {
 }
 type State struct {
 	PkgToFileMetadata ds.PkgToFileMeta
-	FunctionMetadata  []ds.FunctionMeta
-	IdentifiedCluster []ds.Cluster
-	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
-	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
+	FunctionMetadata  []*ds.FunctionMeta
+	IdentifiedCluster []*ds.Cluster
+	OrphanMetas       []*ds.FunctionMeta     // functions that did not join any cluster
+	OrphanedFunctions []*ds.OrphanedFunction // orphans with Z-score candidates, after analysis
 	RepositoryPath    string
-	Index             ds.Index
-	Java              StateJava
+	Index             *ds.Index
+	Java              *StateJava
 }
 
 type StateJava struct {
-	FunctionMetadata  []ds.FunctionMeta
-	IdentifiedCluster []ds.Cluster
-	OrphanMetas       []ds.FunctionMeta     // functions that did not join any cluster
-	OrphanedFunctions []ds.OrphanedFunction // orphans with Z-score candidates, after analysis
-	Index             ds.Index
+	FunctionMetadata  []*ds.FunctionMeta
+	IdentifiedCluster []*ds.Cluster
+	OrphanMetas       []*ds.FunctionMeta     // functions that did not join any cluster
+	OrphanedFunctions []*ds.OrphanedFunction // orphans with Z-score candidates, after analysis
+	Index             *ds.Index
 }
 
 // dbCleaner removes the BadgerDB directory for the repository, if exists, before the
@@ -139,7 +140,7 @@ func (f *functionMetadata) execute() error {
 	for _, val := range f.state.PkgToFileMetadata {
 		val := val
 		g.Go(func() error {
-			var localFncM []ds.FunctionMeta
+			var localFncM []*ds.FunctionMeta
 			for _, m := range val {
 				if m.Lang != ds.Language_GOLANG {
 					continue
@@ -181,7 +182,7 @@ func (w *indexPersistor) execute() error {
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
-	store := func(index ds.Index, lang ds.Language) error {
+	store := func(index *ds.Index, lang ds.Language) error {
 		for k, v := range index.Postings {
 			if err := bDb.StorePostings(k, lang, v); err != nil {
 				slog.Error("unable to save inverted index", slog.Any("error", err))
@@ -229,7 +230,7 @@ func (m *analyzer) skipInDryRun() bool { return true }
 
 func (c *identifyCluster) execute() error {
 	cfg := ast.DefaultClusterConfig()
-	cluster := func(fMeta []ds.FunctionMeta, lang ds.Language) ([]ds.Cluster, []ds.FunctionMeta, error) {
+	cluster := func(fMeta []*ds.FunctionMeta, lang ds.Language) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
 		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg)
 		if err != nil {
 			return nil, nil, err
@@ -320,7 +321,7 @@ func clusterCompositeScore(size, numPackages int, tier string, meanScore, import
 // identifyClusterPersistor so the values are saved to the DB.
 func (c *clusterClassifier) execute() error {
 
-	classify := func(cluster []ds.Cluster, lang ds.Language) {
+	classify := func(cluster []*ds.Cluster, lang ds.Language) {
 
 		var high, medium, low int
 		for _, cl := range cluster {
@@ -370,7 +371,7 @@ func (c *clusterPersistor) execute() error {
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
 
-	persist := func(clusters []ds.Cluster, lang ds.Language) error {
+	persist := func(clusters []*ds.Cluster, lang ds.Language) error {
 
 		for idx, cl := range clusters {
 			if cl.IsPrimitive {
@@ -400,7 +401,7 @@ func (c *clusterPersistor) skipInDryRun() bool { return true }
 
 func (o *orphanAnalyzer) execute() error {
 
-	analyze := func(cltrs []ds.Cluster, orphans []ds.FunctionMeta) ([]ds.OrphanedFunction, error) {
+	analyze := func(cltrs []*ds.Cluster, orphans []*ds.FunctionMeta) ([]*ds.OrphanedFunction, error) {
 
 		if len(cltrs) == 0 || len(orphans) == 0 {
 			return nil, nil
@@ -437,7 +438,7 @@ func (p *orphanPersistor) execute() error {
 	}
 	bDb := db.NewBadgerXDb(tmp)
 	defer bDb.Close() //nolint:errcheck
-	store := func(orphans []ds.OrphanedFunction, lang ds.Language) error {
+	store := func(orphans []*ds.OrphanedFunction, lang ds.Language) error {
 		if len(orphans) == 0 {
 			return nil
 		}
@@ -463,15 +464,15 @@ func (p *orphanPersistor) skipInDryRun() bool { return true }
 // document containing every outlier and its closest cluster's peer bodies in
 // the exact format the beats-analyze LLM skill expects as its user message.
 func (o *outlierWriter) execute() error {
-	allOrphans := append(o.state.OrphanedFunctions, o.state.Java.OrphanedFunctions...)
+	allOrphans := slices.Concat(o.state.OrphanedFunctions, o.state.Java.OrphanedFunctions)
 	if len(allOrphans) == 0 {
 		slog.Info("no orphaned functions — skipping outlier.md")
 		return nil
 	}
 
 	// Index non-primitive clusters by ShapeHash (both Go and Java).
-	allClusters := append(o.state.IdentifiedCluster, o.state.Java.IdentifiedCluster...)
-	clusterByHash := make(map[string]ds.Cluster, len(allClusters))
+	allClusters := slices.Concat(o.state.IdentifiedCluster, o.state.Java.IdentifiedCluster)
+	clusterByHash := make(map[string]*ds.Cluster, len(allClusters))
 	for _, cl := range allClusters {
 		if !cl.IsPrimitive && cl.ShapeHash != "" {
 			clusterByHash[cl.ShapeHash] = cl
@@ -524,7 +525,7 @@ func (o *outlierWriter) execute() error {
 		fmt.Fprintf(&sb, "  common subsequence of cluster: %s\n", commonSubseq)
 		fmt.Fprintf(&sb, "  peers:\n")
 
-		cr := buildClusterResult(&cl)
+		cr := buildClusterResult(cl)
 		for _, m := range cr.Members {
 			fmt.Fprintf(&sb, "    %s/%s (%s:%d)\n", m.Package, m.Func, m.File, m.Line)
 			if m.Body != "" {
@@ -574,11 +575,11 @@ func (j *javafunctionMetadata) execute() error {
 	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
-	j.state.Java = StateJava{FunctionMetadata: make([]ds.FunctionMeta, 0)}
+	j.state.Java = &StateJava{FunctionMetadata: make([]*ds.FunctionMeta, 0)}
 	for _, val := range j.state.PkgToFileMetadata {
 		val := val
 		g.Go(func() error {
-			var localFncM []ds.FunctionMeta
+			var localFncM []*ds.FunctionMeta
 			for _, m := range val {
 				if m.Lang != ds.Language_JAVA {
 					continue
@@ -644,8 +645,9 @@ func (b *Beats) run(repo string) error {
 
 	s := &State{
 		RepositoryPath:    repo,
-		FunctionMetadata:  make([]ds.FunctionMeta, 0),
+		FunctionMetadata:  make([]*ds.FunctionMeta, 0),
 		PkgToFileMetadata: make(ds.PkgToFileMeta),
+		Java:              &StateJava{},
 	}
 	for _, cmd := range getCommands(s) {
 		if b.IsDryRun {

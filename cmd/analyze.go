@@ -198,7 +198,7 @@ func runAnalyze(repo string) error {
 
 // ── report builder ────────────────────────────────────────────────────────────
 
-func buildClusterRow(c ds.Cluster) ClusterRow {
+func buildClusterRow(c *ds.Cluster) ClusterRow {
 	// per-member pairwise scores — computed once, used for both sort and display
 	memberScores := ast.MemberPairwiseScores(c.Members)
 
@@ -445,17 +445,17 @@ func shortImport(imp string) string {
 	return parts[len(parts)-1]
 }
 
-func buildOutlierGroups(clusters []ds.Cluster, orphans []ds.OrphanedFunction) []ClusterOutlierGroup {
+func buildOutlierGroups(clusters []*ds.Cluster, orphans []*ds.OrphanedFunction) []ClusterOutlierGroup {
 	// Index clusters by ShapeHash — ClusterIdx is an analysis-time array index
 	// that does not survive a DB round-trip reliably.
-	clusterByHash := make(map[string]ds.Cluster, len(clusters))
+	clusterByHash := make(map[string]*ds.Cluster, len(clusters))
 	for _, cl := range clusters {
 		if cl.ShapeHash != "" {
 			clusterByHash[cl.ShapeHash] = cl
 		}
 	}
 
-	type entry struct{ orphan ds.OrphanedFunction }
+	type entry struct{ orphan *ds.OrphanedFunction }
 	groupMap := make(map[string][]entry)
 	for _, o := range orphans {
 		if len(o.Candidates) == 0 {
@@ -558,7 +558,7 @@ func buildOutlierGroups(clusters []ds.Cluster, orphans []ds.OrphanedFunction) []
 	return groups
 }
 
-func buildReport(repo string, clusters []ds.Cluster, orphanedFns []ds.OrphanedFunction) RepoReport {
+func buildReport(repo string, clusters []*ds.Cluster, orphanedFns []*ds.OrphanedFunction) RepoReport {
 	rows := make([]ClusterRow, 0, len(clusters))
 	var totalCoherence, totalCallCoherence, totalAvgScore float64
 	var functionsInClusters int

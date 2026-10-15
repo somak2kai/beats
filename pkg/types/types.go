@@ -245,15 +245,15 @@ type Index struct {
 	TotalDocs int
 }
 
-func PopulateIndex(fMeta []FunctionMeta) Index {
+func PopulateIndex(fMeta []*FunctionMeta) *Index {
 
 	funcMeta := make(map[string]FunctionMeta, len(fMeta))
 	post := make(map[int64][]string, len(fMeta))
-	index := Index{Postings: post, TotalDocs: len(fMeta), FuncMeta: funcMeta}
+	index := &Index{Postings: post, TotalDocs: len(fMeta), FuncMeta: funcMeta}
 
 	for _, i := range fMeta {
 		id := uuid.NewString()
-		funcMeta[id] = i
+		funcMeta[id] = *i
 		tokenHash := i.TokenSeqHash
 		for _, j := range tokenHash {
 			post[j] = append(post[j], id)

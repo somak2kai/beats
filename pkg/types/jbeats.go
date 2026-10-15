@@ -34,8 +34,8 @@ type JBeatsFileResult struct {
 }
 
 // ToFunctionMeta converts a JBeatsFunctionMeta to the canonical FunctionMeta type.
-func ToFunctionMeta(j JBeatsFunctionMeta) FunctionMeta {
-	return FunctionMeta{
+func ToFunctionMeta(j JBeatsFunctionMeta) *FunctionMeta {
+	return &FunctionMeta{
 		Name:    j.Name,
 		Package: j.PackageName,
 		FileMeta: FileMeta{

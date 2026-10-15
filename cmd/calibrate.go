@@ -118,7 +118,7 @@ func runCalibrate(args []string) {
 
 // ── core sweep ───────────────────────────────────────────────────────────────
 
-func sweepThreshold(fns []ds.FunctionMeta, eligible int, thresholds []float64, seqSim float64, B int) []calibrate.TradeoffPoint {
+func sweepThreshold(fns []*ds.FunctionMeta, eligible int, thresholds []float64, seqSim float64, B int) []calibrate.TradeoffPoint {
 	points := make([]calibrate.TradeoffPoint, len(thresholds))
 
 	for ti, thresh := range thresholds {
@@ -205,7 +205,7 @@ func sweepThreshold(fns []ds.FunctionMeta, eligible int, thresholds []float64, s
 				bootSem <- struct{}{}
 				defer func() { <-bootSem }()
 
-				subFns := make([]ds.FunctionMeta, len(allIndices[b]))
+				subFns := make([]*ds.FunctionMeta, len(allIndices[b]))
 				for i, idx := range allIndices[b] {
 					subFns[i] = fns[idx]
 				}
@@ -299,7 +299,7 @@ func printTradeoffTable(points []calibrate.TradeoffPoint) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func clusterFingerprints(clusters []ds.Cluster) []map[string]bool {
+func clusterFingerprints(clusters []*ds.Cluster) []map[string]bool {
 	fps := make([]map[string]bool, 0, len(clusters))
 	for _, cl := range clusters {
 		if cl.IsPrimitive {
@@ -331,12 +331,12 @@ func setJaccard(a, b map[string]bool) float64 {
 	return float64(inter) / float64(union)
 }
 
-func parseCurrentHead(repo string) ([]ds.FunctionMeta, error) {
+func parseCurrentHead(repo string) ([]*ds.FunctionMeta, error) {
 	files, err := util.GetFileMetadata(repo)
 	if err != nil {
 		return nil, err
 	}
-	var fns []ds.FunctionMeta
+	var fns []*ds.FunctionMeta
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
@@ -347,7 +347,7 @@ func parseCurrentHead(repo string) ([]ds.FunctionMeta, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			var local []ds.FunctionMeta
+			var local []*ds.FunctionMeta
 			for _, m := range val {
 				if m.Lang != ds.Language_GOLANG {
 					continue
@@ -370,7 +370,7 @@ func parseCurrentHead(repo string) ([]ds.FunctionMeta, error) {
 	return fns, nil
 }
 
-func countEligible(fns []ds.FunctionMeta) int {
+func countEligible(fns []*ds.FunctionMeta) int {
 	count := 0
 	for _, fn := range fns {
 		if len(fn.TokenSeq) >= 3 && !fn.GeneratedCode && !fn.TestCode && !fn.IsConstructor {

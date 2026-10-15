@@ -11,8 +11,8 @@ import (
 
 // makeClusterWithStats builds a Cluster with Stats + Coherence populated —
 // enough for buildExportPayload to serialise it fully.
-func makeClusterWithStats(hash string, size int, mean, std float64) ds.Cluster {
-	return ds.Cluster{
+func makeClusterWithStats(hash string, size int, mean, std float64) *ds.Cluster {
+	return &ds.Cluster{
 		ShapeHash: hash,
 		Tier:      "high",
 		Size:      size,
@@ -30,8 +30,8 @@ func makeClusterWithStats(hash string, size int, mean, std float64) ds.Cluster {
 	}
 }
 
-func makeOrphanFull(name string, imp, calls []string, cands []ds.ClusterCandidate) ds.OrphanedFunction {
-	return ds.OrphanedFunction{
+func makeOrphanFull(name string, imp, calls []string, cands []ds.ClusterCandidate) *ds.OrphanedFunction {
+	return &ds.OrphanedFunction{
 		Meta: ds.FunctionMeta{
 			Name:          name,
 			Package:       "pkg",
@@ -67,11 +67,11 @@ func TestBuildExportPayload_EmptyInputs(t *testing.T) {
 }
 
 func TestBuildExportPayload_CorpusSizeIncludesClusterAndOrphanCounts(t *testing.T) {
-	clusters := []ds.Cluster{
+	clusters := []*ds.Cluster{
 		makeClusterWithStats("h1", 5, 0.9, 0.02),
 		makeClusterWithStats("h2", 3, 0.8, 0.05),
 	}
-	orphans := []ds.OrphanedFunction{
+	orphans := []*ds.OrphanedFunction{
 		makeOrphanFull("o1", nil, nil, nil),
 		makeOrphanFull("o2", nil, nil, nil),
 	}
@@ -86,7 +86,7 @@ func TestBuildExportPayload_CorpusSizeIncludesClusterAndOrphanCounts(t *testing.
 }
 
 func TestBuildExportPayload_MinScoreFiltersClustersNotCorpus(t *testing.T) {
-	clusters := []ds.Cluster{
+	clusters := []*ds.Cluster{
 		makeClusterWithStats("h1", 5, 0.95, 0.01), // keep
 		makeClusterWithStats("h2", 3, 0.80, 0.02), // drop
 		makeClusterWithStats("h3", 4, 0.92, 0.01), // keep (== threshold)
@@ -113,7 +113,7 @@ func TestBuildExportPayload_MinScoreFiltersClustersNotCorpus(t *testing.T) {
 func TestBuildExportPayload_SkipsPrimitiveClusters(t *testing.T) {
 	prim := makeClusterWithStats("prim", 100, 0.99, 0.001)
 	prim.IsPrimitive = true
-	clusters := []ds.Cluster{
+	clusters := []*ds.Cluster{
 		prim,
 		makeClusterWithStats("h1", 3, 0.9, 0.02),
 	}
@@ -136,7 +136,7 @@ func TestBuildExportPayload_ClusterFieldMapping(t *testing.T) {
 	cl.CallCoherence = 0.75
 	cl.CompositeScore = 4.2
 
-	p := buildExportPayload("r", []ds.Cluster{cl}, nil, 0)
+	p := buildExportPayload("r", []*ds.Cluster{cl}, nil, 0)
 	if len(p.Clusters) != 1 {
 		t.Fatal("expected 1 cluster")
 	}
@@ -180,7 +180,7 @@ func TestBuildExportPayload_OrphanCandidateFieldMapping(t *testing.T) {
 		CycloDelta: -1.5,
 		Idiom:      "webhook handler",
 	}}
-	orphans := []ds.OrphanedFunction{
+	orphans := []*ds.OrphanedFunction{
 		makeOrphanFull("o1", []string{"fmt", "os"}, []string{"fmt.Println"}, cands),
 	}
 
@@ -220,7 +220,7 @@ func TestBuildExportPayload_OrphanCandidateFieldMapping(t *testing.T) {
 }
 
 func TestBuildExportPayload_OrphanImportsSorted(t *testing.T) {
-	orphans := []ds.OrphanedFunction{
+	orphans := []*ds.OrphanedFunction{
 		makeOrphanFull("o1", []string{"z", "a", "m"}, []string{"z.F", "a.F"}, nil),
 	}
 	p := buildExportPayload("r", nil, orphans, 0)

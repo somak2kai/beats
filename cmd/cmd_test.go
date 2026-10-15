@@ -454,7 +454,7 @@ func TestBuildOutlierGroups_EmptyInputs(t *testing.T) {
 
 func TestBuildOutlierGroups_OrphanWithNoCandidate(t *testing.T) {
 	// Orphans with no candidates must be silently skipped.
-	orphans := []ds.OrphanedFunction{{Meta: ds.FunctionMeta{Name: "foo"}, Candidates: nil}}
+	orphans := []*ds.OrphanedFunction{{Meta: ds.FunctionMeta{Name: "foo"}, Candidates: nil}}
 	groups := buildOutlierGroups(nil, orphans)
 	if len(groups) != 0 {
 		t.Errorf("expected 0 groups for orphan without candidates, got %d", len(groups))
@@ -463,11 +463,11 @@ func TestBuildOutlierGroups_OrphanWithNoCandidate(t *testing.T) {
 
 func TestBuildOutlierGroups_UnknownShapeHashSkipped(t *testing.T) {
 	// Candidate ShapeHash not present in any cluster → group silently dropped.
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta:       ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{ShapeHash: "doesnotexist"}},
 	}}
-	groups := buildOutlierGroups([]ds.Cluster{}, orphans)
+	groups := buildOutlierGroups([]*ds.Cluster{}, orphans)
 	if len(groups) != 0 {
 		t.Errorf("expected 0 groups for unknown hash, got %d", len(groups))
 	}
@@ -475,19 +475,19 @@ func TestBuildOutlierGroups_UnknownShapeHashSkipped(t *testing.T) {
 
 func TestBuildOutlierGroups_PrimitiveClusterSkipped(t *testing.T) {
 	// Orphan whose best candidate resolves to a primitive cluster must be skipped.
-	cl := ds.Cluster{ShapeHash: "abc", IsPrimitive: true}
-	orphans := []ds.OrphanedFunction{{
+	cl := &ds.Cluster{ShapeHash: "abc", IsPrimitive: true}
+	orphans := []*ds.OrphanedFunction{{
 		Meta:       ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc"}},
 	}}
-	groups := buildOutlierGroups([]ds.Cluster{cl}, orphans)
+	groups := buildOutlierGroups([]*ds.Cluster{cl}, orphans)
 	if len(groups) != 0 {
 		t.Errorf("expected 0 groups for primitive cluster, got %d", len(groups))
 	}
 }
 
 func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
-	cl := ds.Cluster{
+	cl := &ds.Cluster{
 		ShapeHash:   "abc123",
 		CommonSeq:   []int{ast.TK_IF, ast.TK_RETURN},
 		IsPrimitive: false,
@@ -495,7 +495,7 @@ func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 	cl.Profile.TopImports = []string{"fmt"}
 	cl.Profile.TopCallTargets = []string{"fmt.Println"}
 
-	orphan := ds.OrphanedFunction{
+	orphan := &ds.OrphanedFunction{
 		Meta: ds.FunctionMeta{
 			Name:          "myFunc",
 			TokenSeq:      []int{ast.TK_IF, ast.TK_FOR, ast.TK_RETURN},
@@ -505,7 +505,7 @@ func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc123"}},
 	}
 
-	groups := buildOutlierGroups([]ds.Cluster{cl}, []ds.OrphanedFunction{orphan})
+	groups := buildOutlierGroups([]*ds.Cluster{cl}, []*ds.OrphanedFunction{orphan})
 	if len(groups) != 1 {
 		t.Fatalf("expected 1 group, got %d", len(groups))
 	}
@@ -539,5 +539,28 @@ func TestBeatsDBPath_FlatAndStable(t *testing.T) {
 	}
 	if filepath.Dir(parent) != filepath.Dir(dot) {
 		t.Errorf("DBs must be siblings: %q vs %q", parent, dot)
+	}
+}
+
+func TestClusterClassifier_StampsTierAndScore(t *testing.T) {
+	cl := &ds.Cluster{
+		Size:          10,
+		Members:       []ds.FunctionMeta{{Package: "a"}, {Package: "b"}},
+		Stats:         ds.ClusterStats{MeanScore: 0.9, StdScore: 0.01},
+		Coherence:     1.0,
+		CallCoherence: 1.0,
+	}
+	s := &State{IdentifiedCluster: []*ds.Cluster{cl}, Java: &StateJava{}}
+
+	if err := (&clusterClassifier{state: s}).execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := s.IdentifiedCluster[0]
+	if got.Tier != "high" {
+		t.Errorf("Tier = %q, want %q", got.Tier, "high")
+	}
+	if got.CompositeScore <= 0 {
+		t.Errorf("CompositeScore = %v, want > 0", got.CompositeScore)
 	}
 }

@@ -13,8 +13,8 @@ import (
 // makeFn constructs a FunctionMeta with a computed TokenSeqHash from the given
 // token sequence. DirectImports and CallTargets drive the Jaccard terms of the
 // three-term similarity score.
-func makeFn(seq []int, imports, calls []string) ds.FunctionMeta {
-	return ds.FunctionMeta{
+func makeFn(seq []int, imports, calls []string) *ds.FunctionMeta {
+	return &ds.FunctionMeta{
 		TokenSeq:      seq,
 		TokenSeqHash:  hash.ComputeWindowHash(seq),
 		DirectImports: imports,
@@ -39,8 +39,8 @@ func absFloat(x float64) float64 {
 // corpus to at least 20× the cluster size so the cluster is not mis-classified
 // as a structural stop-word. Passing 98 noise functions gives a 100-function
 // corpus where the threshold is 5, safely above any cluster in these tests.
-func makeNoiseFns(n int) []ds.FunctionMeta {
-	fns := make([]ds.FunctionMeta, n)
+func makeNoiseFns(n int) []*ds.FunctionMeta {
+	fns := make([]*ds.FunctionMeta, n)
 	for i := range fns {
 		base := 10000 + i*100
 		seq := []int{base, base + 1, base + 2, base + 3, base + 4}
@@ -53,7 +53,7 @@ func makeNoiseFns(n int) []ds.FunctionMeta {
 
 func TestBuildTrigramMap_ExcludesShortSeqs(t *testing.T) {
 	// len=2 < minTokenSeqLen=4 → no entries in the trigram map.
-	fns := []ds.FunctionMeta{makeFn([]int{1, 2}, nil, nil)}
+	fns := []*ds.FunctionMeta{makeFn([]int{1, 2}, nil, nil)}
 	m := buildTrigramMap(fns)
 	if len(m) != 0 {
 		t.Fatalf("expected empty map for short seq, got %d entries", len(m))
@@ -62,7 +62,7 @@ func TestBuildTrigramMap_ExcludesShortSeqs(t *testing.T) {
 
 func TestBuildTrigramMap_IndexesFunction(t *testing.T) {
 	seq := []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
-	fns := []ds.FunctionMeta{makeFn(seq, nil, nil)}
+	fns := []*ds.FunctionMeta{makeFn(seq, nil, nil)}
 	m := buildTrigramMap(fns)
 	if len(m) == 0 {
 		t.Fatal("expected non-empty trigram map for valid seq")
@@ -78,7 +78,7 @@ func TestBuildTrigramMap_IndexesFunction(t *testing.T) {
 
 func TestBuildTrigramMap_TwoIdenticalFunctionsShareBuckets(t *testing.T) {
 	seq := []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
-	fns := []ds.FunctionMeta{
+	fns := []*ds.FunctionMeta{
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 	}
@@ -95,7 +95,7 @@ func TestBuildTrigramMap_DisjointSeqsNeverShareBuckets(t *testing.T) {
 	// Two sequences with completely different token values → no shared hashes.
 	seq1 := []int{1, 2, 3, 4, 5}
 	seq2 := []int{100, 200, 300, 400, 500}
-	fns := []ds.FunctionMeta{
+	fns := []*ds.FunctionMeta{
 		makeFn(seq1, nil, nil),
 		makeFn(seq2, nil, nil),
 	}
@@ -111,7 +111,7 @@ func TestBuildTrigramMap_DisjointSeqsNeverShareBuckets(t *testing.T) {
 
 func TestCountSharedTrigrams_IdenticalSeqs(t *testing.T) {
 	seq := []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
-	fns := []ds.FunctionMeta{
+	fns := []*ds.FunctionMeta{
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 	}
@@ -138,7 +138,7 @@ func TestCountSharedTrigrams_SkipsLargeBuckets(t *testing.T) {
 func TestCountSharedTrigrams_PairsAlwaysOrdered(t *testing.T) {
 	// All pairKey{i,j} in the result must satisfy i < j.
 	seq := []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
-	fns := []ds.FunctionMeta{
+	fns := []*ds.FunctionMeta{
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
@@ -365,7 +365,7 @@ func TestAssembleCluster_PopulatesShapeHash(t *testing.T) {
 // ── disambiguateShapeHashes ───────────────────────────────────────────────────
 
 func TestDisambiguateShapeHashes_NoCollision(t *testing.T) {
-	clusters := []ds.Cluster{{ShapeHash: "aaa"}, {ShapeHash: "bbb"}}
+	clusters := []*ds.Cluster{{ShapeHash: "aaa"}, {ShapeHash: "bbb"}}
 	disambiguateShapeHashes(clusters)
 	if clusters[0].ShapeHash != "aaa" || clusters[1].ShapeHash != "bbb" {
 		t.Fatal("hashes should be unchanged when there is no collision")
@@ -373,7 +373,7 @@ func TestDisambiguateShapeHashes_NoCollision(t *testing.T) {
 }
 
 func TestDisambiguateShapeHashes_CollisionGetsSuffix(t *testing.T) {
-	clusters := []ds.Cluster{
+	clusters := []*ds.Cluster{
 		{ShapeHash: "aaa"},
 		{ShapeHash: "aaa"},
 		{ShapeHash: "aaa"},
@@ -391,7 +391,7 @@ func TestDisambiguateShapeHashes_CollisionGetsSuffix(t *testing.T) {
 }
 
 func TestDisambiguateShapeHashes_IndependentCollisionGroups(t *testing.T) {
-	clusters := []ds.Cluster{
+	clusters := []*ds.Cluster{
 		{ShapeHash: "aaa"},
 		{ShapeHash: "bbb"},
 		{ShapeHash: "aaa"},
@@ -486,7 +486,7 @@ func TestIdentifyClusters_IdenticalFunctionsClustered(t *testing.T) {
 	// 3 target functions + 97 noise = 100 total.
 	// primitiveThreshold = 100 * 0.05 = 5 → a cluster of 3 survives (3 < 5).
 	fns := append(
-		[]ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
+		[]*ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
 		makeNoiseFns(97)...,
 	)
 	clusters, _, err := IdentifyClusters(fns)
@@ -503,7 +503,7 @@ func TestIdentifyClusters_StructurallyDifferentNotClustered(t *testing.T) {
 	// Disjoint token sequences → no shared trigrams → no candidates → no cluster.
 	f0 := makeFn([]int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}, []string{"fmt"}, nil)
 	f1 := makeFn([]int{TK_RANGE, TK_DEFER, TK_CALL_PKG, TK_ASSIGN, TK_GO}, []string{"os"}, nil)
-	if clusters, _, _ := IdentifyClusters([]ds.FunctionMeta{f0, f1}); len(clusters) != 0 {
+	if clusters, _, _ := IdentifyClusters([]*ds.FunctionMeta{f0, f1}); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for structurally different functions, got %d", len(clusters))
 	}
 }
@@ -526,7 +526,7 @@ func TestIdentifyClusters_CompleteLinkagePreventsChaining(t *testing.T) {
 	f3 := makeFn(seq5, []string{"io", "net"}, []string{"io.Close", "net.Dial"})
 
 	// 4 target + 96 noise = 100 total → primitiveThreshold = 5 → cluster of 3 survives (3 < 5).
-	fns := append([]ds.FunctionMeta{f0, f1, f2, f3}, makeNoiseFns(96)...)
+	fns := append([]*ds.FunctionMeta{f0, f1, f2, f3}, makeNoiseFns(96)...)
 	clusters, _, err := IdentifyClusters(fns)
 	require.NoError(t, err)
 	// F3 is blocked by complete linkage and becomes a singleton → dropped (identifyMinSize=3).
@@ -548,7 +548,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 	// 7 target + 93 noise = 100 total → primitiveThreshold = 5 → cluster of 4 (4<5)
 	// and cluster of 3 (3<5) both survive.
 	fns := append(
-		[]ds.FunctionMeta{
+		[]*ds.FunctionMeta{
 			makeFn(seq2, imp2, calls2),
 			makeFn(seq2, imp2, calls2),
 			makeFn(seq2, imp2, calls2),
@@ -572,7 +572,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 
 func TestIdentifyClusters_SingletonDropped(t *testing.T) {
 	// One function alone cannot form a cluster (identifyMinSize=3).
-	fns := []ds.FunctionMeta{makeFn(seq5, []string{"fmt"}, nil)}
+	fns := []*ds.FunctionMeta{makeFn(seq5, []string{"fmt"}, nil)}
 	if clusters, _, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for a single function, got %d", len(clusters))
 	}
@@ -587,7 +587,7 @@ func TestIdentifyClusters_InitClusterDropped(t *testing.T) {
 	// 2 init functions + 98 noise = 100 total → primitiveThreshold = 5.
 	// The cluster of 2 is dropped at the identifyMinSize=3 gate (2 < 3),
 	// before even reaching isInitCluster — result is still 0 clusters.
-	fns := append([]ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)
+	fns := append([]*ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)
 	if clusters, _, _ := IdentifyClusters(fns); len(clusters) != 0 {
 		t.Fatalf("expected init cluster to be dropped, got %d clusters", len(clusters))
 	}
@@ -602,7 +602,7 @@ func TestIdentifyClusters_OrphanPromoted(t *testing.T) {
 	// Both scored below threshold → both enter scoredFns → both returned as orphans.
 	f0 := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
 	f1 := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
-	fns := append([]ds.FunctionMeta{f0, f1}, makeNoiseFns(98)...)
+	fns := append([]*ds.FunctionMeta{f0, f1}, makeNoiseFns(98)...)
 	_, orphans, err := IdentifyClusters(fns)
 	require.NoError(t, err)
 	if len(orphans) != 2 {
@@ -617,7 +617,7 @@ func TestIdentifyClusters_ClusteredFunctionNotOrphan(t *testing.T) {
 	imp := []string{"fmt"}
 	calls := []string{"fmt.Println"}
 	fns := append(
-		[]ds.FunctionMeta{
+		[]*ds.FunctionMeta{
 			makeFn(seq5, imp, calls),
 			makeFn(seq5, imp, calls),
 			makeFn(seq5, imp, calls),
@@ -642,7 +642,7 @@ func TestIdentifyClusters_MixedClusterAndOrphan(t *testing.T) {
 	calls := []string{"fmt.Println"}
 	f3 := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
 	fns := append(
-		[]ds.FunctionMeta{
+		[]*ds.FunctionMeta{
 			makeFn(seq5, imp, calls),
 			makeFn(seq5, imp, calls),
 			makeFn(seq5, imp, calls),
@@ -666,7 +666,7 @@ func TestIdentifyClusters_StructurallyUniqueNotOrphaned(t *testing.T) {
 	// It never enters scoredFns and must NOT appear as an orphan — it is
 	// structurally unique, not orphaned.
 	fUnique := makeFn([]int{50000, 50001, 50002, 50003, 50004}, []string{"fmt"}, []string{"fmt.Println"})
-	fns := append([]ds.FunctionMeta{fUnique}, makeNoiseFns(99)...)
+	fns := append([]*ds.FunctionMeta{fUnique}, makeNoiseFns(99)...)
 	_, orphans, err := IdentifyClusters(fns)
 	require.NoError(t, err)
 	if len(orphans) != 0 {
@@ -680,7 +680,7 @@ func TestIdentifyClusters_OrphanExcludesInit(t *testing.T) {
 	fInit := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
 	fInit.Name = "init"
 	fOther := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
-	fns := append([]ds.FunctionMeta{fInit, fOther}, makeNoiseFns(98)...)
+	fns := append([]*ds.FunctionMeta{fInit, fOther}, makeNoiseFns(98)...)
 	_, orphans, err := IdentifyClusters(fns)
 	require.NoError(t, err)
 	for _, o := range orphans {

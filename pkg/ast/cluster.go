@@ -70,7 +70,7 @@ type scoredPair struct {
 }
 
 // IdentifyOrphans uses DefaultClusterConfig. See IdentifyOrphansWithConfig.
-func IdentifyOrphans(orphanMetas []ds.FunctionMeta, cluster []ds.Cluster) ([]ds.OrphanedFunction, error) {
+func IdentifyOrphans(orphanMetas []*ds.FunctionMeta, cluster []*ds.Cluster) ([]*ds.OrphanedFunction, error) {
 	return IdentifyOrphansWithConfig(orphanMetas, cluster, DefaultClusterConfig())
 }
 
@@ -81,7 +81,7 @@ func IdentifyOrphans(orphanMetas []ds.FunctionMeta, cluster []ds.Cluster) ([]ds.
 // medoid) using arithmetic mean (seqS+impS+callS)/3.
 //
 // Fast-reject: seqS against the medoid must be ≥ cfg.SeqFastReject before full member scoring.
-func IdentifyOrphansWithConfig(orphanMetas []ds.FunctionMeta, cluster []ds.Cluster, cfg ClusterConfig) ([]ds.OrphanedFunction, error) {
+func IdentifyOrphansWithConfig(orphanMetas []*ds.FunctionMeta, cluster []*ds.Cluster, cfg ClusterConfig) ([]*ds.OrphanedFunction, error) {
 
 	if len(orphanMetas) == 0 || len(cluster) == 0 {
 		slog.Info("orphan analysis skipped", slog.String("reason", "no orphans or no clusters"))
@@ -90,7 +90,7 @@ func IdentifyOrphansWithConfig(orphanMetas []ds.FunctionMeta, cluster []ds.Clust
 
 	var g errgroup.Group
 	var mu sync.Mutex
-	result := make([]ds.OrphanedFunction, 0, len(orphanMetas))
+	result := make([]*ds.OrphanedFunction, 0, len(orphanMetas))
 
 	g.SetLimit(runtime.GOMAXPROCS(0))
 
@@ -104,14 +104,14 @@ func IdentifyOrphansWithConfig(orphanMetas []ds.FunctionMeta, cluster []ds.Clust
 					continue
 				}
 
-				medoidSeqS, _, _, _ := OrphanScore(orphan, cl.Stats.Top3[0].Meta)
+				medoidSeqS, _, _, _ := OrphanScore(*orphan, cl.Stats.Top3[0].Meta)
 				if medoidSeqS < cfg.SeqFastReject {
 					continue
 				}
 
 				var seqSum, impSum, callSum float64
 				for _, mem := range cl.Members {
-					s, i, c, _ := OrphanScore(orphan, mem)
+					s, i, c, _ := OrphanScore(*orphan, mem)
 					seqSum += s
 					impSum += i
 					callSum += c
@@ -167,8 +167,8 @@ func IdentifyOrphansWithConfig(orphanMetas []ds.FunctionMeta, cluster []ds.Clust
 				return candidates[a].ShapeHash < candidates[b].ShapeHash
 			})
 			mu.Lock()
-			result = append(result, ds.OrphanedFunction{
-				Meta:       orphan,
+			result = append(result, &ds.OrphanedFunction{
+				Meta:       *orphan,
 				Candidates: candidates,
 			})
 			mu.Unlock()
@@ -183,7 +183,7 @@ func IdentifyOrphansWithConfig(orphanMetas []ds.FunctionMeta, cluster []ds.Clust
 }
 
 // IdentifyClusters uses DefaultClusterConfig. See IdentifyClustersWithConfig.
-func IdentifyClusters(fns []ds.FunctionMeta) ([]ds.Cluster, []ds.FunctionMeta, error) {
+func IdentifyClusters(fns []*ds.FunctionMeta) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
 	return IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 }
 
@@ -191,7 +191,7 @@ func IdentifyClusters(fns []ds.FunctionMeta) ([]ds.Cluster, []ds.FunctionMeta, e
 // Returns:
 //   - clusters: all multi-member structural clusters (after filtering)
 //   - orphans: functions that did not join any cluster and are eligible for orphan analysis
-func IdentifyClustersWithConfig(fns []ds.FunctionMeta, cfg ClusterConfig) ([]ds.Cluster, []ds.FunctionMeta, error) {
+func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
 	if len(fns) == 0 {
 		return nil, nil, nil
 	}
@@ -214,7 +214,7 @@ func IdentifyClustersWithConfig(fns []ds.FunctionMeta, cfg ClusterConfig) ([]ds.
 	return cl, orph, nil
 }
 
-func ignoreFunction(fn ds.FunctionMeta) bool {
+func ignoreFunction(fn *ds.FunctionMeta) bool {
 	if len(fn.TokenSeq) < minTokenSeqLen {
 		return true
 	}
@@ -224,7 +224,7 @@ func ignoreFunction(fn ds.FunctionMeta) bool {
 	return false
 }
 
-func ignoreFunctionCfg(fn ds.FunctionMeta, cfg ClusterConfig) bool {
+func ignoreFunctionCfg(fn *ds.FunctionMeta, cfg ClusterConfig) bool {
 	if len(fn.TokenSeq) < cfg.MinTokenSeqLen {
 		return true
 	}
@@ -237,7 +237,7 @@ func ignoreFunctionCfg(fn ds.FunctionMeta, cfg ClusterConfig) bool {
 // buildTrigramMap maps each trigram hash to the indices of functions that contain it.
 // Functions with fewer than minTokenSeqLen tokens are excluded — not enough
 // structure to be discriminating. Similarly any test or generated code is excluded.
-func buildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
+func buildTrigramMap(fns []*ds.FunctionMeta) map[int64][]int {
 	trigramMap := make(map[int64][]int, len(fns))
 	for i, fn := range fns {
 		if ignoreFunction(fn) {
@@ -251,11 +251,11 @@ func buildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
 }
 
 // BuildTrigramMap is the exported form for use by the calibrate package.
-func BuildTrigramMap(fns []ds.FunctionMeta) map[int64][]int {
+func BuildTrigramMap(fns []*ds.FunctionMeta) map[int64][]int {
 	return buildTrigramMap(fns)
 }
 
-func buildTrigramMapCfg(fns []ds.FunctionMeta, cfg ClusterConfig) map[int64][]int {
+func buildTrigramMapCfg(fns []*ds.FunctionMeta, cfg ClusterConfig) map[int64][]int {
 	trigramMap := make(map[int64][]int, len(fns))
 	for i, fn := range fns {
 		if ignoreFunctionCfg(fn, cfg) {
@@ -313,7 +313,7 @@ func countSharedTrigramsCfg(trigramMap map[int64][]int, cfg ClusterConfig) map[p
 //     still fell below identifyThreshold. Functions absent from this set either
 //     never shared enough trigram structure to score against anything (structurally
 //     unique) or scored above threshold and joined a cluster.
-func scorePairsCfg(fns []ds.FunctionMeta, sharedCounts map[pairKey]int, cfg ClusterConfig) ([]scoredPair, map[pairKey]float64, map[int]bool, error) {
+func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg ClusterConfig) ([]scoredPair, map[pairKey]float64, map[int]bool, error) {
 	// pre-compute per-function keys and sets once — reused across all pair lookups.
 	keys := make([]string, len(fns))
 	importSets := make([]map[string]bool, len(fns))
@@ -426,7 +426,7 @@ func scorePairsCfg(fns []ds.FunctionMeta, sharedCounts map[pairKey]int, cfg Clus
 // agglomerateCfg runs complete-linkage agglomerative clustering over the scored
 // pairs using Union-Find for efficient membership tracking.
 // Returns clusterMembers: root index → all member indices in that cluster.
-func agglomerateCfg(fns []ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64, cfg ClusterConfig) map[int][]int {
+func agglomerateCfg(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64, cfg ClusterConfig) map[int][]int {
 	parent := make([]int, len(fns))
 	for i := range parent {
 		parent[i] = i
@@ -500,9 +500,9 @@ func completeLinkageCheckCfg(membA, membB []int, pairScores map[pairKey]float64,
 //     identifyThreshold. Functions that never shared enough trigrams to score
 //     against anything are structurally unique, not orphaned.
 //   - passes the standard eligibility guard (not generated, ≥4 tokens, not test, not init)
-func buildClustersCfg(fns []ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]ds.Cluster, []ds.FunctionMeta) {
-	var clusters []ds.Cluster
-	var orphans []ds.FunctionMeta
+func buildClustersCfg(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
+	var clusters []*ds.Cluster
+	var orphans []*ds.FunctionMeta
 
 	for _, idxs := range clusterMembers {
 		if len(idxs) < cfg.IdentifyMinSize {
@@ -525,7 +525,7 @@ func buildClustersCfg(fns []ds.FunctionMeta, clusterMembers map[int][]int, primi
 
 		metas := make([]ds.FunctionMeta, len(idxs))
 		for k, idx := range idxs {
-			metas[k] = fns[idx]
+			metas[k] = *fns[idx]
 		}
 
 		// ignore clusters formed due to scanning any test files.
@@ -550,7 +550,7 @@ func buildClustersCfg(fns []ds.FunctionMeta, clusterMembers map[int][]int, primi
 // assembleCluster builds a single Cluster value from its member FunctionMeta slice.
 // Picks the modal token sequence as the cluster representative — members may have
 // slightly different sequences when merged via near-identity.
-func assembleCluster(metas []ds.FunctionMeta) ds.Cluster {
+func assembleCluster(metas []ds.FunctionMeta) *ds.Cluster {
 	seqFreq := make(map[string]int)
 	seqForKey := make(map[string][]int)
 	for _, m := range metas {
@@ -565,7 +565,7 @@ func assembleCluster(metas []ds.FunctionMeta) ds.Cluster {
 		}
 	}
 
-	c := ds.Cluster{
+	c := &ds.Cluster{
 		SeqKey:    bestKey,
 		ShapeHash: shapeHash(bestKey),
 		TokenSeq:  seqForKey[bestKey],
@@ -582,7 +582,7 @@ func assembleCluster(metas []ds.FunctionMeta) ds.Cluster {
 
 // disambiguateShapeHashes appends a numeric suffix to ShapeHash when two clusters
 // share the same modal token sequence, keeping DB keys unique across runs.
-func disambiguateShapeHashes(clusters []ds.Cluster) {
+func disambiguateShapeHashes(clusters []*ds.Cluster) {
 	hashCount := make(map[string]int)
 	for i := range clusters {
 		h := clusters[i].ShapeHash

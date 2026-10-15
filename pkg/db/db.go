@@ -80,7 +80,7 @@ func (d *BadgerXDb) StoreCluster(tier, shapeHash string, c ds.Cluster) error {
 // StoreClusterByIndex stores a cluster under a zero-padded numeric key so that
 // clusters can be retrieved by sequential index without knowing the shape hash.
 // Key format: cluster:<tier>:<10-digit-index>  e.g. cluster:identified:0000000042
-func (d *BadgerXDb) StoreClusterByIndex(tier string, idx int, lang string, c ds.Cluster) error {
+func (d *BadgerXDb) StoreClusterByIndex(tier string, idx int, lang string, c *ds.Cluster) error {
 	key := fmt.Sprintf("cluster:%s:%s:%05d", tier, lang, idx)
 	return d.db.Update([]byte(key), c)
 }
@@ -125,14 +125,14 @@ func int64ToBytes(hash int64) []byte {
 
 // StoreOrphanedFunctions persists the full slice of OrphanedFunction values.
 // Key: meta:orphans
-func (d *BadgerXDb) StoreOrphanedFunctions(orphans []ds.OrphanedFunction, lang ds.Language) error {
+func (d *BadgerXDb) StoreOrphanedFunctions(orphans []*ds.OrphanedFunction, lang ds.Language) error {
 	return d.db.Update([]byte("meta:orphans:"+string(lang)), orphans)
 }
 
 // LoadOrphanedFunctions retrieves the orphaned functions slice, or returns an
 // empty slice when none have been stored yet.
-func (d *BadgerXDb) LoadOrphanedFunctions(lang ds.Language) ([]ds.OrphanedFunction, error) {
-	var orphans []ds.OrphanedFunction
+func (d *BadgerXDb) LoadOrphanedFunctions(lang ds.Language) ([]*ds.OrphanedFunction, error) {
+	var orphans []*ds.OrphanedFunction
 	err := d.db.View([]byte("meta:orphans:"+string(lang)), &orphans)
 	if err != nil {
 		// Key not found is not an error — orphan analysis may not have run yet
@@ -142,15 +142,15 @@ func (d *BadgerXDb) LoadOrphanedFunctions(lang ds.Language) ([]ds.OrphanedFuncti
 }
 
 // ScanClusters returns all clusters stored under the given tier prefix.
-func (d *BadgerXDb) ScanClusters(tier string) ([]ds.Cluster, error) {
+func (d *BadgerXDb) ScanClusters(tier string) ([]*ds.Cluster, error) {
 	prefix := []byte(fmt.Sprintf("cluster:%s:", tier))
-	var clusters []ds.Cluster
+	var clusters []*ds.Cluster
 	err := d.db.IterateView(prefix, badger.DefaultIteratorOptions, func(decode badgerx.DecodeFunc) error {
 		var c ds.Cluster
 		if err := decode(&c); err != nil {
 			return err
 		}
-		clusters = append(clusters, c)
+		clusters = append(clusters, &c)
 		return nil
 	})
 	return clusters, err

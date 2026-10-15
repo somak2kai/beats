@@ -22,7 +22,7 @@ func writeTempGo(t *testing.T, src string) ds.FileMeta {
 }
 
 // findFn returns the FunctionMeta with the given name, failing the test if not found.
-func findFn(t *testing.T, fns []ds.FunctionMeta, name string) ds.FunctionMeta {
+func findFn(t *testing.T, fns []*ds.FunctionMeta, name string) *ds.FunctionMeta {
 	t.Helper()
 	for _, fn := range fns {
 		if fn.Name == name {
@@ -34,7 +34,7 @@ func findFn(t *testing.T, fns []ds.FunctionMeta, name string) ds.FunctionMeta {
 		names[i] = fn.Name
 	}
 	t.Fatalf("function %q not found; parsed functions: %v", name, names)
-	return ds.FunctionMeta{}
+	return nil
 }
 
 // hasToken reports whether tok appears at least once in seq.

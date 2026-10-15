@@ -120,7 +120,7 @@ func runQueryOutlier(args []string) {
 	}
 
 	clusters, _ := queryScanClusters(bDb)
-	clusterByHash := make(map[string]ds.Cluster, len(clusters))
+	clusterByHash := make(map[string]*ds.Cluster, len(clusters))
 	for _, cl := range clusters {
 		clusterByHash[cl.ShapeHash] = cl
 	}
@@ -137,7 +137,7 @@ func runQueryOutlier(args []string) {
 	}
 }
 
-func buildOutlierResults(orphans []ds.OrphanedFunction, clusterByHash map[string]ds.Cluster) []OutlierResult {
+func buildOutlierResults(orphans []*ds.OrphanedFunction, clusterByHash map[string]*ds.Cluster) []OutlierResult {
 	results := make([]OutlierResult, 0, len(orphans))
 	for _, o := range orphans {
 		if len(o.Candidates) == 0 {
@@ -267,7 +267,7 @@ func runQueryCluster(hashPrefix string, args []string) {
 	var found *ds.Cluster
 	for i := range clusters {
 		if clusters[i].ShapeHash == hashPrefix {
-			found = &clusters[i]
+			found = clusters[i]
 			break
 		}
 	}
@@ -361,7 +361,7 @@ func openQueryDB(repo string) (*db.BadgerXDb, error) {
 }
 
 // queryScanClusters tries TierIdentified first, falls back to TierCollapsed.
-func queryScanClusters(bDb *db.BadgerXDb) ([]ds.Cluster, string) {
+func queryScanClusters(bDb *db.BadgerXDb) ([]*ds.Cluster, string) {
 	clusters, err := bDb.ScanClusters(db.TierIdentified)
 	if err == nil && len(clusters) > 0 {
 		return clusters, db.TierIdentified

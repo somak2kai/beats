@@ -11,8 +11,8 @@ import (
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // makeCluster builds a minimal Cluster for use in tests.
-func makeCluster(hash, tier string, size int, commonSeq []int) ds.Cluster {
-	return ds.Cluster{
+func makeCluster(hash, tier string, size int, commonSeq []int) *ds.Cluster {
+	return &ds.Cluster{
 		ShapeHash: hash,
 		Tier:      tier,
 		Size:      size,
@@ -21,8 +21,8 @@ func makeCluster(hash, tier string, size int, commonSeq []int) ds.Cluster {
 }
 
 // makeOrphan builds a minimal OrphanedFunction for use in tests.
-func makeOrphan(name string, candidates []ds.ClusterCandidate) ds.OrphanedFunction {
-	return ds.OrphanedFunction{
+func makeOrphan(name string, candidates []ds.ClusterCandidate) *ds.OrphanedFunction {
+	return &ds.OrphanedFunction{
 		Meta:       ds.FunctionMeta{Name: name},
 		Candidates: candidates,
 	}
@@ -38,15 +38,15 @@ func TestBuildOutlierResults_NilInputs(t *testing.T) {
 }
 
 func TestBuildOutlierResults_SkipsOrphanWithNoCandidates(t *testing.T) {
-	orphans := []ds.OrphanedFunction{makeOrphan("foo", nil)}
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{})
+	orphans := []*ds.OrphanedFunction{makeOrphan("foo", nil)}
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{})
 	if len(results) != 0 {
 		t.Errorf("expected 0 results for orphan with no candidates, got %d", len(results))
 	}
 }
 
 func TestBuildOutlierResults_MetaFieldsTransferred(t *testing.T) {
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{
 			Name:       "myFunc",
 			Package:    "mypkg",
@@ -56,7 +56,7 @@ func TestBuildOutlierResults_MetaFieldsTransferred(t *testing.T) {
 		},
 		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc"}},
 	}}
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -80,14 +80,14 @@ func TestBuildOutlierResults_MetaFieldsTransferred(t *testing.T) {
 
 func TestBuildOutlierResults_UnknownCluster_EmptyDeltas(t *testing.T) {
 	// Candidate cluster not in map → result still produced, deltas are all empty.
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{
 			ShapeHash:  "missing",
 			ArithScore: 0.75,
 		}},
 	}}
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -108,7 +108,7 @@ func TestBuildOutlierResults_DeltasComputedFromCluster(t *testing.T) {
 	cl.Profile.TopImports = []string{"fmt"}
 	cl.Profile.TopCallTargets = []string{"fmt.Println"}
 
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{
 			Name:          "foo",
 			TokenSeq:      []int{ast.TK_IF, ast.TK_FOR, ast.TK_RETURN}, // FOR is extra vs LCS
@@ -118,7 +118,7 @@ func TestBuildOutlierResults_DeltasComputedFromCluster(t *testing.T) {
 		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc", ArithScore: 0.80, CycloDelta: 2.5}},
 	}}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{"abc": cl})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{"abc": cl})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -162,7 +162,7 @@ func TestBuildOutlierResults_CandidateEntryFields(t *testing.T) {
 	// Tier, Size, CommonShape, Idiom must be populated on the CandidateEntry.
 	cl := makeCluster("abc123", "high", 14, []int{ast.TK_IF, ast.TK_RETURN})
 
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{
 			ShapeHash:  "abc123",
@@ -171,7 +171,7 @@ func TestBuildOutlierResults_CandidateEntryFields(t *testing.T) {
 		}},
 	}}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{"abc123": cl})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{"abc123": cl})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -198,12 +198,12 @@ func TestBuildOutlierResults_ClusterIDTruncatedTo6Chars(t *testing.T) {
 	hash := "abcdefghij0123456789" // longer than 6 chars
 	cl := makeCluster(hash, "low", 3, nil)
 
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta:       ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{ShapeHash: hash}},
 	}}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{hash: cl})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{hash: cl})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -217,12 +217,12 @@ func TestBuildOutlierResults_ClusterIDShortHashUnchanged(t *testing.T) {
 	hash := "abc"
 	cl := makeCluster(hash, "low", 2, nil)
 
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta:       ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{{ShapeHash: hash}},
 	}}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{hash: cl})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{hash: cl})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -236,7 +236,7 @@ func TestBuildOutlierResults_MultipleCandidatesPreserved(t *testing.T) {
 	cl1 := makeCluster("aaa", "high", 10, nil)
 	cl2 := makeCluster("bbb", "medium", 5, nil)
 
-	orphans := []ds.OrphanedFunction{{
+	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{Name: "foo"},
 		Candidates: []ds.ClusterCandidate{
 			{ShapeHash: "aaa", ArithScore: 0.82},
@@ -244,7 +244,7 @@ func TestBuildOutlierResults_MultipleCandidatesPreserved(t *testing.T) {
 		},
 	}}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{"aaa": cl1, "bbb": cl2})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{"aaa": cl1, "bbb": cl2})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -256,13 +256,13 @@ func TestBuildOutlierResults_MultipleCandidatesPreserved(t *testing.T) {
 func TestBuildOutlierResults_MultipleOrphansAllIncluded(t *testing.T) {
 	cl := makeCluster("abc", "high", 5, nil)
 
-	orphans := []ds.OrphanedFunction{
+	orphans := []*ds.OrphanedFunction{
 		makeOrphan("alpha", []ds.ClusterCandidate{{ShapeHash: "abc"}}),
 		makeOrphan("beta", []ds.ClusterCandidate{{ShapeHash: "abc"}}),
 		makeOrphan("nocandidate", nil), // must be skipped
 	}
 
-	results := buildOutlierResults(orphans, map[string]ds.Cluster{"abc": cl})
+	results := buildOutlierResults(orphans, map[string]*ds.Cluster{"abc": cl})
 	if len(results) != 2 {
 		t.Errorf("expected 2 results (nocandidate skipped), got %d", len(results))
 	}

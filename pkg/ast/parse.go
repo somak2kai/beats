@@ -45,7 +45,7 @@ const (
 	TK_ASSERT_STMT  // assert statement (Java)
 )
 
-func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
+func ParseFile(f ds.FileMeta) ([]*ds.FunctionMeta, error) {
 	fset := token.NewFileSet()
 	// Read raw bytes first so we can pass them to the parser (avoids a second
 	// open) and slice function bodies by byte offset later.
@@ -63,7 +63,7 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 	isGeneratedCode := isGeneratedCode(file)
 	isTestCode := isTestFile(imports)
 
-	funcs := make([]ds.FunctionMeta, 0)
+	funcs := make([]*ds.FunctionMeta, 0)
 
 	ast.Inspect(file, func(n ast.Node) bool {
 		fn, ok := n.(*ast.FuncDecl)
@@ -75,7 +75,7 @@ func ParseFile(f ds.FileMeta) ([]ds.FunctionMeta, error) {
 		end := fset.Position(fn.End())
 
 		features, tokens := extractStructuralFeatures(fn, aliasMap)
-		funcs = append(funcs, ds.FunctionMeta{
+		funcs = append(funcs, &ds.FunctionMeta{
 			Package:       file.Name.Name,
 			FileMeta:      f,
 			Start_line:    start.Line,
