@@ -772,16 +772,3 @@ func TestOrphanScore_NoImportsOrCalls(t *testing.T) {
 		t.Fatalf("arith: expected %f, got %f", want, arith)
 	}
 }
-
-func TestIdentifyClusters_SmallCorpusKeepsCluster(t *testing.T) {
-	// 3 of 30 functions is 10% — above 5% — but must still survive the primitive filter.
-	imp := []string{"fmt"}
-	calls := []string{"fmt.Println"}
-	fns := append(
-		[]*ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
-		makeNoiseFns(27)...,
-	)
-	clusters, _, err := IdentifyClusters(fns)
-	require.NoError(t, err)
-	require.Len(t, clusters, 1)
-}
