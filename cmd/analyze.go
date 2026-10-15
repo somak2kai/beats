@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -170,9 +171,12 @@ func runAnalyze(repo string) error {
 
 	slog.Info("loaded clusters", slog.Int("count", len(clusters)), slog.String("tier", tier))
 
-	goOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
-	javaOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
-	orphans := append(goOrphans, javaOrphans...) // best-effort; nil if not yet computed
+	goOrphans, err := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
+	javaOrphans, jerr := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	if err = errors.Join(err, jerr); err != nil {
+		return fmt.Errorf("load orphans: %w", err)
+	}
+	orphans := append(goOrphans, javaOrphans...)
 
 	report := buildReport(repo, clusters, orphans)
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -96,10 +97,18 @@ func runExport(args []string) {
 	}
 	defer bDb.Close() //nolint:errcheck
 
-	clusters, _ := queryScanClusters(bDb)
+	clusters, _, err := queryScanClusters(bDb)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats export:", err)
+		os.Exit(1)
+	}
 
-	goOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
-	javaOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	goOrphans, err := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
+	javaOrphans, jerr := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	if err = errors.Join(err, jerr); err != nil {
+		fmt.Fprintln(os.Stderr, "beats export:", err)
+		os.Exit(1)
+	}
 	orphans := append(goOrphans, javaOrphans...)
 
 	payload := buildExportPayload(*repo, clusters, orphans, *minScore)

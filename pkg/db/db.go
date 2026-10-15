@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 
@@ -134,11 +135,11 @@ func (d *BadgerXDb) StoreOrphanedFunctions(orphans []*ds.OrphanedFunction, lang 
 func (d *BadgerXDb) LoadOrphanedFunctions(lang ds.Language) ([]*ds.OrphanedFunction, error) {
 	var orphans []*ds.OrphanedFunction
 	err := d.db.View([]byte("meta:orphans:"+string(lang)), &orphans)
-	if err != nil {
-		// Key not found is not an error — orphan analysis may not have run yet
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		// orphan analysis may not have run yet
 		return nil, nil
 	}
-	return orphans, nil
+	return orphans, err
 }
 
 // ScanClusters returns all clusters stored under the given tier prefix.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -112,14 +113,22 @@ func runQueryOutlier(args []string) {
 	defer bDb.Close() //nolint:errcheck
 
 	goOrphans, err := bDb.LoadOrphanedFunctions(ds.Language_GOLANG)
-	javaOrphans, _ := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	javaOrphans, jerr := bDb.LoadOrphanedFunctions(ds.Language_JAVA)
+	if err = errors.Join(err, jerr); err != nil {
+		fmt.Fprintln(os.Stderr, "beats query outlier:", err)
+		os.Exit(1)
+	}
 	orphans := append(goOrphans, javaOrphans...)
-	if err != nil || len(orphans) == 0 {
+	if len(orphans) == 0 {
 		fmt.Fprintln(os.Stderr, "no orphaned functions found — run beats init first")
 		return
 	}
 
-	clusters, _ := queryScanClusters(bDb)
+	clusters, _, err := queryScanClusters(bDb)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats query outlier:", err)
+		os.Exit(1)
+	}
 	clusterByHash := make(map[string]*ds.Cluster, len(clusters))
 	for _, cl := range clusters {
 		clusterByHash[cl.ShapeHash] = cl
@@ -262,7 +271,11 @@ func runQueryCluster(hashPrefix string, args []string) {
 	}
 	defer bDb.Close() //nolint:errcheck
 
-	clusters, _ := queryScanClusters(bDb)
+	clusters, _, err := queryScanClusters(bDb)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beats query cluster:", err)
+		os.Exit(1)
+	}
 
 	var found *ds.Cluster
 	for i := range clusters {
@@ -361,11 +374,11 @@ func openQueryDB(repo string) (*db.BadgerXDb, error) {
 }
 
 // queryScanClusters tries TierIdentified first, falls back to TierCollapsed.
-func queryScanClusters(bDb *db.BadgerXDb) ([]*ds.Cluster, string) {
+func queryScanClusters(bDb *db.BadgerXDb) ([]*ds.Cluster, string, error) {
 	clusters, err := bDb.ScanClusters(db.TierIdentified)
 	if err == nil && len(clusters) > 0 {
-		return clusters, db.TierIdentified
+		return clusters, db.TierIdentified, nil
 	}
-	clusters, _ = bDb.ScanClusters(db.TierCollapsed)
-	return clusters, db.TierCollapsed
+	clusters, err = bDb.ScanClusters(db.TierCollapsed)
+	return clusters, db.TierCollapsed, err
 }
