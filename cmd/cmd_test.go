@@ -552,7 +552,7 @@ func TestClusterClassifier_StampsTierAndScore(t *testing.T) {
 	}
 	s := &State{IdentifiedCluster: []*ds.Cluster{cl}, Java: &StateJava{}}
 
-	if err := (&clusterClassifier{state: s}).execute(); err != nil {
+	if err := classifyClusters(s); err != nil {
 		t.Fatal(err)
 	}
 

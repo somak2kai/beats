@@ -24,64 +24,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// beatsDBPath returns the stable BadgerDB path for a given repo.
-func beatsDBPath(repo string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.TempDir() // fallback, should never happen
-	}
-	abs, err := filepath.Abs(repo)
-	if err != nil {
-		return "", fmt.Errorf("resolve repo path %q: %w", repo, err)
-	}
-	if runtime.GOOS == "windows" {
-		abs = strings.ReplaceAll(abs, ":", "") // ':' is not allowed in a Windows folder name
-	}
-	name := strings.ReplaceAll(abs, string(filepath.Separator), "_")
-	if strings.Trim(name, "_") == "" {
-		return "", fmt.Errorf("refusing to use %q as a repo path", repo)
-	}
-	return filepath.Join(home, ".beats", "badger", name), nil
+type execute func(s *State) error
+type stage struct {
+	exec execute
+	// any database interaction gets skipped in dry run mode.
+	isSkipInDryRun bool
 }
-
-var (
-	_ command   = (*dbCleaner)(nil)
-	_ skippable = (*dbCleaner)(nil)
-	_ command   = (*fileMetadata)(nil)
-	_ command   = (*functionMetadata)(nil)
-	_ command   = (*indexCommand)(nil)
-	_ command   = (*indexPersistor)(nil)
-	_ skippable = (*indexPersistor)(nil)
-	_ command   = (*identifyCluster)(nil)
-	_ command   = (*clusterClassifier)(nil)
-	_ command   = (*clusterPersistor)(nil)
-	_ skippable = (*clusterPersistor)(nil)
-	_ command   = (*analyzer)(nil)
-	_ skippable = (*analyzer)(nil)
-	_ command   = (*orphanAnalyzer)(nil)
-	_ skippable = (*orphanAnalyzer)(nil)
-	_ command   = (*orphanPersistor)(nil)
-	_ skippable = (*orphanPersistor)(nil)
-	_ command   = (*outlierWriter)(nil)
-	_ skippable = (*outlierWriter)(nil)
-	_ command   = (*javafunctionMetadata)(nil)
-)
-
-type command interface{ execute() error }
-type skippable interface{ skipInDryRun() bool }
-type dbCleaner struct{ state *State }
-type fileMetadata struct{ state *State }
-type functionMetadata struct{ state *State }
-type javafunctionMetadata struct{ state *State }
-type indexCommand struct{ state *State }
-type indexPersistor struct{ state *State }
-type identifyCluster struct{ state *State }
-type clusterClassifier struct{ state *State }
-type clusterPersistor struct{ state *State }
-type analyzer struct{ state *State }
-type orphanAnalyzer struct{ state *State }
-type orphanPersistor struct{ state *State }
-type outlierWriter struct{ state *State }
 
 type Beats struct {
 	IsDryRun bool
@@ -105,10 +53,51 @@ type StateJava struct {
 	Index             *ds.Index
 }
 
-// dbCleaner removes the BadgerDB directory for the repository, if exists, before the
+func getPipeline() []stage {
+	return []stage{
+		{exec: resetDb, isSkipInDryRun: true},               // 1. wipes off existing data
+		{exec: getFileMetadata},                             // 2. identifies files to scan
+		{exec: getGolangFunctionMetadata},                   // 3. runs ast parser to get go function metadata
+		{exec: getJavaFunctionMetadata},                     // 4. runs jbeats ast parser to get java function metadata
+		{exec: perfomClustering},                            // 5. performs clustering on function metadata
+		{exec: classifyClusters},                            // 6. runs classification on clusters identified into high, medium
+		{exec: saveClusterInDb, isSkipInDryRun: true},       // 7. saves cluster information to badgerdb
+		{exec: identifyOrphans},                             //8. runs analysis to identify functions which did not join clusters
+		{exec: saveOrphansInDB, isSkipInDryRun: true},       // 9. saves orphans information to badger db
+		{exec: populateFunctionIndex},                       // 10. gets and populates additional metadata for function metadata
+		{exec: saveFunctionIndexInDb, isSkipInDryRun: true}, // 11. writes function index metadata to badger
+		{exec: writeOutlierHtmlFile, isSkipInDryRun: true},  // 12. creates the .beats/outlier.md files for skills to read.
+		{exec: writeBeatsHtmlFile, isSkipInDryRun: true},    //13. creates the .beats/report.html files
+	}
+}
+
+func (b *Beats) run(repo string) error {
+
+	s := &State{
+		RepositoryPath:    repo,
+		FunctionMetadata:  make([]*ds.FunctionMeta, 0),
+		PkgToFileMetadata: make(ds.PkgToFileMeta),
+		Java:              &StateJava{},
+	}
+	for _, cmd := range getPipeline() {
+		if b.IsDryRun {
+			if cmd.isSkipInDryRun {
+				slog.Info("skipping (dry-run)")
+				continue
+			}
+		}
+		if err := cmd.exec(s); err != nil {
+			slog.Error("stage halted...", slog.Any("error", err))
+			return err
+		}
+	}
+	return nil
+}
+
+// removes the BadgerDB directory for the repository, if exists, before the
 // pipeline runs.
-func (d *dbCleaner) execute() error {
-	dbPath, err := beatsDBPath(d.state.RepositoryPath)
+func resetDb(s *State) error {
+	dbPath, err := beatsDBPath(s.RepositoryPath)
 	if err != nil {
 		return err
 	}
@@ -120,24 +109,25 @@ func (d *dbCleaner) execute() error {
 	return nil
 }
 
-func (d *dbCleaner) skipInDryRun() bool { return true }
+// gets the list of files to scan further in repository.
+func getFileMetadata(s *State) error {
 
-func (f *fileMetadata) execute() error {
-	files, err := util.GetFileMetadata(f.state.RepositoryPath)
+	files, err := util.GetFileMetadata(s.RepositoryPath)
 	if err != nil {
 		slog.Error("failed to get file metadata", slog.Any("error", err))
 		return err
 	}
-	f.state.PkgToFileMetadata = files
+	s.PkgToFileMetadata = files
 	return nil
 }
 
-func (f *functionMetadata) execute() error {
+// gets ast token sequences for golang functions.
+func getGolangFunctionMetadata(s *State) error {
 
 	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
-	for _, val := range f.state.PkgToFileMetadata {
+	for _, val := range s.PkgToFileMetadata {
 		val := val
 		g.Go(func() error {
 			var localFncM []*ds.FunctionMeta
@@ -153,7 +143,7 @@ func (f *functionMetadata) execute() error {
 				localFncM = append(localFncM, meta...)
 			}
 			mu.Lock()
-			f.state.FunctionMetadata = append(f.state.FunctionMetadata, localFncM...)
+			s.FunctionMetadata = append(s.FunctionMetadata, localFncM...)
 			mu.Unlock()
 			return nil
 		})
@@ -163,19 +153,21 @@ func (f *functionMetadata) execute() error {
 		slog.Error("unable to capture file metadata record", slog.Any("error", err))
 		return err
 	}
-	slog.Info("parsed golang functions", slog.Int("total", len(f.state.FunctionMetadata)))
+	slog.Info("parsed golang functions", slog.Int("total", len(s.FunctionMetadata)))
 	return nil
 }
 
-func (i *indexCommand) execute() error {
-	i.state.Index = ds.PopulateIndex(i.state.FunctionMetadata)
-	i.state.Java.Index = ds.PopulateIndex(i.state.Java.FunctionMetadata)
+// gets and populates additional metadata for function metadata
+func populateFunctionIndex(s *State) error {
+	s.Index = ds.PopulateIndex(s.FunctionMetadata)
+	s.Java.Index = ds.PopulateIndex(s.Java.FunctionMetadata)
 	return nil
 }
 
-func (w *indexPersistor) execute() error {
+// saves function index created in badger db.
+func saveFunctionIndexInDb(s *State) error {
 
-	tmp, err := beatsDBPath(w.state.RepositoryPath)
+	tmp, err := beatsDBPath(s.RepositoryPath)
 	if err != nil {
 		return err
 	}
@@ -205,60 +197,58 @@ func (w *indexPersistor) execute() error {
 		}
 		return nil
 	}
-	if err := store(w.state.Index, ds.Language_GOLANG); err != nil {
+	if err := store(s.Index, ds.Language_GOLANG); err != nil {
 		return err
 	}
-	if err := store(w.state.Java.Index, ds.Language_JAVA); err != nil {
+	if err := store(s.Java.Index, ds.Language_JAVA); err != nil {
 		return err
 	}
 	return nil
 }
-func (w *indexPersistor) skipInDryRun() bool {
-	return true
-}
 
-func (a *analyzer) execute() error {
-	goHasData := len(a.state.IdentifiedCluster) > 0 && len(a.state.OrphanMetas) > 0
-	javaHasData := len(a.state.Java.IdentifiedCluster) > 0 && len(a.state.Java.OrphanMetas) > 0
+// writes out .beats/report.html file.
+func writeBeatsHtmlFile(s *State) error {
+	goHasData := len(s.IdentifiedCluster) > 0 && len(s.OrphanMetas) > 0
+	javaHasData := len(s.Java.IdentifiedCluster) > 0 && len(s.Java.OrphanMetas) > 0
 	if !goHasData && !javaHasData {
 		return nil
 	}
-	return runAnalyze(a.state.RepositoryPath)
+	return runAnalyze(s.RepositoryPath)
 }
 
-func (m *analyzer) skipInDryRun() bool { return true }
+// based on function metadata created so far , performs clustering.
+func perfomClustering(s *State) error {
 
-func (c *identifyCluster) execute() error {
 	cfg := ast.DefaultClusterConfig()
 	cluster := func(fMeta []*ds.FunctionMeta, lang ds.Language) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
-		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg)
+		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg) // bug here donest use the language filter.
 		if err != nil {
 			return nil, nil, err
 		}
 		return clusters, orphans, nil
 	}
 
-	cl, o, err := cluster(c.state.FunctionMetadata, ds.Language_GOLANG)
+	cl, o, err := cluster(s.FunctionMetadata, ds.Language_GOLANG)
 	if err != nil {
 		return err
 	}
-	c.state.IdentifiedCluster = cl
-	c.state.OrphanMetas = o
+	s.IdentifiedCluster = cl
+	s.OrphanMetas = o
 
-	clj, oj, err := cluster(c.state.Java.FunctionMetadata, ds.Language_JAVA)
+	clj, oj, err := cluster(s.Java.FunctionMetadata, ds.Language_JAVA)
 	if err != nil {
 		return err
 	}
-	c.state.Java.IdentifiedCluster = clj
-	c.state.Java.OrphanMetas = oj
+	s.Java.IdentifiedCluster = clj
+	s.Java.OrphanMetas = oj
 
 	slog.Info("identified golang clusters",
-		slog.Int("count", len(c.state.IdentifiedCluster)),
-		slog.Int("orphans", len(c.state.OrphanMetas)),
+		slog.Int("count", len(s.IdentifiedCluster)),
+		slog.Int("orphans", len(s.OrphanMetas)),
 	)
 	slog.Info("identified java clusters",
-		slog.Int("count", len(c.state.Java.IdentifiedCluster)),
-		slog.Int("orphans", len(c.state.Java.OrphanMetas)),
+		slog.Int("count", len(s.Java.IdentifiedCluster)),
+		slog.Int("orphans", len(s.Java.OrphanMetas)),
 	)
 	return nil
 }
@@ -316,10 +306,8 @@ func clusterCompositeScore(size, numPackages int, tier string, meanScore, import
 	return math.Log(float64(size)) * math.Log1p(float64(numPackages)) * confidence * meanScore * meanScore * cohFactor
 }
 
-// clusterClassifier stamps Tier and AttentionScore on every non-primitive
-// cluster in State after IdentifyClusters has run. It must execute before
-// identifyClusterPersistor so the values are saved to the DB.
-func (c *clusterClassifier) execute() error {
+// classifies clusters as high medium low for clsuters identified.
+func classifyClusters(s *State) error {
 
 	classify := func(cluster []*ds.Cluster, lang ds.Language) {
 
@@ -357,14 +345,16 @@ func (c *clusterClassifier) execute() error {
 			)
 		}
 	}
-	classify(c.state.IdentifiedCluster, ds.Language_GOLANG)
-	classify(c.state.Java.IdentifiedCluster, ds.Language_JAVA)
+	classify(s.IdentifiedCluster, ds.Language_GOLANG)
+	classify(s.Java.IdentifiedCluster, ds.Language_JAVA)
 
 	return nil
 }
 
-func (c *clusterPersistor) execute() error {
-	tmp, err := beatsDBPath(c.state.RepositoryPath)
+// saves cluster information to badgerdb.
+func saveClusterInDb(s *State) error {
+
+	tmp, err := beatsDBPath(s.RepositoryPath)
 	if err != nil {
 		return err
 	}
@@ -388,18 +378,17 @@ func (c *clusterPersistor) execute() error {
 		}
 		return nil
 	}
-	if err := persist(c.state.IdentifiedCluster, ds.Language_GOLANG); err != nil {
+	if err := persist(s.IdentifiedCluster, ds.Language_GOLANG); err != nil {
 		return err
 	}
-	if err := persist(c.state.Java.IdentifiedCluster, ds.Language_JAVA); err != nil {
+	if err := persist(s.Java.IdentifiedCluster, ds.Language_JAVA); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *clusterPersistor) skipInDryRun() bool { return true }
-
-func (o *orphanAnalyzer) execute() error {
+// identifies orphans, which are potential outliers to clusters identified.
+func identifyOrphans(s *State) error {
 
 	analyze := func(cltrs []*ds.Cluster, orphans []*ds.FunctionMeta) ([]*ds.OrphanedFunction, error) {
 
@@ -413,26 +402,25 @@ func (o *orphanAnalyzer) execute() error {
 		return result, nil
 	}
 
-	r, err := analyze(o.state.IdentifiedCluster, o.state.OrphanMetas)
+	r, err := analyze(s.IdentifiedCluster, s.OrphanMetas)
 	if err != nil {
 		return err
 	}
-	o.state.OrphanedFunctions = r
+	s.OrphanedFunctions = r
 
-	rj, err := analyze(o.state.Java.IdentifiedCluster, o.state.Java.OrphanMetas)
+	rj, err := analyze(s.Java.IdentifiedCluster, s.Java.OrphanMetas)
 	if err != nil {
 		return err
 	}
-	o.state.Java.OrphanedFunctions = rj
+	s.Java.OrphanedFunctions = rj
 
 	return nil
 }
 
-func (o *orphanAnalyzer) skipInDryRun() bool { return false }
+// saves outlier information to db.
+func saveOrphansInDB(s *State) error {
 
-func (p *orphanPersistor) execute() error {
-
-	tmp, err := beatsDBPath(p.state.RepositoryPath)
+	tmp, err := beatsDBPath(s.RepositoryPath)
 	if err != nil {
 		return err
 	}
@@ -448,30 +436,27 @@ func (p *orphanPersistor) execute() error {
 		}
 		return nil
 	}
-	if err := store(p.state.OrphanedFunctions, ds.Language_GOLANG); err != nil {
+	if err := store(s.OrphanedFunctions, ds.Language_GOLANG); err != nil {
 		return err
 	}
-	if err := store(p.state.Java.OrphanedFunctions, ds.Language_JAVA); err != nil {
+	if err := store(s.Java.OrphanedFunctions, ds.Language_JAVA); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (p *orphanPersistor) skipInDryRun() bool { return true }
+// writes out .beats/outlier.md for skills to use further.
+func writeOutlierHtmlFile(s *State) error {
 
-// outlierWriter writes .beats/outlier.md — a pre-computed, self-contained
-// document containing every outlier and its closest cluster's peer bodies in
-// the exact format the beats-analyze LLM skill expects as its user message.
-func (o *outlierWriter) execute() error {
-	allOrphans := slices.Concat(o.state.OrphanedFunctions, o.state.Java.OrphanedFunctions)
+	allOrphans := slices.Concat(s.OrphanedFunctions, s.Java.OrphanedFunctions)
 	if len(allOrphans) == 0 {
 		slog.Info("no orphaned functions — skipping outlier.md")
 		return nil
 	}
 
 	// Index non-primitive clusters by ShapeHash (both Go and Java).
-	allClusters := slices.Concat(o.state.IdentifiedCluster, o.state.Java.IdentifiedCluster)
+	allClusters := slices.Concat(s.IdentifiedCluster, s.Java.IdentifiedCluster)
 	clusterByHash := make(map[string]*ds.Cluster, len(allClusters))
 	for _, cl := range allClusters {
 		if !cl.IsPrimitive && cl.ShapeHash != "" {
@@ -503,7 +488,7 @@ func (o *outlierWriter) execute() error {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "# beats outlier analysis\n")
-	fmt.Fprintf(&sb, "repo: %s\n", o.state.RepositoryPath)
+	fmt.Fprintf(&sb, "repo: %s\n", s.RepositoryPath)
 	fmt.Fprintf(&sb, "generated: %s\n", time.Now().Format("2006-01-02T15:04:05"))
 	fmt.Fprintf(&sb, "outliers: %d  clusters: %d\n", len(results), len(orderedHashes))
 	fmt.Fprintf(&sb, "\n")
@@ -555,7 +540,7 @@ func (o *outlierWriter) execute() error {
 		fmt.Fprintf(&sb, "\n")
 	}
 
-	beatsDir := filepath.Join(o.state.RepositoryPath, ".beats")
+	beatsDir := filepath.Join(s.RepositoryPath, ".beats")
 	if err := os.MkdirAll(beatsDir, 0755); err != nil {
 		return fmt.Errorf("create .beats dir: %w", err)
 	}
@@ -567,16 +552,14 @@ func (o *outlierWriter) execute() error {
 	return nil
 }
 
-func (o *outlierWriter) skipInDryRun() bool { return true }
-
-// performs the parsing of java files via jbeats. code errors is jbeats is not available and installed in path.
-func (j *javafunctionMetadata) execute() error {
+// gets ast token sequences for java functions.
+func getJavaFunctionMetadata(s *State) error {
 
 	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
-	j.state.Java = &StateJava{FunctionMetadata: make([]*ds.FunctionMeta, 0)}
-	for _, val := range j.state.PkgToFileMetadata {
+	s.Java = &StateJava{FunctionMetadata: make([]*ds.FunctionMeta, 0)}
+	for _, val := range s.PkgToFileMetadata {
 		val := val
 		g.Go(func() error {
 			var localFncM []*ds.FunctionMeta
@@ -586,9 +569,9 @@ func (j *javafunctionMetadata) execute() error {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, "./jbeats",
+				cmd := exec.CommandContext(ctx, "/Users/admin/ws/java/jbeats/target/jbeats",
 					fmt.Sprintf("--inp=%s", m.Path),
-					fmt.Sprintf("--repo=%s", j.state.RepositoryPath),
+					fmt.Sprintf("--repo=%s", s.RepositoryPath),
 				)
 
 				out, err := cmd.Output()
@@ -627,7 +610,7 @@ func (j *javafunctionMetadata) execute() error {
 				os.Remove(jsonPath) //nolint errcheck
 			}
 			mu.Lock()
-			j.state.Java.FunctionMetadata = append(j.state.Java.FunctionMetadata, localFncM...)
+			s.Java.FunctionMetadata = append(s.Java.FunctionMetadata, localFncM...)
 			mu.Unlock()
 			return nil
 		})
@@ -637,49 +620,28 @@ func (j *javafunctionMetadata) execute() error {
 		slog.Error("unable to capture file metadata record", slog.Any("error", err))
 		return err
 	}
-	slog.Info("total number of java functions", slog.Int("count", len(j.state.Java.FunctionMetadata)))
+	slog.Info("total number of java functions", slog.Int("count", len(s.Java.FunctionMetadata)))
 	return nil
 }
 
-func (b *Beats) run(repo string) error {
-
-	s := &State{
-		RepositoryPath:    repo,
-		FunctionMetadata:  make([]*ds.FunctionMeta, 0),
-		PkgToFileMetadata: make(ds.PkgToFileMeta),
-		Java:              &StateJava{},
+// beatsDBPath returns the stable BadgerDB path for a given repo.
+func beatsDBPath(repo string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir() // fallback, should never happen
 	}
-	for _, cmd := range getCommands(s) {
-		if b.IsDryRun {
-			if c, ok := cmd.(skippable); ok && c.skipInDryRun() {
-				slog.Info("skipping (dry-run)")
-				continue
-			}
-		}
-		if err := cmd.execute(); err != nil {
-			slog.Error("stage halted...", slog.Any("error", err))
-			return err
-		}
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return "", fmt.Errorf("resolve repo path %q: %w", repo, err)
 	}
-	return nil
-}
-
-func getCommands(s *State) []command {
-	return []command{
-		&dbCleaner{state: s},
-		&fileMetadata{state: s},
-		&functionMetadata{state: s},
-		&javafunctionMetadata{state: s},
-		&identifyCluster{state: s},
-		&clusterClassifier{state: s},
-		&clusterPersistor{state: s},
-		&orphanAnalyzer{state: s},
-		&orphanPersistor{state: s},
-		&indexCommand{state: s},
-		&indexPersistor{state: s},
-		&outlierWriter{state: s},
-		&analyzer{state: s},
+	if runtime.GOOS == "windows" {
+		abs = strings.ReplaceAll(abs, ":", "") // ':' is not allowed in a Windows folder name
 	}
+	name := strings.ReplaceAll(abs, string(filepath.Separator), "_")
+	if strings.Trim(name, "_") == "" {
+		return "", fmt.Errorf("refusing to use %q as a repo path", repo)
+	}
+	return filepath.Join(home, ".beats", "badger", name), nil
 }
 
 //nolint:unused
