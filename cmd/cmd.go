@@ -220,7 +220,7 @@ func writeBeatsHtmlFile(s *State) error {
 func perfomClustering(s *State) error {
 
 	cfg := ast.DefaultClusterConfig()
-	cluster := func(fMeta []*ds.FunctionMeta, lang ds.Language) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
+	cluster := func(fMeta []*ds.FunctionMeta) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
 		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg) // bug here donest use the language filter.
 		if err != nil {
 			return nil, nil, err
@@ -228,14 +228,14 @@ func perfomClustering(s *State) error {
 		return clusters, orphans, nil
 	}
 
-	cl, o, err := cluster(s.FunctionMetadata, ds.Language_GOLANG)
+	cl, o, err := cluster(s.FunctionMetadata)
 	if err != nil {
 		return err
 	}
 	s.IdentifiedCluster = cl
 	s.OrphanMetas = o
 
-	clj, oj, err := cluster(s.Java.FunctionMetadata, ds.Language_JAVA)
+	clj, oj, err := cluster(s.Java.FunctionMetadata)
 	if err != nil {
 		return err
 	}
