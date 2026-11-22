@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/somak2kai/beats/pkg/hash"
@@ -198,6 +199,7 @@ func extractCallTargets(fn *ast.FuncDecl, aliasMap map[string]string) []string {
 	for t := range seen {
 		out = append(out, t)
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -231,6 +233,10 @@ func extractDirectImports(fn *ast.FuncDecl, aliasMap map[string]string) []string
 		if !ok {
 			return true
 		}
+		// prevents cases where local variable name shadows import aliasing.
+		if ident.Obj != nil { //lint:ignore
+			return true // bound to a local declaration, not an import
+		}
 		if path, exists := aliasMap[ident.Name]; exists {
 			seen[path] = true
 		}
@@ -240,6 +246,7 @@ func extractDirectImports(fn *ast.FuncDecl, aliasMap map[string]string) []string
 	for path := range seen {
 		out = append(out, path)
 	}
+	sort.Strings(out)
 	return out
 }
 

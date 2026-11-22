@@ -3,6 +3,7 @@ package ast
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	ds "github.com/somak2kai/beats/pkg/types"
@@ -435,6 +436,85 @@ func UsesOs() {
 	}
 	if hasOs {
 		t.Error("os should not be in DirectImports — it is not referenced in UsesFmtOnly")
+	}
+}
+
+func TestParseFile_DirectImportsIgnoresShadowedImportName(t *testing.T) {
+	// The import alias "somak" is shadowed by a local variable. Selectors on the
+	// local (somak.WriteString) must not be attributed to the "sync" import,
+	// while a use of the package before the shadowing declaration still counts.
+	src := `package testpkg
+import (
+	"bytes"
+	somak "sync"
+)
+func ShadowedOnly() {
+	somak := &bytes.Buffer{}
+	somak.WriteString("x")
+}
+func UsedThenShadowed() {
+	var mu somak.Mutex
+	mu.Lock()
+	somak := &bytes.Buffer{}
+	somak.Reset()
+}
+func ShadowedByParam(somak *bytes.Buffer) {
+	somak.Reset()
+}
+`
+	fns, err := ParseFile(writeTempGo(t, src))
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	cases := []struct {
+		fn   string
+		want []string
+	}{
+		{"ShadowedOnly", []string{"bytes"}},
+		{"UsedThenShadowed", []string{"bytes", "sync"}},
+		{"ShadowedByParam", []string{"bytes"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fn, func(t *testing.T) {
+			got := findFn(t, fns, tc.fn).DirectImports
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("DirectImports = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseFile_DirectImportsSorted(t *testing.T) {
+	// Packages are referenced in reverse alphabetical order. Go map iteration
+	// over such a small map only rotates the insertion order, and no rotation
+	// of a reversed list is sorted, so this fails reliably without sort.Strings.
+	src := `package testpkg
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+func UsesMany() {
+	_ = time.Now()
+	_ = strings.ToUpper("x")
+	_ = os.Stderr
+	fmt.Println()
+	_ = errors.New("x")
+	_ = bytes.NewBuffer(nil)
+}
+`
+	fns, err := ParseFile(writeTempGo(t, src))
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+	got := findFn(t, fns, "UsesMany").DirectImports
+	want := []string{"bytes", "errors", "fmt", "os", "strings", "time"}
+	if !slices.Equal(got, want) {
+		t.Errorf("DirectImports = %v, want sorted %v", got, want)
 	}
 }
 
