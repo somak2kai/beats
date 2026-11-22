@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -27,7 +27,7 @@
+ 
+ // Clamp restricts v to the inclusive range [lo, hi].
+ func Clamp(v, lo, hi int) int {
+-	if v < lo {
++	if v <= lo {
+ 		return lo
+ 	}
+ 	if v > hi {
+
+ESCAPED functions.go:33 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

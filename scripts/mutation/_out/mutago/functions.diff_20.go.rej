@@ -1,0 +1,9 @@
+@@ -81,7 +81,7 @@
+ 		return nil, errors.New("sample: pageSize must be >= 1")
+ 	}
+ 	start := (page - 1) * pageSize
+-	if start >= len(items) {
++	if start > len(items) {
+ 		return []string{}, nil
+ 	}
+ 	end := start + pageSize

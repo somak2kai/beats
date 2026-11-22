@@ -1,0 +1,11 @@
+@@ -114,8 +114,8 @@
+ 		return s
+ 	}
+ 	if maxLen <= 3 {
+-		return s[:maxLen]
+-	}
++	_, _ = s, maxLen
++}
+ 	return s[:maxLen-3] + "..."
+ }
+ 

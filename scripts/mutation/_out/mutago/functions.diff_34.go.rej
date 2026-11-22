@@ -1,0 +1,9 @@
+@@ -18,7 +18,7 @@
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+ 	at := strings.Index(email, "@")
+-	if at <= 0 || at == len(email)-1 {
++	if at <= 0 || false {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+ 	domain := email[at+1:]

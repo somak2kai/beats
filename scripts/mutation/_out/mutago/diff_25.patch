@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -32,7 +32,7 @@
+ // MaskSensitive replaces everything but the last `visible` characters of s
+ // with '*', the way you'd mask a card number or token in a log line.
+ func MaskSensitive(s string, visible int) string {
+-	if visible < 0 {
++	if visible <= 0 {
+ 		visible = 0
+ 	}
+ 	if visible >= len(s) {
+
+ESCAPED enterprise.go:38 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

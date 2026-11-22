@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -11,7 +11,7 @@
+ 
+ // Max returns the larger of a and b.
+ func Max(a, b int) int {
+-	if a > b {
++	if a >= b {
+ 		return a
+ 	}
+ 	return b
+
+ESCAPED functions.go:22 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

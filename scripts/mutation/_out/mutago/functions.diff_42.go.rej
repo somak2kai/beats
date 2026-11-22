@@ -1,0 +1,11 @@
+@@ -154,8 +154,8 @@
+ func ValidatePasswordStrength(pw string) []string {
+ 	var problems []string
+ 	if len(pw) < 8 {
+-		problems = append(problems, "must be at least 8 characters")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasUpper(pw) {
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}

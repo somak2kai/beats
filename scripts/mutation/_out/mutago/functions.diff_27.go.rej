@@ -1,0 +1,9 @@
+@@ -62,7 +62,7 @@
+ 		return nil, errors.New("sample: chunk size must be positive")
+ 	}
+ 	var chunks [][]int
+-	for i := 0; i < len(items); i += size {
++	for i := 0; i <= len(items); i += size {
+ 		end := i + size
+ 		if end > len(items) {
+ 			end = len(items)

@@ -1,0 +1,16 @@
+--- Original
++++ New
+@@ -157,8 +157,8 @@
+ 		problems = append(problems, "must be at least 8 characters")
+ 	}
+ 	if !hasUpper(pw) {
+-		problems = append(problems, "must contain an uppercase letter")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasDigit(pw) {
+ 		problems = append(problems, "must contain a digit")
+ 	}
+
+ESCAPED enterprise.go:163 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,9 @@
+@@ -77,7 +77,7 @@
+ 	if page < 1 {
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+-	if pageSize < 1 {
++	if pageSize <= 1 {
+ 		return nil, errors.New("sample: pageSize must be >= 1")
+ 	}
+ 	start := (page - 1) * pageSize

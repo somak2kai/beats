@@ -1,0 +1,11 @@
+@@ -163,8 +163,8 @@
+ 		problems = append(problems, "must contain a digit")
+ 	}
+ 	if !hasSpecial(pw) {
+-		problems = append(problems, "must contain a special character")
+-	}
++	_, _ = problems, problems
++}
+ 	return problems
+ }
+ 

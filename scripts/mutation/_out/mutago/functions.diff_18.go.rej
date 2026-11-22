@@ -1,0 +1,9 @@
+@@ -74,7 +74,7 @@
+ 
+ // Paginate returns the 1-indexed page of items for the given page size.
+ func Paginate(items []string, page, pageSize int) ([]string, error) {
+-	if page < 1 {
++	if page <= 1 {
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+ 	if pageSize < 1 {

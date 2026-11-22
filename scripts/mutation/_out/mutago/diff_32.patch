@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -195,5 +195,5 @@
+ 	if consecutiveFailures < threshold {
+ 		return true
+ 	}
+-	return now.Sub(lastFailureAt) >= cooldown
++	return now.Sub(lastFailureAt) > cooldown
+ }
+
+KILLED enterprise.go:180 (expression/error-guard)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:187 (expression/errorf-wrap)
+------------------------------------------------------------------------------------------------------------------------------------------------------

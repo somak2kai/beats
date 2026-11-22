@@ -1,0 +1,11 @@
+@@ -12,8 +12,8 @@
+ // enough to exercise realistic branching without pulling in regexp.
+ func ValidateEmail(email string) error {
+ 	if email == "" {
+-		return errors.New("sample: email is empty")
+-	}
++	_ = errors.New
++}
+ 	if strings.ContainsAny(email, " \t\n") {
+ 		return errors.New("sample: email contains whitespace")
+ 	}

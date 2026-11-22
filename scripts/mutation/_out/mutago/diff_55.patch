@@ -1,0 +1,51 @@
+--- Original
++++ New
+@@ -28,7 +28,7 @@
+ // Clamp restricts v to the inclusive range [lo, hi].
+ func Clamp(v, lo, hi int) int {
+ 	if v < lo {
+-		return lo
++		return 0
+ 	}
+ 	if v > hi {
+ 		return hi
+
+KILLED functions.go:34 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:36 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:46 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:55 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:75 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:88 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:109 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+The mutation score is 72.50% (145 killed, 55 escaped, 0 errored, 0 not covered, 0 skipped, 200 total)
+
+Per-mutator breakdown:
+  arithmetic/assign_invert             killed   2 / 2    (100%)
+  arithmetic/assignment                killed   2 / 2    (100%)
+  arithmetic/base                      killed  12 / 17   (71%)
+  branch/case                          killed   1 / 1    (100%)
+  branch/if                            killed  22 / 34   (65%)
+  conditional/bool-literal             killed   1 / 1    (100%)
+  conditional/negated                  killed  32 / 32   (100%)
+  conditional/not                      killed   3 / 3    (100%)
+  expression/comparison                killed   5 / 25   (20%)
+  expression/error-guard               killed   1 / 1    (100%)
+  expression/errorf-wrap               killed   0 / 1    (0%)
+  expression/logical                   killed   3 / 3    (100%)
+  expression/remove                    killed   3 / 6    (50%)
+  loop/break                           killed   1 / 1    (100%)
+  loop/condition                       killed   2 / 2    (100%)
+  loop/range_break                     killed  11 / 11   (100%)
+  numbers/decrementer                  killed   2 / 5    (40%)
+  numbers/incrementer                  killed   3 / 5    (60%)
+  statement/remove                     killed  11 / 16   (69%)
+  statement/return                     killed  28 / 32   (88%)

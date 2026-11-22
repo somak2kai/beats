@@ -1,0 +1,1272 @@
+{
+  "generated_at": "2026-08-31T13:02:40Z",
+  "msi": 0.725,
+  "escaped_count": 55,
+  "reminder": "A mutant is an example of how this code could be wrong — it's not a script for the test. Don't assert on the mutant directly. Instead ask: if this code were buggy, what would a caller of the public API observe go wrong? Write a test for that.",
+  "mutants": [
+    {
+      "id": "c38187c2d8d5f524f3dec1e380a55e9a",
+      "file": "enterprise.go",
+      "line": 21,
+      "mutator": "arithmetic/base",
+      "description": "Changes: `if at \u003c= 0 || at == len(email)-1 {` → `if at \u003c= 0 || at == len(email) + 1 {`",
+      "kill_hint": "Write a test with specific numeric inputs and assert the exact output — boundary values expose operator swaps best",
+      "diff": "--- Original\n+++ New\n@@ -18,7 +18,7 @@\n \t\treturn errors.New(\"sample: email contains whitespace\")\n \t}\n \tat := strings.Index(email, \"@\")\n-\tif at \u003c= 0 || at == len(email)-1 {\n+\tif at \u003c= 0 || at == len(email) + 1 {\n \t\treturn errors.New(\"sample: email missing a valid '@'\")\n \t}\n \tdomain := email[at+1:]\n",
+      "context_start_line": 18,
+      "context_lines": [
+        "\t\treturn errors.New(\"sample: email contains whitespace\")",
+        "\t}",
+        "\tat := strings.Index(email, \"@\")",
+        "\tif at \u003c= 0 || at == len(email)-1 {",
+        "\t\treturn errors.New(\"sample: email missing a valid '@'\")",
+        "\t}",
+        "\tdomain := email[at+1:]"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "04b9a92f8664129cdf5a43db974d20d3",
+      "file": "enterprise.go",
+      "line": 24,
+      "mutator": "arithmetic/base",
+      "description": "Changes: `domain := email[at+1:]` → `domain := email[at - 1:]`",
+      "kill_hint": "Write a test with specific numeric inputs and assert the exact output — boundary values expose operator swaps best",
+      "diff": "--- Original\n+++ New\n@@ -21,7 +21,7 @@\n \tif at \u003c= 0 || at == len(email)-1 {\n \t\treturn errors.New(\"sample: email missing a valid '@'\")\n \t}\n-\tdomain := email[at+1:]\n+\tdomain := email[at - 1:]\n \tdot := strings.LastIndex(domain, \".\")\n \tif dot \u003c= 0 || dot == len(domain)-1 {\n \t\treturn errors.New(\"sample: email domain missing a valid '.'\")\n",
+      "context_start_line": 21,
+      "context_lines": [
+        "\tif at \u003c= 0 || at == len(email)-1 {",
+        "\t\treturn errors.New(\"sample: email missing a valid '@'\")",
+        "\t}",
+        "\tdomain := email[at+1:]",
+        "\tdot := strings.LastIndex(domain, \".\")",
+        "\tif dot \u003c= 0 || dot == len(domain)-1 {",
+        "\t\treturn errors.New(\"sample: email domain missing a valid '.'\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "de18ce50e5cc0392a2a7820726dc59b5",
+      "file": "enterprise.go",
+      "line": 26,
+      "mutator": "arithmetic/base",
+      "description": "Changes: `if dot \u003c= 0 || dot == len(domain)-1 {` → `if dot \u003c= 0 || dot == len(domain) + 1 {`",
+      "kill_hint": "Write a test with specific numeric inputs and assert the exact output — boundary values expose operator swaps best",
+      "diff": "--- Original\n+++ New\n@@ -23,7 +23,7 @@\n \t}\n \tdomain := email[at+1:]\n \tdot := strings.LastIndex(domain, \".\")\n-\tif dot \u003c= 0 || dot == len(domain)-1 {\n+\tif dot \u003c= 0 || dot == len(domain) + 1 {\n \t\treturn errors.New(\"sample: email domain missing a valid '.'\")\n \t}\n \treturn nil\n",
+      "context_start_line": 23,
+      "context_lines": [
+        "\t}",
+        "\tdomain := email[at+1:]",
+        "\tdot := strings.LastIndex(domain, \".\")",
+        "\tif dot \u003c= 0 || dot == len(domain)-1 {",
+        "\t\treturn errors.New(\"sample: email domain missing a valid '.'\")",
+        "\t}",
+        "\treturn nil"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "6b07117b4618f723ea51211067f204b3",
+      "file": "enterprise.go",
+      "line": 97,
+      "mutator": "arithmetic/base",
+      "description": "Changes: `merged := make(map[string]string, len(base)+len(override))` → `merged := make(map[string]string, len(base) - len(override))`",
+      "kill_hint": "Write a test with specific numeric inputs and assert the exact output — boundary values expose operator swaps best",
+      "diff": "--- Original\n+++ New\n@@ -94,7 +94,7 @@\n // MergeConfigs merges override on top of base, without mutating either\n // input map.\n func MergeConfigs(base, override map[string]string) map[string]string {\n-\tmerged := make(map[string]string, len(base)+len(override))\n+\tmerged := make(map[string]string, len(base) - len(override))\n \tfor k, v := range base {\n \t\tmerged[k] = v\n \t}\n",
+      "context_start_line": 94,
+      "context_lines": [
+        "// MergeConfigs merges override on top of base, without mutating either",
+        "// input map.",
+        "func MergeConfigs(base, override map[string]string) map[string]string {",
+        "\tmerged := make(map[string]string, len(base)+len(override))",
+        "\tfor k, v := range base {",
+        "\t\tmerged[k] = v",
+        "\t}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "a0ead206e362c2eb862702b8a3c1185f",
+      "file": "enterprise.go",
+      "line": 184,
+      "mutator": "arithmetic/base",
+      "description": "Changes: `sleep(time.Duration(attempt) * time.Millisecond)` → `sleep(time.Duration(attempt) / time.Millisecond)`",
+      "kill_hint": "Write a test with specific numeric inputs and assert the exact output — boundary values expose operator swaps best",
+      "diff": "--- Original\n+++ New\n@@ -181,7 +181,7 @@\n \t\t\treturn nil\n \t\t}\n \t\tif attempt \u003c maxAttempts {\n-\t\t\tsleep(time.Duration(attempt) * time.Millisecond)\n+\t\t\tsleep(time.Duration(attempt) / time.Millisecond)\n \t\t}\n \t}\n \treturn fmt.Errorf(\"sample: all %d attempts failed: %w\", maxAttempts, lastErr)\n",
+      "context_start_line": 181,
+      "context_lines": [
+        "\t\t\treturn nil",
+        "\t\t}",
+        "\t\tif attempt \u003c maxAttempts {",
+        "\t\t\tsleep(time.Duration(attempt) * time.Millisecond)",
+        "\t\t}",
+        "\t}",
+        "\treturn fmt.Errorf(\"sample: all %d attempts failed: %w\", maxAttempts, lastErr)"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "3cb7d7aa43bdf8892c1d04e643e28e59",
+      "file": "enterprise.go",
+      "line": 15,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -12,8 +12,8 @@\n // enough to exercise realistic branching without pulling in regexp.\n func ValidateEmail(email string) error {\n \tif email == \"\" {\n-\t\treturn errors.New(\"sample: email is empty\")\n-\t}\n+\t_ = errors.New\n+}\n \tif strings.ContainsAny(email, \" \\t\\n\") {\n \t\treturn errors.New(\"sample: email contains whitespace\")\n \t}\n",
+      "context_start_line": 12,
+      "context_lines": [
+        "// enough to exercise realistic branching without pulling in regexp.",
+        "func ValidateEmail(email string) error {",
+        "\tif email == \"\" {",
+        "\t\treturn errors.New(\"sample: email is empty\")",
+        "\t}",
+        "\tif strings.ContainsAny(email, \" \\t\\n\") {",
+        "\t\treturn errors.New(\"sample: email contains whitespace\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "44cfd054f2220036d47b77495c83d111",
+      "file": "enterprise.go",
+      "line": 36,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -33,8 +33,8 @@\n // with '*', the way you'd mask a card number or token in a log line.\n func MaskSensitive(s string, visible int) string {\n \tif visible \u003c 0 {\n-\t\tvisible = 0\n-\t}\n+\t_ = visible\n+}\n \tif visible \u003e= len(s) {\n \t\treturn s\n \t}\n",
+      "context_start_line": 33,
+      "context_lines": [
+        "// with '*', the way you'd mask a card number or token in a log line.",
+        "func MaskSensitive(s string, visible int) string {",
+        "\tif visible \u003c 0 {",
+        "\t\tvisible = 0",
+        "\t}",
+        "\tif visible \u003e= len(s) {",
+        "\t\treturn s"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f9598401c08571f293728afbb4579c76",
+      "file": "enterprise.go",
+      "line": 81,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -78,8 +78,8 @@\n \t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")\n \t}\n \tif pageSize \u003c 1 {\n-\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")\n-\t}\n+\t_ = errors.New\n+}\n \tstart := (page - 1) * pageSize\n \tif start \u003e= len(items) {\n \t\treturn []string{}, nil\n",
+      "context_start_line": 78,
+      "context_lines": [
+        "\t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")",
+        "\t}",
+        "\tif pageSize \u003c 1 {",
+        "\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")",
+        "\t}",
+        "\tstart := (page - 1) * pageSize",
+        "\tif start \u003e= len(items) {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f6ea346c88cf8e78ff9544818e96d87b",
+      "file": "enterprise.go",
+      "line": 85,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -82,8 +82,8 @@\n \t}\n \tstart := (page - 1) * pageSize\n \tif start \u003e= len(items) {\n-\t\treturn []string{}, nil\n-\t}\n+\n+}\n \tend := start + pageSize\n \tif end \u003e len(items) {\n \t\tend = len(items)\n",
+      "context_start_line": 82,
+      "context_lines": [
+        "\t}",
+        "\tstart := (page - 1) * pageSize",
+        "\tif start \u003e= len(items) {",
+        "\t\treturn []string{}, nil",
+        "\t}",
+        "\tend := start + pageSize",
+        "\tif end \u003e len(items) {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "7ab361353992c2d9e08df0c564e0408e",
+      "file": "enterprise.go",
+      "line": 111,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -108,8 +108,8 @@\n // when truncation actually happens.\n func TruncateWithEllipsis(s string, maxLen int) string {\n \tif maxLen \u003c= 0 {\n-\t\treturn \"\"\n-\t}\n+\n+}\n \tif len(s) \u003c= maxLen {\n \t\treturn s\n \t}\n",
+      "context_start_line": 108,
+      "context_lines": [
+        "// when truncation actually happens.",
+        "func TruncateWithEllipsis(s string, maxLen int) string {",
+        "\tif maxLen \u003c= 0 {",
+        "\t\treturn \"\"",
+        "\t}",
+        "\tif len(s) \u003c= maxLen {",
+        "\t\treturn s"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "3bfe9adfcfaf4e24589167193a3ac0c4",
+      "file": "enterprise.go",
+      "line": 117,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -114,8 +114,8 @@\n \t\treturn s\n \t}\n \tif maxLen \u003c= 3 {\n-\t\treturn s[:maxLen]\n-\t}\n+\t_, _ = s, maxLen\n+}\n \treturn s[:maxLen-3] + \"...\"\n }\n \n",
+      "context_start_line": 114,
+      "context_lines": [
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {",
+        "\t\treturn s[:maxLen]",
+        "\t}",
+        "\treturn s[:maxLen-3] + \"...\"",
+        "}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f471bd708ea7800c590949bccb3c0b64",
+      "file": "enterprise.go",
+      "line": 157,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -154,8 +154,8 @@\n func ValidatePasswordStrength(pw string) []string {\n \tvar problems []string\n \tif len(pw) \u003c 8 {\n-\t\tproblems = append(problems, \"must be at least 8 characters\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasUpper(pw) {\n \t\tproblems = append(problems, \"must contain an uppercase letter\")\n \t}\n",
+      "context_start_line": 154,
+      "context_lines": [
+        "func ValidatePasswordStrength(pw string) []string {",
+        "\tvar problems []string",
+        "\tif len(pw) \u003c 8 {",
+        "\t\tproblems = append(problems, \"must be at least 8 characters\")",
+        "\t}",
+        "\tif !hasUpper(pw) {",
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "bb8f2c7b7c389033398fd220c2f2d16a",
+      "file": "enterprise.go",
+      "line": 160,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -157,8 +157,8 @@\n \t\tproblems = append(problems, \"must be at least 8 characters\")\n \t}\n \tif !hasUpper(pw) {\n-\t\tproblems = append(problems, \"must contain an uppercase letter\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasDigit(pw) {\n \t\tproblems = append(problems, \"must contain a digit\")\n \t}\n",
+      "context_start_line": 157,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must be at least 8 characters\")",
+        "\t}",
+        "\tif !hasUpper(pw) {",
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")",
+        "\t}",
+        "\tif !hasDigit(pw) {",
+        "\t\tproblems = append(problems, \"must contain a digit\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "3064c6a03fb69c79895c6144235c83f1",
+      "file": "enterprise.go",
+      "line": 163,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -160,8 +160,8 @@\n \t\tproblems = append(problems, \"must contain an uppercase letter\")\n \t}\n \tif !hasDigit(pw) {\n-\t\tproblems = append(problems, \"must contain a digit\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasSpecial(pw) {\n \t\tproblems = append(problems, \"must contain a special character\")\n \t}\n",
+      "context_start_line": 160,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")",
+        "\t}",
+        "\tif !hasDigit(pw) {",
+        "\t\tproblems = append(problems, \"must contain a digit\")",
+        "\t}",
+        "\tif !hasSpecial(pw) {",
+        "\t\tproblems = append(problems, \"must contain a special character\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "467c594f9b53ab776a3bab616374650d",
+      "file": "enterprise.go",
+      "line": 166,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -163,8 +163,8 @@\n \t\tproblems = append(problems, \"must contain a digit\")\n \t}\n \tif !hasSpecial(pw) {\n-\t\tproblems = append(problems, \"must contain a special character\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \treturn problems\n }\n \n",
+      "context_start_line": 163,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must contain a digit\")",
+        "\t}",
+        "\tif !hasSpecial(pw) {",
+        "\t\tproblems = append(problems, \"must contain a special character\")",
+        "\t}",
+        "\treturn problems",
+        "}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "0020f29a03888b8700eb6c9698044835",
+      "file": "enterprise.go",
+      "line": 175,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -172,8 +172,8 @@\n // calling sleep between attempts (injected so tests don't need real time.Sleep).\n func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {\n \tif maxAttempts \u003c 1 {\n-\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")\n-\t}\n+\t_ = errors.New\n+}\n \tvar lastErr error\n \tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {\n \t\tlastErr = fn()\n",
+      "context_start_line": 172,
+      "context_lines": [
+        "// calling sleep between attempts (injected so tests don't need real time.Sleep).",
+        "func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {",
+        "\tif maxAttempts \u003c 1 {",
+        "\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")",
+        "\t}",
+        "\tvar lastErr error",
+        "\tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "154cbc1322d5d9a2785a245b5fb390c5",
+      "file": "enterprise.go",
+      "line": 196,
+      "mutator": "branch/if",
+      "description": "Removes an if-block body so the condition becomes a no-op",
+      "kill_hint": "Write a test that enters this branch and asserts the output or side effect it produces",
+      "diff": "--- Original\n+++ New\n@@ -193,7 +193,7 @@\n // open (cooldown) once tripped.\n func CircuitBreakerAllow(consecutiveFailures, threshold int, lastFailureAt, now time.Time, cooldown time.Duration) bool {\n \tif consecutiveFailures \u003c threshold {\n-\t\treturn true\n-\t}\n+\n+}\n \treturn now.Sub(lastFailureAt) \u003e= cooldown\n }\n",
+      "context_start_line": 193,
+      "context_lines": [
+        "// open (cooldown) once tripped.",
+        "func CircuitBreakerAllow(consecutiveFailures, threshold int, lastFailureAt, now time.Time, cooldown time.Duration) bool {",
+        "\tif consecutiveFailures \u003c threshold {",
+        "\t\treturn true",
+        "\t}",
+        "\treturn now.Sub(lastFailureAt) \u003e= cooldown",
+        "}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "fbb932401500fd482766e231782a3f84",
+      "file": "enterprise.go",
+      "line": 77,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if page \u003c 1 {` → `if page \u003c= 1 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -74,7 +74,7 @@\n \n // Paginate returns the 1-indexed page of items for the given page size.\n func Paginate(items []string, page, pageSize int) ([]string, error) {\n-\tif page \u003c 1 {\n+\tif page \u003c= 1 {\n \t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")\n \t}\n \tif pageSize \u003c 1 {\n",
+      "context_start_line": 74,
+      "context_lines": [
+        "",
+        "// Paginate returns the 1-indexed page of items for the given page size.",
+        "func Paginate(items []string, page, pageSize int) ([]string, error) {",
+        "\tif page \u003c 1 {",
+        "\t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")",
+        "\t}",
+        "\tif pageSize \u003c 1 {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "e2b90fcbffbef6c8e03f64ffa9d889f2",
+      "file": "enterprise.go",
+      "line": 80,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if pageSize \u003c 1 {` → `if pageSize \u003c= 1 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -77,7 +77,7 @@\n \tif page \u003c 1 {\n \t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")\n \t}\n-\tif pageSize \u003c 1 {\n+\tif pageSize \u003c= 1 {\n \t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")\n \t}\n \tstart := (page - 1) * pageSize\n",
+      "context_start_line": 77,
+      "context_lines": [
+        "\tif page \u003c 1 {",
+        "\t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")",
+        "\t}",
+        "\tif pageSize \u003c 1 {",
+        "\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")",
+        "\t}",
+        "\tstart := (page - 1) * pageSize"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "23013712c879dd5c1f5634d897807d5f",
+      "file": "enterprise.go",
+      "line": 84,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if start \u003e= len(items) {` → `if start \u003e len(items) {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -81,7 +81,7 @@\n \t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")\n \t}\n \tstart := (page - 1) * pageSize\n-\tif start \u003e= len(items) {\n+\tif start \u003e len(items) {\n \t\treturn []string{}, nil\n \t}\n \tend := start + pageSize\n",
+      "context_start_line": 81,
+      "context_lines": [
+        "\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")",
+        "\t}",
+        "\tstart := (page - 1) * pageSize",
+        "\tif start \u003e= len(items) {",
+        "\t\treturn []string{}, nil",
+        "\t}",
+        "\tend := start + pageSize"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "e220bb1e1d1295c122f1bdfab501d2ad",
+      "file": "enterprise.go",
+      "line": 110,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if maxLen \u003c= 0 {` → `if maxLen \u003c 0 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -107,7 +107,7 @@\n // TruncateWithEllipsis shortens s to at most maxLen bytes, appending \"...\"\n // when truncation actually happens.\n func TruncateWithEllipsis(s string, maxLen int) string {\n-\tif maxLen \u003c= 0 {\n+\tif maxLen \u003c 0 {\n \t\treturn \"\"\n \t}\n \tif len(s) \u003c= maxLen {\n",
+      "context_start_line": 107,
+      "context_lines": [
+        "// TruncateWithEllipsis shortens s to at most maxLen bytes, appending \"...\"",
+        "// when truncation actually happens.",
+        "func TruncateWithEllipsis(s string, maxLen int) string {",
+        "\tif maxLen \u003c= 0 {",
+        "\t\treturn \"\"",
+        "\t}",
+        "\tif len(s) \u003c= maxLen {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "06da6ffa18345251bf7e2bc7dc4b4778",
+      "file": "enterprise.go",
+      "line": 113,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if len(s) \u003c= maxLen {` → `if len(s) \u003c maxLen {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -110,7 +110,7 @@\n \tif maxLen \u003c= 0 {\n \t\treturn \"\"\n \t}\n-\tif len(s) \u003c= maxLen {\n+\tif len(s) \u003c maxLen {\n \t\treturn s\n \t}\n \tif maxLen \u003c= 3 {\n",
+      "context_start_line": 110,
+      "context_lines": [
+        "\tif maxLen \u003c= 0 {",
+        "\t\treturn \"\"",
+        "\t}",
+        "\tif len(s) \u003c= maxLen {",
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f093efa4436864a1a21a1980da8582ac",
+      "file": "enterprise.go",
+      "line": 116,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if maxLen \u003c= 3 {` → `if maxLen \u003c 3 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -113,7 +113,7 @@\n \tif len(s) \u003c= maxLen {\n \t\treturn s\n \t}\n-\tif maxLen \u003c= 3 {\n+\tif maxLen \u003c 3 {\n \t\treturn s[:maxLen]\n \t}\n \treturn s[:maxLen-3] + \"...\"\n",
+      "context_start_line": 113,
+      "context_lines": [
+        "\tif len(s) \u003c= maxLen {",
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {",
+        "\t\treturn s[:maxLen]",
+        "\t}",
+        "\treturn s[:maxLen-3] + \"...\""
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "4d1e635689548233801c4a458f04c698",
+      "file": "enterprise.go",
+      "line": 26,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if dot \u003c= 0 || dot == len(domain)-1 {` → `if dot \u003c 0 || dot == len(domain)-1 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -23,7 +23,7 @@\n \t}\n \tdomain := email[at+1:]\n \tdot := strings.LastIndex(domain, \".\")\n-\tif dot \u003c= 0 || dot == len(domain)-1 {\n+\tif dot \u003c 0 || dot == len(domain)-1 {\n \t\treturn errors.New(\"sample: email domain missing a valid '.'\")\n \t}\n \treturn nil\n",
+      "context_start_line": 23,
+      "context_lines": [
+        "\t}",
+        "\tdomain := email[at+1:]",
+        "\tdot := strings.LastIndex(domain, \".\")",
+        "\tif dot \u003c= 0 || dot == len(domain)-1 {",
+        "\t\treturn errors.New(\"sample: email domain missing a valid '.'\")",
+        "\t}",
+        "\treturn nil"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "d9c60e529740aa4455c2e9061fe8315d",
+      "file": "enterprise.go",
+      "line": 35,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if visible \u003c 0 {` → `if visible \u003c= 0 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -32,7 +32,7 @@\n // MaskSensitive replaces everything but the last `visible` characters of s\n // with '*', the way you'd mask a card number or token in a log line.\n func MaskSensitive(s string, visible int) string {\n-\tif visible \u003c 0 {\n+\tif visible \u003c= 0 {\n \t\tvisible = 0\n \t}\n \tif visible \u003e= len(s) {\n",
+      "context_start_line": 32,
+      "context_lines": [
+        "// MaskSensitive replaces everything but the last `visible` characters of s",
+        "// with '*', the way you'd mask a card number or token in a log line.",
+        "func MaskSensitive(s string, visible int) string {",
+        "\tif visible \u003c 0 {",
+        "\t\tvisible = 0",
+        "\t}",
+        "\tif visible \u003e= len(s) {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "8c0e47c81ae63eb924abb6f5085d3b11",
+      "file": "enterprise.go",
+      "line": 38,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if visible \u003e= len(s) {` → `if visible \u003e len(s) {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -35,7 +35,7 @@\n \tif visible \u003c 0 {\n \t\tvisible = 0\n \t}\n-\tif visible \u003e= len(s) {\n+\tif visible \u003e len(s) {\n \t\treturn s\n \t}\n \treturn strings.Repeat(\"*\", len(s)-visible) + s[len(s)-visible:]\n",
+      "context_start_line": 35,
+      "context_lines": [
+        "\tif visible \u003c 0 {",
+        "\t\tvisible = 0",
+        "\t}",
+        "\tif visible \u003e= len(s) {",
+        "\t\treturn s",
+        "\t}",
+        "\treturn strings.Repeat(\"*\", len(s)-visible) + s[len(s)-visible:]"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f6714d061d7568e8830f2cf885aea547",
+      "file": "enterprise.go",
+      "line": 65,
+      "mutator": "expression/comparison",
+      "description": "Changes: `for i := 0; i \u003c len(items); i += size {` → `for i := 0; i \u003c= len(items); i += size {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -62,7 +62,7 @@\n \t\treturn nil, errors.New(\"sample: chunk size must be positive\")\n \t}\n \tvar chunks [][]int\n-\tfor i := 0; i \u003c len(items); i += size {\n+\tfor i := 0; i \u003c= len(items); i += size {\n \t\tend := i + size\n \t\tif end \u003e len(items) {\n \t\t\tend = len(items)\n",
+      "context_start_line": 62,
+      "context_lines": [
+        "\t\treturn nil, errors.New(\"sample: chunk size must be positive\")",
+        "\t}",
+        "\tvar chunks [][]int",
+        "\tfor i := 0; i \u003c len(items); i += size {",
+        "\t\tend := i + size",
+        "\t\tif end \u003e len(items) {",
+        "\t\t\tend = len(items)"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "63a406401d7b7afabdfbf42b44f41432",
+      "file": "enterprise.go",
+      "line": 67,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if end \u003e len(items) {` → `if end \u003e= len(items) {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -64,7 +64,7 @@\n \tvar chunks [][]int\n \tfor i := 0; i \u003c len(items); i += size {\n \t\tend := i + size\n-\t\tif end \u003e len(items) {\n+\t\tif end \u003e= len(items) {\n \t\t\tend = len(items)\n \t\t}\n \t\tchunks = append(chunks, items[i:end])\n",
+      "context_start_line": 64,
+      "context_lines": [
+        "\tvar chunks [][]int",
+        "\tfor i := 0; i \u003c len(items); i += size {",
+        "\t\tend := i + size",
+        "\t\tif end \u003e len(items) {",
+        "\t\t\tend = len(items)",
+        "\t\t}",
+        "\t\tchunks = append(chunks, items[i:end])"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "1249588f2fb1ef483500868f0f4bbd79",
+      "file": "enterprise.go",
+      "line": 174,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if maxAttempts \u003c 1 {` → `if maxAttempts \u003c= 1 {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -171,7 +171,7 @@\n // RetryWithBackoff calls fn until it succeeds or maxAttempts is reached,\n // calling sleep between attempts (injected so tests don't need real time.Sleep).\n func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {\n-\tif maxAttempts \u003c 1 {\n+\tif maxAttempts \u003c= 1 {\n \t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")\n \t}\n \tvar lastErr error\n",
+      "context_start_line": 171,
+      "context_lines": [
+        "// RetryWithBackoff calls fn until it succeeds or maxAttempts is reached,",
+        "// calling sleep between attempts (injected so tests don't need real time.Sleep).",
+        "func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {",
+        "\tif maxAttempts \u003c 1 {",
+        "\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")",
+        "\t}",
+        "\tvar lastErr error"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "55cc91cd3bb8ac335577f90fdfa5db36",
+      "file": "enterprise.go",
+      "line": 178,
+      "mutator": "expression/comparison",
+      "description": "Changes: `for attempt := 1; attempt \u003c= maxAttempts; attempt++ {` → `for attempt := 1; attempt \u003c maxAttempts; attempt++ {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -175,7 +175,7 @@\n \t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")\n \t}\n \tvar lastErr error\n-\tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {\n+\tfor attempt := 1; attempt \u003c maxAttempts; attempt++ {\n \t\tlastErr = fn()\n \t\tif lastErr == nil {\n \t\t\treturn nil\n",
+      "context_start_line": 175,
+      "context_lines": [
+        "\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")",
+        "\t}",
+        "\tvar lastErr error",
+        "\tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {",
+        "\t\tlastErr = fn()",
+        "\t\tif lastErr == nil {",
+        "\t\t\treturn nil"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "2407dd328c7ce46403a8a6c3d168fd77",
+      "file": "enterprise.go",
+      "line": 183,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if attempt \u003c maxAttempts {` → `if attempt \u003c= maxAttempts {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -180,7 +180,7 @@\n \t\tif lastErr == nil {\n \t\t\treturn nil\n \t\t}\n-\t\tif attempt \u003c maxAttempts {\n+\t\tif attempt \u003c= maxAttempts {\n \t\t\tsleep(time.Duration(attempt) * time.Millisecond)\n \t\t}\n \t}\n",
+      "context_start_line": 180,
+      "context_lines": [
+        "\t\tif lastErr == nil {",
+        "\t\t\treturn nil",
+        "\t\t}",
+        "\t\tif attempt \u003c maxAttempts {",
+        "\t\t\tsleep(time.Duration(attempt) * time.Millisecond)",
+        "\t\t}",
+        "\t}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "3547e342370a44aea3bac1ea622a18f3",
+      "file": "enterprise.go",
+      "line": 198,
+      "mutator": "expression/comparison",
+      "description": "Changes: `return now.Sub(lastFailureAt) \u003e= cooldown` → `return now.Sub(lastFailureAt) \u003e cooldown`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -195,5 +195,5 @@\n \tif consecutiveFailures \u003c threshold {\n \t\treturn true\n \t}\n-\treturn now.Sub(lastFailureAt) \u003e= cooldown\n+\treturn now.Sub(lastFailureAt) \u003e cooldown\n }\n",
+      "context_start_line": 195,
+      "context_lines": [
+        "\tif consecutiveFailures \u003c threshold {",
+        "\t\treturn true",
+        "\t}",
+        "\treturn now.Sub(lastFailureAt) \u003e= cooldown",
+        "}",
+        ""
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "3d73fd6ba0d2222171a55d895758dc21",
+      "file": "enterprise.go",
+      "line": 187,
+      "mutator": "expression/errorf-wrap",
+      "description": "Changes: `return fmt.Errorf(\"sample: all %d attempts failed: %w\", maxAttempts, lastErr)` → `return fmt.Errorf(\"sample: all %d attempts failed: %v\", maxAttempts, lastErr)`",
+      "kill_hint": "Write a test that asserts errors.Is or errors.As against the wrapped cause — downgrading %w to %v breaks unwrapping while leaving the message identical",
+      "diff": "--- Original\n+++ New\n@@ -184,7 +184,7 @@\n \t\t\tsleep(time.Duration(attempt) * time.Millisecond)\n \t\t}\n \t}\n-\treturn fmt.Errorf(\"sample: all %d attempts failed: %w\", maxAttempts, lastErr)\n+\treturn fmt.Errorf(\"sample: all %d attempts failed: %v\", maxAttempts, lastErr)\n }\n \n // CircuitBreakerAllow reports whether a call should be allowed through,\n",
+      "context_start_line": 184,
+      "context_lines": [
+        "\t\t\tsleep(time.Duration(attempt) * time.Millisecond)",
+        "\t\t}",
+        "\t}",
+        "\treturn fmt.Errorf(\"sample: all %d attempts failed: %w\", maxAttempts, lastErr)",
+        "}",
+        "",
+        "// CircuitBreakerAllow reports whether a call should be allowed through,"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "1882ad2493bdf6744af2a3115f240780",
+      "file": "enterprise.go",
+      "line": 21,
+      "mutator": "expression/remove",
+      "description": "Changes: `if at \u003c= 0 || at == len(email)-1 {` → `if at \u003c= 0 || false {`",
+      "kill_hint": "Write a test that asserts the side effect or state change this expression produces",
+      "diff": "--- Original\n+++ New\n@@ -18,7 +18,7 @@\n \t\treturn errors.New(\"sample: email contains whitespace\")\n \t}\n \tat := strings.Index(email, \"@\")\n-\tif at \u003c= 0 || at == len(email)-1 {\n+\tif at \u003c= 0 || false {\n \t\treturn errors.New(\"sample: email missing a valid '@'\")\n \t}\n \tdomain := email[at+1:]\n",
+      "context_start_line": 18,
+      "context_lines": [
+        "\t\treturn errors.New(\"sample: email contains whitespace\")",
+        "\t}",
+        "\tat := strings.Index(email, \"@\")",
+        "\tif at \u003c= 0 || at == len(email)-1 {",
+        "\t\treturn errors.New(\"sample: email missing a valid '@'\")",
+        "\t}",
+        "\tdomain := email[at+1:]"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "7b36a329da01e52d9bfd20d5d198f48c",
+      "file": "enterprise.go",
+      "line": 26,
+      "mutator": "expression/remove",
+      "description": "Changes: `if dot \u003c= 0 || dot == len(domain)-1 {` → `if dot \u003c= 0 || false {`",
+      "kill_hint": "Write a test that asserts the side effect or state change this expression produces",
+      "diff": "--- Original\n+++ New\n@@ -23,7 +23,7 @@\n \t}\n \tdomain := email[at+1:]\n \tdot := strings.LastIndex(domain, \".\")\n-\tif dot \u003c= 0 || dot == len(domain)-1 {\n+\tif dot \u003c= 0 || false {\n \t\treturn errors.New(\"sample: email domain missing a valid '.'\")\n \t}\n \treturn nil\n",
+      "context_start_line": 23,
+      "context_lines": [
+        "\t}",
+        "\tdomain := email[at+1:]",
+        "\tdot := strings.LastIndex(domain, \".\")",
+        "\tif dot \u003c= 0 || dot == len(domain)-1 {",
+        "\t\treturn errors.New(\"sample: email domain missing a valid '.'\")",
+        "\t}",
+        "\treturn nil"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "6048e9ae17df198ce9ba6404538455ac",
+      "file": "enterprise.go",
+      "line": 145,
+      "mutator": "expression/remove",
+      "description": "Changes: `if unicode.IsPunct(r) || unicode.IsSymbol(r) {` → `if unicode.IsPunct(r) || false {`",
+      "kill_hint": "Write a test that asserts the side effect or state change this expression produces",
+      "diff": "--- Original\n+++ New\n@@ -142,7 +142,7 @@\n \n func hasSpecial(s string) bool {\n \tfor _, r := range s {\n-\t\tif unicode.IsPunct(r) || unicode.IsSymbol(r) {\n+\t\tif unicode.IsPunct(r) || false {\n \t\t\treturn true\n \t\t}\n \t}\n",
+      "context_start_line": 142,
+      "context_lines": [
+        "",
+        "func hasSpecial(s string) bool {",
+        "\tfor _, r := range s {",
+        "\t\tif unicode.IsPunct(r) || unicode.IsSymbol(r) {",
+        "\t\t\treturn true",
+        "\t\t}",
+        "\t}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "c21e1f51feb0c115747a73050a262d4d",
+      "file": "enterprise.go",
+      "line": 116,
+      "mutator": "numbers/decrementer",
+      "description": "Changes: `if maxLen \u003c= 3 {` → `if maxLen \u003c= 2 {`",
+      "kill_hint": "Write a test that asserts the exact numeric value",
+      "diff": "--- Original\n+++ New\n@@ -113,7 +113,7 @@\n \tif len(s) \u003c= maxLen {\n \t\treturn s\n \t}\n-\tif maxLen \u003c= 3 {\n+\tif maxLen \u003c= 2 {\n \t\treturn s[:maxLen]\n \t}\n \treturn s[:maxLen-3] + \"...\"\n",
+      "context_start_line": 113,
+      "context_lines": [
+        "\tif len(s) \u003c= maxLen {",
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {",
+        "\t\treturn s[:maxLen]",
+        "\t}",
+        "\treturn s[:maxLen-3] + \"...\""
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "f90bc4d0d3b2746b3448c45f436a4025",
+      "file": "enterprise.go",
+      "line": 116,
+      "mutator": "numbers/incrementer",
+      "description": "Changes: `if maxLen \u003c= 3 {` → `if maxLen \u003c= 4 {`",
+      "kill_hint": "Write a test that asserts the exact numeric value — off-by-one mutations are killed by precise equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -113,7 +113,7 @@\n \tif len(s) \u003c= maxLen {\n \t\treturn s\n \t}\n-\tif maxLen \u003c= 3 {\n+\tif maxLen \u003c= 4 {\n \t\treturn s[:maxLen]\n \t}\n \treturn s[:maxLen-3] + \"...\"\n",
+      "context_start_line": 113,
+      "context_lines": [
+        "\tif len(s) \u003c= maxLen {",
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {",
+        "\t\treturn s[:maxLen]",
+        "\t}",
+        "\treturn s[:maxLen-3] + \"...\""
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "b05db00a0093ee24d460c9fc5bcfd985",
+      "file": "enterprise.go",
+      "line": 36,
+      "mutator": "statement/remove",
+      "description": "Removes a statement entirely, dropping its side effect or return value",
+      "kill_hint": "Write a test that asserts the side effect or state change this statement produces",
+      "diff": "--- Original\n+++ New\n@@ -33,8 +33,8 @@\n // with '*', the way you'd mask a card number or token in a log line.\n func MaskSensitive(s string, visible int) string {\n \tif visible \u003c 0 {\n-\t\tvisible = 0\n-\t}\n+\t_ = visible\n+}\n \tif visible \u003e= len(s) {\n \t\treturn s\n \t}\n",
+      "context_start_line": 33,
+      "context_lines": [
+        "// with '*', the way you'd mask a card number or token in a log line.",
+        "func MaskSensitive(s string, visible int) string {",
+        "\tif visible \u003c 0 {",
+        "\t\tvisible = 0",
+        "\t}",
+        "\tif visible \u003e= len(s) {",
+        "\t\treturn s"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "c5247cae4fef46e6e9d72310456f0817",
+      "file": "enterprise.go",
+      "line": 21,
+      "mutator": "numbers/decrementer",
+      "description": "Changes: `if at \u003c= 0 || at == len(email)-1 {` → `if at \u003c= 0 || at == len(email)-0 {`",
+      "kill_hint": "Write a test that asserts the exact numeric value",
+      "diff": "--- Original\n+++ New\n@@ -18,7 +18,7 @@\n \t\treturn errors.New(\"sample: email contains whitespace\")\n \t}\n \tat := strings.Index(email, \"@\")\n-\tif at \u003c= 0 || at == len(email)-1 {\n+\tif at \u003c= 0 || at == len(email)-0 {\n \t\treturn errors.New(\"sample: email missing a valid '@'\")\n \t}\n \tdomain := email[at+1:]\n",
+      "context_start_line": 18,
+      "context_lines": [
+        "\t\treturn errors.New(\"sample: email contains whitespace\")",
+        "\t}",
+        "\tat := strings.Index(email, \"@\")",
+        "\tif at \u003c= 0 || at == len(email)-1 {",
+        "\t\treturn errors.New(\"sample: email missing a valid '@'\")",
+        "\t}",
+        "\tdomain := email[at+1:]"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "ac9eb13395e9f39837c16dca8c02383c",
+      "file": "enterprise.go",
+      "line": 156,
+      "mutator": "numbers/decrementer",
+      "description": "Changes: `if len(pw) \u003c 8 {` → `if len(pw) \u003c 7 {`",
+      "kill_hint": "Write a test that asserts the exact numeric value",
+      "diff": "--- Original\n+++ New\n@@ -153,7 +153,7 @@\n // strength rule pw fails; an empty slice means pw passes all of them.\n func ValidatePasswordStrength(pw string) []string {\n \tvar problems []string\n-\tif len(pw) \u003c 8 {\n+\tif len(pw) \u003c 7 {\n \t\tproblems = append(problems, \"must be at least 8 characters\")\n \t}\n \tif !hasUpper(pw) {\n",
+      "context_start_line": 153,
+      "context_lines": [
+        "// strength rule pw fails; an empty slice means pw passes all of them.",
+        "func ValidatePasswordStrength(pw string) []string {",
+        "\tvar problems []string",
+        "\tif len(pw) \u003c 8 {",
+        "\t\tproblems = append(problems, \"must be at least 8 characters\")",
+        "\t}",
+        "\tif !hasUpper(pw) {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "a6acd9343d28d6a3f13adf1eaf9b0062",
+      "file": "enterprise.go",
+      "line": 157,
+      "mutator": "statement/remove",
+      "description": "Removes a statement entirely, dropping its side effect or return value",
+      "kill_hint": "Write a test that asserts the side effect or state change this statement produces",
+      "diff": "--- Original\n+++ New\n@@ -154,8 +154,8 @@\n func ValidatePasswordStrength(pw string) []string {\n \tvar problems []string\n \tif len(pw) \u003c 8 {\n-\t\tproblems = append(problems, \"must be at least 8 characters\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasUpper(pw) {\n \t\tproblems = append(problems, \"must contain an uppercase letter\")\n \t}\n",
+      "context_start_line": 154,
+      "context_lines": [
+        "func ValidatePasswordStrength(pw string) []string {",
+        "\tvar problems []string",
+        "\tif len(pw) \u003c 8 {",
+        "\t\tproblems = append(problems, \"must be at least 8 characters\")",
+        "\t}",
+        "\tif !hasUpper(pw) {",
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "ea3fff2e86c691582f0c9ff900afe64a",
+      "file": "enterprise.go",
+      "line": 160,
+      "mutator": "statement/remove",
+      "description": "Removes a statement entirely, dropping its side effect or return value",
+      "kill_hint": "Write a test that asserts the side effect or state change this statement produces",
+      "diff": "--- Original\n+++ New\n@@ -157,8 +157,8 @@\n \t\tproblems = append(problems, \"must be at least 8 characters\")\n \t}\n \tif !hasUpper(pw) {\n-\t\tproblems = append(problems, \"must contain an uppercase letter\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasDigit(pw) {\n \t\tproblems = append(problems, \"must contain a digit\")\n \t}\n",
+      "context_start_line": 157,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must be at least 8 characters\")",
+        "\t}",
+        "\tif !hasUpper(pw) {",
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")",
+        "\t}",
+        "\tif !hasDigit(pw) {",
+        "\t\tproblems = append(problems, \"must contain a digit\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "ae67da1bc4b40929fa824c9a4ebc663f",
+      "file": "enterprise.go",
+      "line": 163,
+      "mutator": "statement/remove",
+      "description": "Removes a statement entirely, dropping its side effect or return value",
+      "kill_hint": "Write a test that asserts the side effect or state change this statement produces",
+      "diff": "--- Original\n+++ New\n@@ -160,8 +160,8 @@\n \t\tproblems = append(problems, \"must contain an uppercase letter\")\n \t}\n \tif !hasDigit(pw) {\n-\t\tproblems = append(problems, \"must contain a digit\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \tif !hasSpecial(pw) {\n \t\tproblems = append(problems, \"must contain a special character\")\n \t}\n",
+      "context_start_line": 160,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must contain an uppercase letter\")",
+        "\t}",
+        "\tif !hasDigit(pw) {",
+        "\t\tproblems = append(problems, \"must contain a digit\")",
+        "\t}",
+        "\tif !hasSpecial(pw) {",
+        "\t\tproblems = append(problems, \"must contain a special character\")"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "2e9f79cb10b2e8ea7050a0e1ca20c2a6",
+      "file": "enterprise.go",
+      "line": 166,
+      "mutator": "statement/remove",
+      "description": "Removes a statement entirely, dropping its side effect or return value",
+      "kill_hint": "Write a test that asserts the side effect or state change this statement produces",
+      "diff": "--- Original\n+++ New\n@@ -163,8 +163,8 @@\n \t\tproblems = append(problems, \"must contain a digit\")\n \t}\n \tif !hasSpecial(pw) {\n-\t\tproblems = append(problems, \"must contain a special character\")\n-\t}\n+\t_, _ = problems, problems\n+}\n \treturn problems\n }\n \n",
+      "context_start_line": 163,
+      "context_lines": [
+        "\t\tproblems = append(problems, \"must contain a digit\")",
+        "\t}",
+        "\tif !hasSpecial(pw) {",
+        "\t\tproblems = append(problems, \"must contain a special character\")",
+        "\t}",
+        "\treturn problems",
+        "}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "6227296cc1f6ea4e721dff92e4171508",
+      "file": "enterprise.go",
+      "line": 21,
+      "mutator": "numbers/incrementer",
+      "description": "Changes: `if at \u003c= 0 || at == len(email)-1 {` → `if at \u003c= 0 || at == len(email)-2 {`",
+      "kill_hint": "Write a test that asserts the exact numeric value — off-by-one mutations are killed by precise equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -18,7 +18,7 @@\n \t\treturn errors.New(\"sample: email contains whitespace\")\n \t}\n \tat := strings.Index(email, \"@\")\n-\tif at \u003c= 0 || at == len(email)-1 {\n+\tif at \u003c= 0 || at == len(email)-2 {\n \t\treturn errors.New(\"sample: email missing a valid '@'\")\n \t}\n \tdomain := email[at+1:]\n",
+      "context_start_line": 18,
+      "context_lines": [
+        "\t\treturn errors.New(\"sample: email contains whitespace\")",
+        "\t}",
+        "\tat := strings.Index(email, \"@\")",
+        "\tif at \u003c= 0 || at == len(email)-1 {",
+        "\t\treturn errors.New(\"sample: email missing a valid '@'\")",
+        "\t}",
+        "\tdomain := email[at+1:]"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "1f92882e8724101887db2e8c01b5ce56",
+      "file": "enterprise.go",
+      "line": 81,
+      "mutator": "statement/return",
+      "description": "Changes: `return nil, errors.New(\"sample: pageSize must be \u003e= 1\")` → `return nil, nil`",
+      "kill_hint": "Write a test that asserts the exact return value — zero-value substitutions are caught by equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -78,7 +78,7 @@\n \t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")\n \t}\n \tif pageSize \u003c 1 {\n-\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")\n+\t\treturn nil, nil\n \t}\n \tstart := (page - 1) * pageSize\n \tif start \u003e= len(items) {\n",
+      "context_start_line": 78,
+      "context_lines": [
+        "\t\treturn nil, errors.New(\"sample: page must be \u003e= 1\")",
+        "\t}",
+        "\tif pageSize \u003c 1 {",
+        "\t\treturn nil, errors.New(\"sample: pageSize must be \u003e= 1\")",
+        "\t}",
+        "\tstart := (page - 1) * pageSize",
+        "\tif start \u003e= len(items) {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "b1bbd6df04d7b8409297791f4c12e711",
+      "file": "enterprise.go",
+      "line": 117,
+      "mutator": "statement/return",
+      "description": "Changes: `return s[:maxLen]` → `return \"\"`",
+      "kill_hint": "Write a test that asserts the exact return value — zero-value substitutions are caught by equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -114,7 +114,7 @@\n \t\treturn s\n \t}\n \tif maxLen \u003c= 3 {\n-\t\treturn s[:maxLen]\n+\t\treturn \"\"\n \t}\n \treturn s[:maxLen-3] + \"...\"\n }\n",
+      "context_start_line": 114,
+      "context_lines": [
+        "\t\treturn s",
+        "\t}",
+        "\tif maxLen \u003c= 3 {",
+        "\t\treturn s[:maxLen]",
+        "\t}",
+        "\treturn s[:maxLen-3] + \"...\"",
+        "}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "90bf8291fe377d83218d03e611817665",
+      "file": "enterprise.go",
+      "line": 175,
+      "mutator": "statement/return",
+      "description": "Changes: `return errors.New(\"sample: maxAttempts must be \u003e= 1\")` → `return nil`",
+      "kill_hint": "Write a test that asserts the exact return value — zero-value substitutions are caught by equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -172,7 +172,7 @@\n // calling sleep between attempts (injected so tests don't need real time.Sleep).\n func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {\n \tif maxAttempts \u003c 1 {\n-\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")\n+\t\treturn nil\n \t}\n \tvar lastErr error\n \tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {\n",
+      "context_start_line": 172,
+      "context_lines": [
+        "// calling sleep between attempts (injected so tests don't need real time.Sleep).",
+        "func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {",
+        "\tif maxAttempts \u003c 1 {",
+        "\t\treturn errors.New(\"sample: maxAttempts must be \u003e= 1\")",
+        "\t}",
+        "\tvar lastErr error",
+        "\tfor attempt := 1; attempt \u003c= maxAttempts; attempt++ {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "984cc6717281c4beb1939635dea21b5c",
+      "file": "functions.go",
+      "line": 14,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if a \u003e b {` → `if a \u003e= b {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -11,7 +11,7 @@\n \n // Max returns the larger of a and b.\n func Max(a, b int) int {\n-\tif a \u003e b {\n+\tif a \u003e= b {\n \t\treturn a\n \t}\n \treturn b\n",
+      "context_start_line": 11,
+      "context_lines": [
+        "",
+        "// Max returns the larger of a and b.",
+        "func Max(a, b int) int {",
+        "\tif a \u003e b {",
+        "\t\treturn a",
+        "\t}",
+        "\treturn b"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "c020b3105adbba34b02b2710236dd34f",
+      "file": "functions.go",
+      "line": 22,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if a \u003c b {` → `if a \u003c= b {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -19,7 +19,7 @@\n \n // Min returns the smaller of a and b.\n func Min(a, b int) int {\n-\tif a \u003c b {\n+\tif a \u003c= b {\n \t\treturn a\n \t}\n \treturn b\n",
+      "context_start_line": 19,
+      "context_lines": [
+        "",
+        "// Min returns the smaller of a and b.",
+        "func Min(a, b int) int {",
+        "\tif a \u003c b {",
+        "\t\treturn a",
+        "\t}",
+        "\treturn b"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "d4e443fd798f0010d2207d6abf92f690",
+      "file": "functions.go",
+      "line": 30,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if v \u003c lo {` → `if v \u003c= lo {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -27,7 +27,7 @@\n \n // Clamp restricts v to the inclusive range [lo, hi].\n func Clamp(v, lo, hi int) int {\n-\tif v \u003c lo {\n+\tif v \u003c= lo {\n \t\treturn lo\n \t}\n \tif v \u003e hi {\n",
+      "context_start_line": 27,
+      "context_lines": [
+        "",
+        "// Clamp restricts v to the inclusive range [lo, hi].",
+        "func Clamp(v, lo, hi int) int {",
+        "\tif v \u003c lo {",
+        "\t\treturn lo",
+        "\t}",
+        "\tif v \u003e hi {"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "6577fe664e07f2540e84591c3647a03b",
+      "file": "functions.go",
+      "line": 33,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if v \u003e hi {` → `if v \u003e= hi {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -30,7 +30,7 @@\n \tif v \u003c lo {\n \t\treturn lo\n \t}\n-\tif v \u003e hi {\n+\tif v \u003e= hi {\n \t\treturn hi\n \t}\n \treturn v\n",
+      "context_start_line": 30,
+      "context_lines": [
+        "\tif v \u003c lo {",
+        "\t\treturn lo",
+        "\t}",
+        "\tif v \u003e hi {",
+        "\t\treturn hi",
+        "\t}",
+        "\treturn v"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "d434e26686087d457ef8b7de76da33c0",
+      "file": "functions.go",
+      "line": 96,
+      "mutator": "expression/comparison",
+      "description": "Changes: `if n \u003e threshold {` → `if n \u003e= threshold {`",
+      "kill_hint": "Write tests at the exact boundary value — one that satisfies the condition and one that doesn't — and assert different outcomes",
+      "diff": "--- Original\n+++ New\n@@ -93,7 +93,7 @@\n func Filter(nums []int, threshold int) []int {\n \tout := make([]int, 0, len(nums))\n \tfor _, n := range nums {\n-\t\tif n \u003e threshold {\n+\t\tif n \u003e= threshold {\n \t\t\tout = append(out, n)\n \t\t}\n \t}\n",
+      "context_start_line": 93,
+      "context_lines": [
+        "func Filter(nums []int, threshold int) []int {",
+        "\tout := make([]int, 0, len(nums))",
+        "\tfor _, n := range nums {",
+        "\t\tif n \u003e threshold {",
+        "\t\t\tout = append(out, n)",
+        "\t\t}",
+        "\t}"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    },
+    {
+      "id": "aa07fade36d72e73e20fd41007f1c499",
+      "file": "functions.go",
+      "line": 31,
+      "mutator": "statement/return",
+      "description": "Changes: `return lo` → `return 0`",
+      "kill_hint": "Write a test that asserts the exact return value — zero-value substitutions are caught by equality assertions",
+      "diff": "--- Original\n+++ New\n@@ -28,7 +28,7 @@\n // Clamp restricts v to the inclusive range [lo, hi].\n func Clamp(v, lo, hi int) int {\n \tif v \u003c lo {\n-\t\treturn lo\n+\t\treturn 0\n \t}\n \tif v \u003e hi {\n \t\treturn hi\n",
+      "context_start_line": 28,
+      "context_lines": [
+        "// Clamp restricts v to the inclusive range [lo, hi].",
+        "func Clamp(v, lo, hi int) int {",
+        "\tif v \u003c lo {",
+        "\t\treturn lo",
+        "\t}",
+        "\tif v \u003e hi {",
+        "\t\treturn hi"
+      ],
+      "test_files": [
+        "enterprise_test.go",
+        "functions_test.go"
+      ]
+    }
+  ]
+}

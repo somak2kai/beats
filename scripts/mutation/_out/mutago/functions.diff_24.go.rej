@@ -1,0 +1,9 @@
+@@ -23,7 +23,7 @@
+ 	}
+ 	domain := email[at+1:]
+ 	dot := strings.LastIndex(domain, ".")
+-	if dot <= 0 || dot == len(domain)-1 {
++	if dot < 0 || dot == len(domain)-1 {
+ 		return errors.New("sample: email domain missing a valid '.'")
+ 	}
+ 	return nil

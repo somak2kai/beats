@@ -1,0 +1,9 @@
+@@ -184,7 +184,7 @@
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}
+-	return fmt.Errorf("sample: all %d attempts failed: %w", maxAttempts, lastErr)
++	return fmt.Errorf("sample: all %d attempts failed: %v", maxAttempts, lastErr)
+ }
+ 
+ // CircuitBreakerAllow reports whether a call should be allowed through,

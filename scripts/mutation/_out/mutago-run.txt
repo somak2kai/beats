@@ -1,0 +1,1114 @@
+KILLED enterprise.go:41 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:83 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:21 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -18,7 +18,7 @@
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+ 	at := strings.Index(email, "@")
+-	if at <= 0 || at == len(email)-1 {
++	if at <= 0 || at == len(email) + 1 {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+ 	domain := email[at+1:]
+
+KILLED enterprise.go:119 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:41 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:24 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -21,7 +21,7 @@
+ 	if at <= 0 || at == len(email)-1 {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+-	domain := email[at+1:]
++	domain := email[at - 1:]
+ 	dot := strings.LastIndex(domain, ".")
+ 	if dot <= 0 || dot == len(domain)-1 {
+ 		return errors.New("sample: email domain missing a valid '.'")
+
+KILLED enterprise.go:83 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:87 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:65 (arithmetic/assign_invert)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:26 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -23,7 +23,7 @@
+ 	}
+ 	domain := email[at+1:]
+ 	dot := strings.LastIndex(domain, ".")
+-	if dot <= 0 || dot == len(domain)-1 {
++	if dot <= 0 || dot == len(domain) + 1 {
+ 		return errors.New("sample: email domain missing a valid '.'")
+ 	}
+ 	return nil
+
+KILLED enterprise.go:66 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:97 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -94,7 +94,7 @@
+ // MergeConfigs merges override on top of base, without mutating either
+ // input map.
+ func MergeConfigs(base, override map[string]string) map[string]string {
+-	merged := make(map[string]string, len(base)+len(override))
++	merged := make(map[string]string, len(base) - len(override))
+ 	for k, v := range base {
+ 		merged[k] = v
+ 	}
+
+KILLED enterprise.go:119 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:184 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -181,7 +181,7 @@
+ 			return nil
+ 		}
+ 		if attempt < maxAttempts {
+-			sleep(time.Duration(attempt) * time.Millisecond)
++			sleep(time.Duration(attempt) / time.Millisecond)
+ 		}
+ 	}
+ 	return fmt.Errorf("sample: all %d attempts failed: %w", maxAttempts, lastErr)
+
+ESCAPED enterprise.go:15 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -12,8 +12,8 @@
+ // enough to exercise realistic branching without pulling in regexp.
+ func ValidateEmail(email string) error {
+ 	if email == "" {
+-		return errors.New("sample: email is empty")
+-	}
++	_ = errors.New
++}
+ 	if strings.ContainsAny(email, " \t\n") {
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+
+KILLED enterprise.go:18 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:22 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:27 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:36 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -33,8 +33,8 @@
+ // with '*', the way you'd mask a card number or token in a log line.
+ func MaskSensitive(s string, visible int) string {
+ 	if visible < 0 {
+-		visible = 0
+-	}
++	_ = visible
++}
+ 	if visible >= len(s) {
+ 		return s
+ 	}
+
+KILLED enterprise.go:39 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:51 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:65 (arithmetic/assignment)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:68 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:78 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:81 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -78,8 +78,8 @@
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+ 	if pageSize < 1 {
+-		return nil, errors.New("sample: pageSize must be >= 1")
+-	}
++	_ = errors.New
++}
+ 	start := (page - 1) * pageSize
+ 	if start >= len(items) {
+ 		return []string{}, nil
+
+ESCAPED enterprise.go:85 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -82,8 +82,8 @@
+ 	}
+ 	start := (page - 1) * pageSize
+ 	if start >= len(items) {
+-		return []string{}, nil
+-	}
++
++}
+ 	end := start + pageSize
+ 	if end > len(items) {
+ 		end = len(items)
+
+KILLED enterprise.go:89 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:111 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -108,8 +108,8 @@
+ // when truncation actually happens.
+ func TruncateWithEllipsis(s string, maxLen int) string {
+ 	if maxLen <= 0 {
+-		return ""
+-	}
++
++}
+ 	if len(s) <= maxLen {
+ 		return s
+ 	}
+
+KILLED enterprise.go:114 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:117 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -114,8 +114,8 @@
+ 		return s
+ 	}
+ 	if maxLen <= 3 {
+-		return s[:maxLen]
+-	}
++	_, _ = s, maxLen
++}
+ 	return s[:maxLen-3] + "..."
+ }
+ 
+
+KILLED enterprise.go:128 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:184 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:137 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:146 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:157 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -154,8 +154,8 @@
+ func ValidatePasswordStrength(pw string) []string {
+ 	var problems []string
+ 	if len(pw) < 8 {
+-		problems = append(problems, "must be at least 8 characters")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasUpper(pw) {
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+
+ESCAPED enterprise.go:160 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -157,8 +157,8 @@
+ 		problems = append(problems, "must be at least 8 characters")
+ 	}
+ 	if !hasUpper(pw) {
+-		problems = append(problems, "must contain an uppercase letter")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasDigit(pw) {
+ 		problems = append(problems, "must contain a digit")
+ 	}
+
+ESCAPED enterprise.go:163 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -160,8 +160,8 @@
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+ 	if !hasDigit(pw) {
+-		problems = append(problems, "must contain a digit")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasSpecial(pw) {
+ 		problems = append(problems, "must contain a special character")
+ 	}
+
+ESCAPED enterprise.go:166 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -163,8 +163,8 @@
+ 		problems = append(problems, "must contain a digit")
+ 	}
+ 	if !hasSpecial(pw) {
+-		problems = append(problems, "must contain a special character")
+-	}
++	_, _ = problems, problems
++}
+ 	return problems
+ }
+ 
+
+ESCAPED enterprise.go:175 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -172,8 +172,8 @@
+ // calling sleep between attempts (injected so tests don't need real time.Sleep).
+ func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {
+ 	if maxAttempts < 1 {
+-		return errors.New("sample: maxAttempts must be >= 1")
+-	}
++	_ = errors.New
++}
+ 	var lastErr error
+ 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+ 		lastErr = fn()
+
+KILLED enterprise.go:181 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:196 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -193,7 +193,7 @@
+ // open (cooldown) once tripped.
+ func CircuitBreakerAllow(consecutiveFailures, threshold int, lastFailureAt, now time.Time, cooldown time.Duration) bool {
+ 	if consecutiveFailures < threshold {
+-		return true
+-	}
++
++}
+ 	return now.Sub(lastFailureAt) >= cooldown
+ }
+
+KILLED enterprise.go:62 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:53 (conditional/bool-literal)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:14 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:26 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:26 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:35 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:38 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:61 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:65 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:67 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:77 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:80 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:84 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:110 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:113 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:116 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:156 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:174 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:178 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:180 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:183 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:195 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:198 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:159 (conditional/not)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:77 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -74,7 +74,7 @@
+ 
+ // Paginate returns the 1-indexed page of items for the given page size.
+ func Paginate(items []string, page, pageSize int) ([]string, error) {
+-	if page < 1 {
++	if page <= 1 {
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+ 	if pageSize < 1 {
+
+ESCAPED enterprise.go:80 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -77,7 +77,7 @@
+ 	if page < 1 {
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+-	if pageSize < 1 {
++	if pageSize <= 1 {
+ 		return nil, errors.New("sample: pageSize must be >= 1")
+ 	}
+ 	start := (page - 1) * pageSize
+
+KILLED enterprise.go:162 (conditional/not)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:84 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -81,7 +81,7 @@
+ 		return nil, errors.New("sample: pageSize must be >= 1")
+ 	}
+ 	start := (page - 1) * pageSize
+-	if start >= len(items) {
++	if start > len(items) {
+ 		return []string{}, nil
+ 	}
+ 	end := start + pageSize
+
+ESCAPED enterprise.go:110 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -107,7 +107,7 @@
+ // TruncateWithEllipsis shortens s to at most maxLen bytes, appending "..."
+ // when truncation actually happens.
+ func TruncateWithEllipsis(s string, maxLen int) string {
+-	if maxLen <= 0 {
++	if maxLen < 0 {
+ 		return ""
+ 	}
+ 	if len(s) <= maxLen {
+
+ESCAPED enterprise.go:113 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -110,7 +110,7 @@
+ 	if maxLen <= 0 {
+ 		return ""
+ 	}
+-	if len(s) <= maxLen {
++	if len(s) < maxLen {
+ 		return s
+ 	}
+ 	if maxLen <= 3 {
+
+ESCAPED enterprise.go:116 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -113,7 +113,7 @@
+ 	if len(s) <= maxLen {
+ 		return s
+ 	}
+-	if maxLen <= 3 {
++	if maxLen < 3 {
+ 		return s[:maxLen]
+ 	}
+ 	return s[:maxLen-3] + "..."
+
+KILLED enterprise.go:165 (conditional/not)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:26 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -23,7 +23,7 @@
+ 	}
+ 	domain := email[at+1:]
+ 	dot := strings.LastIndex(domain, ".")
+-	if dot <= 0 || dot == len(domain)-1 {
++	if dot < 0 || dot == len(domain)-1 {
+ 		return errors.New("sample: email domain missing a valid '.'")
+ 	}
+ 	return nil
+
+ESCAPED enterprise.go:35 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -32,7 +32,7 @@
+ // MaskSensitive replaces everything but the last `visible` characters of s
+ // with '*', the way you'd mask a card number or token in a log line.
+ func MaskSensitive(s string, visible int) string {
+-	if visible < 0 {
++	if visible <= 0 {
+ 		visible = 0
+ 	}
+ 	if visible >= len(s) {
+
+ESCAPED enterprise.go:38 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -35,7 +35,7 @@
+ 	if visible < 0 {
+ 		visible = 0
+ 	}
+-	if visible >= len(s) {
++	if visible > len(s) {
+ 		return s
+ 	}
+ 	return strings.Repeat("*", len(s)-visible) + s[len(s)-visible:]
+
+ESCAPED enterprise.go:65 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -62,7 +62,7 @@
+ 		return nil, errors.New("sample: chunk size must be positive")
+ 	}
+ 	var chunks [][]int
+-	for i := 0; i < len(items); i += size {
++	for i := 0; i <= len(items); i += size {
+ 		end := i + size
+ 		if end > len(items) {
+ 			end = len(items)
+
+ESCAPED enterprise.go:67 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -64,7 +64,7 @@
+ 	var chunks [][]int
+ 	for i := 0; i < len(items); i += size {
+ 		end := i + size
+-		if end > len(items) {
++		if end >= len(items) {
+ 			end = len(items)
+ 		}
+ 		chunks = append(chunks, items[i:end])
+
+KILLED enterprise.go:156 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:174 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -171,7 +171,7 @@
+ // RetryWithBackoff calls fn until it succeeds or maxAttempts is reached,
+ // calling sleep between attempts (injected so tests don't need real time.Sleep).
+ func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {
+-	if maxAttempts < 1 {
++	if maxAttempts <= 1 {
+ 		return errors.New("sample: maxAttempts must be >= 1")
+ 	}
+ 	var lastErr error
+
+ESCAPED enterprise.go:178 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -175,7 +175,7 @@
+ 		return errors.New("sample: maxAttempts must be >= 1")
+ 	}
+ 	var lastErr error
+-	for attempt := 1; attempt <= maxAttempts; attempt++ {
++	for attempt := 1; attempt < maxAttempts; attempt++ {
+ 		lastErr = fn()
+ 		if lastErr == nil {
+ 			return nil
+
+ESCAPED enterprise.go:183 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -180,7 +180,7 @@
+ 		if lastErr == nil {
+ 			return nil
+ 		}
+-		if attempt < maxAttempts {
++		if attempt <= maxAttempts {
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}
+
+KILLED enterprise.go:195 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:198 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -195,5 +195,5 @@
+ 	if consecutiveFailures < threshold {
+ 		return true
+ 	}
+-	return now.Sub(lastFailureAt) >= cooldown
++	return now.Sub(lastFailureAt) > cooldown
+ }
+
+KILLED enterprise.go:180 (expression/error-guard)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:187 (expression/errorf-wrap)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -184,7 +184,7 @@
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}
+-	return fmt.Errorf("sample: all %d attempts failed: %w", maxAttempts, lastErr)
++	return fmt.Errorf("sample: all %d attempts failed: %v", maxAttempts, lastErr)
+ }
+ 
+ // CircuitBreakerAllow reports whether a call should be allowed through,
+
+KILLED enterprise.go:21 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:26 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:145 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:21 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -18,7 +18,7 @@
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+ 	at := strings.Index(email, "@")
+-	if at <= 0 || at == len(email)-1 {
++	if at <= 0 || false {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+ 	domain := email[at+1:]
+
+KILLED enterprise.go:26 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:26 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -23,7 +23,7 @@
+ 	}
+ 	domain := email[at+1:]
+ 	dot := strings.LastIndex(domain, ".")
+-	if dot <= 0 || dot == len(domain)-1 {
++	if dot <= 0 || false {
+ 		return errors.New("sample: email domain missing a valid '.'")
+ 	}
+ 	return nil
+
+KILLED enterprise.go:61 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:145 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:145 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -142,7 +142,7 @@
+ 
+ func hasSpecial(s string) bool {
+ 	for _, r := range s {
+-		if unicode.IsPunct(r) || unicode.IsSymbol(r) {
++		if unicode.IsPunct(r) || false {
+ 			return true
+ 		}
+ 	}
+
+KILLED enterprise.go:51 (loop/break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:65 (loop/condition)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:116 (numbers/decrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -113,7 +113,7 @@
+ 	if len(s) <= maxLen {
+ 		return s
+ 	}
+-	if maxLen <= 3 {
++	if maxLen <= 2 {
+ 		return s[:maxLen]
+ 	}
+ 	return s[:maxLen-3] + "..."
+
+KILLED enterprise.go:178 (loop/condition)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:49 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:98 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:116 (numbers/incrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -113,7 +113,7 @@
+ 	if len(s) <= maxLen {
+ 		return s
+ 	}
+-	if maxLen <= 3 {
++	if maxLen <= 4 {
+ 		return s[:maxLen]
+ 	}
+ 	return s[:maxLen-3] + "..."
+
+KILLED enterprise.go:101 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:36 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -33,8 +33,8 @@
+ // with '*', the way you'd mask a card number or token in a log line.
+ func MaskSensitive(s string, visible int) string {
+ 	if visible < 0 {
+-		visible = 0
+-	}
++	_ = visible
++}
+ 	if visible >= len(s) {
+ 		return s
+ 	}
+
+KILLED enterprise.go:126 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:135 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:144 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (numbers/decrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:21 (numbers/decrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -18,7 +18,7 @@
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+ 	at := strings.Index(email, "@")
+-	if at <= 0 || at == len(email)-1 {
++	if at <= 0 || at == len(email)-0 {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+ 	domain := email[at+1:]
+
+ESCAPED enterprise.go:156 (numbers/decrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -153,7 +153,7 @@
+ // strength rule pw fails; an empty slice means pw passes all of them.
+ func ValidatePasswordStrength(pw string) []string {
+ 	var problems []string
+-	if len(pw) < 8 {
++	if len(pw) < 7 {
+ 		problems = append(problems, "must be at least 8 characters")
+ 	}
+ 	if !hasUpper(pw) {
+
+ESCAPED enterprise.go:157 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -154,8 +154,8 @@
+ func ValidatePasswordStrength(pw string) []string {
+ 	var problems []string
+ 	if len(pw) < 8 {
+-		problems = append(problems, "must be at least 8 characters")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasUpper(pw) {
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+
+ESCAPED enterprise.go:160 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -157,8 +157,8 @@
+ 		problems = append(problems, "must be at least 8 characters")
+ 	}
+ 	if !hasUpper(pw) {
+-		problems = append(problems, "must contain an uppercase letter")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasDigit(pw) {
+ 		problems = append(problems, "must contain a digit")
+ 	}
+
+ESCAPED enterprise.go:163 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -160,8 +160,8 @@
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+ 	if !hasDigit(pw) {
+-		problems = append(problems, "must contain a digit")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasSpecial(pw) {
+ 		problems = append(problems, "must contain a special character")
+ 	}
+
+ESCAPED enterprise.go:166 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -163,8 +163,8 @@
+ 		problems = append(problems, "must contain a digit")
+ 	}
+ 	if !hasSpecial(pw) {
+-		problems = append(problems, "must contain a special character")
+-	}
++	_, _ = problems, problems
++}
+ 	return problems
+ }
+ 
+
+KILLED enterprise.go:21 (numbers/incrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:184 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:21 (numbers/incrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -18,7 +18,7 @@
+ 		return errors.New("sample: email contains whitespace")
+ 	}
+ 	at := strings.Index(email, "@")
+-	if at <= 0 || at == len(email)-1 {
++	if at <= 0 || at == len(email)-2 {
+ 		return errors.New("sample: email missing a valid '@'")
+ 	}
+ 	domain := email[at+1:]
+
+KILLED enterprise.go:156 (numbers/incrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:53 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:54 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:70 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:68 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:89 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:99 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:179 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:15 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:81 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -78,7 +78,7 @@
+ 		return nil, errors.New("sample: page must be >= 1")
+ 	}
+ 	if pageSize < 1 {
+-		return nil, errors.New("sample: pageSize must be >= 1")
++		return nil, nil
+ 	}
+ 	start := (page - 1) * pageSize
+ 	if start >= len(items) {
+
+KILLED enterprise.go:18 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:22 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:117 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -114,7 +114,7 @@
+ 		return s
+ 	}
+ 	if maxLen <= 3 {
+-		return s[:maxLen]
++		return ""
+ 	}
+ 	return s[:maxLen-3] + "..."
+ }
+
+KILLED enterprise.go:27 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:39 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:41 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:56 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:187 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:62 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:72 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:78 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:91 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:104 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:119 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:128 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:168 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:175 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -172,7 +172,7 @@
+ // calling sleep between attempts (injected so tests don't need real time.Sleep).
+ func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {
+ 	if maxAttempts < 1 {
+-		return errors.New("sample: maxAttempts must be >= 1")
++		return nil
+ 	}
+ 	var lastErr error
+ 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+
+KILLED enterprise.go:198 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:53 (arithmetic/assign_invert)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:53 (arithmetic/assignment)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:73 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:73 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:109 (arithmetic/base)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:85 (branch/case)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:15 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:23 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:31 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:34 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:62 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:97 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:107 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED functions.go:14 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -11,7 +11,7 @@
+ 
+ // Max returns the larger of a and b.
+ func Max(a, b int) int {
+-	if a > b {
++	if a >= b {
+ 		return a
+ 	}
+ 	return b
+
+ESCAPED functions.go:22 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -19,7 +19,7 @@
+ 
+ // Min returns the smaller of a and b.
+ func Min(a, b int) int {
+-	if a < b {
++	if a <= b {
+ 		return a
+ 	}
+ 	return b
+
+KILLED functions.go:14 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:22 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:30 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:33 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:46 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:61 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:96 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:106 (conditional/negated)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED functions.go:30 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -27,7 +27,7 @@
+ 
+ // Clamp restricts v to the inclusive range [lo, hi].
+ func Clamp(v, lo, hi int) int {
+-	if v < lo {
++	if v <= lo {
+ 		return lo
+ 	}
+ 	if v > hi {
+
+ESCAPED functions.go:33 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -30,7 +30,7 @@
+ 	if v < lo {
+ 		return lo
+ 	}
+-	if v > hi {
++	if v >= hi {
+ 		return hi
+ 	}
+ 	return v
+
+KILLED functions.go:46 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED functions.go:96 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -93,7 +93,7 @@
+ func Filter(nums []int, threshold int) []int {
+ 	out := make([]int, 0, len(nums))
+ 	for _, n := range nums {
+-		if n > threshold {
++		if n >= threshold {
+ 			out = append(out, n)
+ 		}
+ 	}
+
+KILLED functions.go:52 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:60 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:72 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:82 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:95 (loop/range_break)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (numbers/decrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (numbers/incrementer)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:53 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:73 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:97 (statement/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:15 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:107 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:17 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED functions.go:31 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+--- Original
++++ New
+@@ -28,7 +28,7 @@
+ // Clamp restricts v to the inclusive range [lo, hi].
+ func Clamp(v, lo, hi int) int {
+ 	if v < lo {
+-		return lo
++		return 0
+ 	}
+ 	if v > hi {
+ 		return hi
+
+KILLED functions.go:34 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:36 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:41 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:46 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:55 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:75 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:88 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED functions.go:109 (statement/return)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+The mutation score is 72.50% (145 killed, 55 escaped, 0 errored, 0 not covered, 0 skipped, 200 total)
+
+Per-mutator breakdown:
+  arithmetic/assign_invert             killed   2 / 2    (100%)
+  arithmetic/assignment                killed   2 / 2    (100%)
+  arithmetic/base                      killed  12 / 17   (71%)
+  branch/case                          killed   1 / 1    (100%)
+  branch/if                            killed  22 / 34   (65%)
+  conditional/bool-literal             killed   1 / 1    (100%)
+  conditional/negated                  killed  32 / 32   (100%)
+  conditional/not                      killed   3 / 3    (100%)
+  expression/comparison                killed   5 / 25   (20%)
+  expression/error-guard               killed   1 / 1    (100%)
+  expression/errorf-wrap               killed   0 / 1    (0%)
+  expression/logical                   killed   3 / 3    (100%)
+  expression/remove                    killed   3 / 6    (50%)
+  loop/break                           killed   1 / 1    (100%)
+  loop/condition                       killed   2 / 2    (100%)
+  loop/range_break                     killed  11 / 11   (100%)
+  numbers/decrementer                  killed   2 / 5    (40%)
+  numbers/incrementer                  killed   3 / 5    (60%)
+  statement/remove                     killed  11 / 16   (69%)
+  statement/return                     killed  28 / 32   (88%)

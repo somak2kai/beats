@@ -1,0 +1,2 @@
+# command-line-arguments
+vet: scripts/mutation/out/mutago/functions.diff_32.go:109:9: undefined: now

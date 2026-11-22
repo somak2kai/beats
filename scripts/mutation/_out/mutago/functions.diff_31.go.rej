@@ -1,0 +1,9 @@
+@@ -180,7 +180,7 @@
+ 		if lastErr == nil {
+ 			return nil
+ 		}
+-		if attempt < maxAttempts {
++		if attempt <= maxAttempts {
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}

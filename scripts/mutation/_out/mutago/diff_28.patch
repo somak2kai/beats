@@ -1,0 +1,16 @@
+--- Original
++++ New
+@@ -64,7 +64,7 @@
+ 	var chunks [][]int
+ 	for i := 0; i < len(items); i += size {
+ 		end := i + size
+-		if end > len(items) {
++		if end >= len(items) {
+ 			end = len(items)
+ 		}
+ 		chunks = append(chunks, items[i:end])
+
+KILLED enterprise.go:156 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:174 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

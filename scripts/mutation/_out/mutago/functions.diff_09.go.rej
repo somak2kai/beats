@@ -1,0 +1,11 @@
+@@ -82,8 +82,8 @@
+ 	}
+ 	start := (page - 1) * pageSize
+ 	if start >= len(items) {
+-		return []string{}, nil
+-	}
++
++}
+ 	end := start + pageSize
+ 	if end > len(items) {
+ 		end = len(items)

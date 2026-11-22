@@ -1,0 +1,22 @@
+--- Original
++++ New
+@@ -184,7 +184,7 @@
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}
+-	return fmt.Errorf("sample: all %d attempts failed: %w", maxAttempts, lastErr)
++	return fmt.Errorf("sample: all %d attempts failed: %v", maxAttempts, lastErr)
+ }
+ 
+ // CircuitBreakerAllow reports whether a call should be allowed through,
+
+KILLED enterprise.go:21 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:26 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:145 (expression/logical)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+KILLED enterprise.go:21 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:21 (expression/remove)
+------------------------------------------------------------------------------------------------------------------------------------------------------

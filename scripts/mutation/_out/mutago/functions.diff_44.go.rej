@@ -1,0 +1,11 @@
+@@ -160,8 +160,8 @@
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+ 	if !hasDigit(pw) {
+-		problems = append(problems, "must contain a digit")
+-	}
++	_, _ = problems, problems
++}
+ 	if !hasSpecial(pw) {
+ 		problems = append(problems, "must contain a special character")
+ 	}

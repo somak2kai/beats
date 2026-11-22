@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -171,7 +171,7 @@
+ // RetryWithBackoff calls fn until it succeeds or maxAttempts is reached,
+ // calling sleep between attempts (injected so tests don't need real time.Sleep).
+ func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {
+-	if maxAttempts < 1 {
++	if maxAttempts <= 1 {
+ 		return errors.New("sample: maxAttempts must be >= 1")
+ 	}
+ 	var lastErr error
+
+ESCAPED enterprise.go:178 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

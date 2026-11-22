@@ -1,0 +1,16 @@
+--- Original
++++ New
+@@ -180,7 +180,7 @@
+ 		if lastErr == nil {
+ 			return nil
+ 		}
+-		if attempt < maxAttempts {
++		if attempt <= maxAttempts {
+ 			sleep(time.Duration(attempt) * time.Millisecond)
+ 		}
+ 	}
+
+KILLED enterprise.go:195 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ESCAPED enterprise.go:198 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

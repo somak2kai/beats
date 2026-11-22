@@ -1,0 +1,18 @@
+--- /Users/admin/ws/golang/beats/scripts/mutation/sample/enterprise.go	2026-08-31 18:15:02
++++ /Users/admin/ws/golang/beats/scripts/mutation/out/gopls/sample_inline/enterprise.go	2026-08-31 18:32:45
+@@ -156,7 +156,14 @@
+ 	if len(pw) < 8 {
+ 		problems = append(problems, "must be at least 8 characters")
+ 	}
+-	if !hasUpper(pw) {
++	if !func() bool {
++	for _, r := range pw {
++		if unicode.IsUpper(r) {
++			return true
++		}
++	}
++	return false
++}() {
+ 		problems = append(problems, "must contain an uppercase letter")
+ 	}
+ 	if !hasDigit(pw) {

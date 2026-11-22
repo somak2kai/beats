@@ -1,0 +1,9 @@
+@@ -107,7 +107,7 @@
+ // TruncateWithEllipsis shortens s to at most maxLen bytes, appending "..."
+ // when truncation actually happens.
+ func TruncateWithEllipsis(s string, maxLen int) string {
+-	if maxLen <= 0 {
++	if maxLen < 0 {
+ 		return ""
+ 	}
+ 	if len(s) <= maxLen {

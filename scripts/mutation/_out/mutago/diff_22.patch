@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -110,7 +110,7 @@
+ 	if maxLen <= 0 {
+ 		return ""
+ 	}
+-	if len(s) <= maxLen {
++	if len(s) < maxLen {
+ 		return s
+ 	}
+ 	if maxLen <= 3 {
+
+ESCAPED enterprise.go:116 (expression/comparison)
+------------------------------------------------------------------------------------------------------------------------------------------------------

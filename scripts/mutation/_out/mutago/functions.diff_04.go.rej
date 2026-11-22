@@ -1,0 +1,9 @@
+@@ -94,7 +94,7 @@
+ // MergeConfigs merges override on top of base, without mutating either
+ // input map.
+ func MergeConfigs(base, override map[string]string) map[string]string {
+-	merged := make(map[string]string, len(base)+len(override))
++	merged := make(map[string]string, len(base) - len(override))
+ 	for k, v := range base {
+ 		merged[k] = v
+ 	}

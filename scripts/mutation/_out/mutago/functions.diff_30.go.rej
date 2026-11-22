@@ -1,0 +1,9 @@
+@@ -175,7 +175,7 @@
+ 		return errors.New("sample: maxAttempts must be >= 1")
+ 	}
+ 	var lastErr error
+-	for attempt := 1; attempt <= maxAttempts; attempt++ {
++	for attempt := 1; attempt < maxAttempts; attempt++ {
+ 		lastErr = fn()
+ 		if lastErr == nil {
+ 			return nil

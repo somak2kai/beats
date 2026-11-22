@@ -1,0 +1,14 @@
+--- Original
++++ New
+@@ -181,7 +181,7 @@
+ 			return nil
+ 		}
+ 		if attempt < maxAttempts {
+-			sleep(time.Duration(attempt) * time.Millisecond)
++			sleep(time.Duration(attempt) / time.Millisecond)
+ 		}
+ 	}
+ 	return fmt.Errorf("sample: all %d attempts failed: %w", maxAttempts, lastErr)
+
+ESCAPED enterprise.go:15 (branch/if)
+------------------------------------------------------------------------------------------------------------------------------------------------------

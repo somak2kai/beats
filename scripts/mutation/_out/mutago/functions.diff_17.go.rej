@@ -1,0 +1,10 @@
+@@ -193,7 +193,7 @@
+ // open (cooldown) once tripped.
+ func CircuitBreakerAllow(consecutiveFailures, threshold int, lastFailureAt, now time.Time, cooldown time.Duration) bool {
+ 	if consecutiveFailures < threshold {
+-		return true
+-	}
++
++}
+ 	return now.Sub(lastFailureAt) >= cooldown
+ }

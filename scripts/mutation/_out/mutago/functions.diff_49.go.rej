@@ -1,0 +1,9 @@
+@@ -172,7 +172,7 @@
+ // calling sleep between attempts (injected so tests don't need real time.Sleep).
+ func RetryWithBackoff(fn func() error, maxAttempts int, sleep func(time.Duration)) error {
+ 	if maxAttempts < 1 {
+-		return errors.New("sample: maxAttempts must be >= 1")
++		return nil
+ 	}
+ 	var lastErr error
+ 	for attempt := 1; attempt <= maxAttempts; attempt++ {
