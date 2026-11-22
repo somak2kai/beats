@@ -53,7 +53,7 @@ jobs:
 
       - name: gofmt
         run: |
-          files=$(gofmt -l .)
+          files=$(gofmt -l $(go list -e -f "{{.Dir}}" ./...))
           if [ -n "$files" ]; then
             echo "The following files are not gofmt'd:"
             echo "$files"
