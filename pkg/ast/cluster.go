@@ -237,13 +237,8 @@ func buildTrigramMap(fns []*ds.FunctionMeta, cfg ClusterConfig) map[int64][]int 
 		if ignoreFunction(fn, cfg) {
 			continue
 		}
-		seen := make(map[int64]struct{})
 		for _, h := range fn.TokenSeqHash {
-			if _, ok := seen[h]; ok {
-				continue
-			}
 			trigramMap[h] = append(trigramMap[h], i)
-			seen[h] = struct{}{}
 		}
 	}
 	return trigramMap
