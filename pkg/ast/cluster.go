@@ -8,6 +8,7 @@ import (
 	"math"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -20,18 +21,17 @@ import (
 const (
 	identifyThreshold      = 0.75
 	identifyMinSize        = 3
-	maxTrigranBucket       = 300
+	maxTrigramBucket       = 300
 	minTokenSeqLen         = 5
 	seqSimilarityThreshold = 0.40
 )
 
 // ClusterConfig holds all tuneable thresholds for the clustering pipeline.
-// Pass to IdentifyClustersWithConfig. IdentifyClusters uses DefaultClusterConfig.
 type ClusterConfig struct {
 	IdentifyThreshold      float64 // min ∛(seqS×impS×callS) to be a candidate (default 0.75)
 	SeqSimilarityThreshold float64 // fast-reject on seq similarity (default 0.40)
-	MaxTrigranBucket       int     // trigram stop-word cutoff (default 300)
-	MinTokenSeqLen         int     // min tokens to participate (default 5)
+	MaxTrigramBucket       int     // trigram stop-word cutoff (default 300)
+	MinTokenSeqLen         int     // min tokens to participate (default 5) any less we dont have enough information to decide on clustering vs orphans.
 	IdentifyMinSize        int     // min cluster members (default 3)
 	PrimitiveThreshold     float64 // max cluster as fraction of corpus (default 0.05)
 	SeqFastReject          float64 // orphan medoid gate (default 0.30)
@@ -46,7 +46,7 @@ func DefaultClusterConfig() ClusterConfig {
 	return ClusterConfig{
 		IdentifyThreshold:      identifyThreshold,
 		SeqSimilarityThreshold: seqSimilarityThreshold,
-		MaxTrigranBucket:       maxTrigranBucket,
+		MaxTrigramBucket:       maxTrigramBucket,
 		MinTokenSeqLen:         minTokenSeqLen,
 		IdentifyMinSize:        identifyMinSize,
 		PrimitiveThreshold:     0.05,
@@ -182,15 +182,10 @@ func IdentifyOrphansWithConfig(orphanMetas []*ds.FunctionMeta, cluster []*ds.Clu
 	return result, nil
 }
 
-// IdentifyClusters uses DefaultClusterConfig. See IdentifyClustersWithConfig.
-func IdentifyClusters(fns []*ds.FunctionMeta) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
-	return IdentifyClustersWithConfig(fns, DefaultClusterConfig())
-}
-
 // IdentifyClustersWithConfig builds clusters using the provided thresholds.
 // Returns:
 //   - clusters: all multi-member structural clusters (after filtering)
-//   - orphans: functions that did not join any cluster and are eligible for orphan analysis
+//   - orphans: functions that did not join any cluster and are eligible for outlier analysis
 func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
 	if len(fns) == 0 {
 		return nil, nil, nil
@@ -202,29 +197,19 @@ func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*d
 	})
 
 	primitiveThreshold := float64(len(fns)) * cfg.PrimitiveThreshold
-	trigramMap := buildTrigramMapCfg(fns, cfg)
-	sharedCounts := countSharedTrigramsCfg(trigramMap, cfg)
-	candidates, pairScores, scoredFns, err := scorePairsCfg(fns, sharedCounts, cfg)
+	trigramMap := buildTrigramMap(fns, cfg)
+	sharedCounts := countSharedTrigrams(trigramMap, cfg)
+	candidates, pairScores, scoredFns, err := scorePairs(fns, sharedCounts, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	clusterMembers := agglomerateCfg(fns, candidates, pairScores, cfg)
-	cl, orph := buildClustersCfg(fns, clusterMembers, primitiveThreshold, scoredFns, cfg)
+	clusterMembers := agglomerate(fns, candidates, pairScores, cfg)
+	cl, orph := buildClusters(fns, clusterMembers, primitiveThreshold, scoredFns, cfg)
 	return cl, orph, nil
 }
 
-func ignoreFunction(fn *ds.FunctionMeta) bool {
-	if len(fn.TokenSeq) < minTokenSeqLen {
-		return true
-	}
-	if fn.GeneratedCode || fn.TestCode || fn.IsConstructor {
-		return true
-	}
-	return false
-}
-
-func ignoreFunctionCfg(fn *ds.FunctionMeta, cfg ClusterConfig) bool {
+func ignoreFunction(fn *ds.FunctionMeta, cfg ClusterConfig) bool {
 	if len(fn.TokenSeq) < cfg.MinTokenSeqLen {
 		return true
 	}
@@ -234,31 +219,13 @@ func ignoreFunctionCfg(fn *ds.FunctionMeta, cfg ClusterConfig) bool {
 	return false
 }
 
-// buildTrigramMap maps each trigram hash to the indices of functions that contain it.
-// Functions with fewer than minTokenSeqLen tokens are excluded — not enough
-// structure to be discriminating. Similarly any test or generated code is excluded.
-func buildTrigramMap(fns []*ds.FunctionMeta) map[int64][]int {
+// converts slice of functions to a map of token sequences to index of functions that contains it.
+//
+//	Functions with fewer than minTokenSeqLen tokens are excluded — not enough
+func buildTrigramMap(fns []*ds.FunctionMeta, cfg ClusterConfig) map[int64][]int {
 	trigramMap := make(map[int64][]int, len(fns))
 	for i, fn := range fns {
-		if ignoreFunction(fn) {
-			continue
-		}
-		for _, h := range fn.TokenSeqHash {
-			trigramMap[h] = append(trigramMap[h], i)
-		}
-	}
-	return trigramMap
-}
-
-// BuildTrigramMap is the exported form for use by the calibrate package.
-func BuildTrigramMap(fns []*ds.FunctionMeta) map[int64][]int {
-	return buildTrigramMap(fns)
-}
-
-func buildTrigramMapCfg(fns []*ds.FunctionMeta, cfg ClusterConfig) map[int64][]int {
-	trigramMap := make(map[int64][]int, len(fns))
-	for i, fn := range fns {
-		if ignoreFunctionCfg(fn, cfg) {
+		if ignoreFunction(fn, cfg) {
 			continue
 		}
 		for _, h := range fn.TokenSeqHash {
@@ -271,10 +238,12 @@ func buildTrigramMapCfg(fns []*ds.FunctionMeta, cfg ClusterConfig) map[int64][]i
 // countSharedTrigrams counts how many trigram hashes each (i,j) candidate pair
 // shares. Buckets larger than maxTrigranBucket are skipped — that trigram is a
 // structural stop-word and would generate noise pairs.
-func countSharedTrigrams(trigramMap map[int64][]int) map[pairKey]int {
+func countSharedTrigrams(trigramMap map[int64][]int, cfg ClusterConfig) map[pairKey]int {
 	shared := make(map[pairKey]int)
 	for _, bucket := range trigramMap {
-		if len(bucket) > maxTrigranBucket {
+		// there are more than cfg.MaxTrigramBucket  number of functions that share this token sequence hash(triagram)
+		// too common sequence, so we remove it in order to reduce cost.
+		if len(bucket) > cfg.MaxTrigramBucket {
 			continue
 		}
 		for a := range bucket {
@@ -286,43 +255,28 @@ func countSharedTrigrams(trigramMap map[int64][]int) map[pairKey]int {
 	return shared
 }
 
-func countSharedTrigramsCfg(trigramMap map[int64][]int, cfg ClusterConfig) map[pairKey]int {
-	shared := make(map[pairKey]int)
-	for _, bucket := range trigramMap {
-		if len(bucket) > cfg.MaxTrigranBucket {
-			continue
-		}
-		for a := range bucket {
-			for b := a + 1; b < len(bucket); b++ {
-				shared[pairKey{bucket[a], bucket[b]}]++
-			}
-		}
-	}
-	return shared
-}
-
-// scorePairsCfg filters and scores candidate pairs using the three-term similarity
+// filters and scores candidate pairs using the three-term similarity
 // formula: ∛(seqSim × importJaccard × callJaccard).
 //
 // Returns:
 //   - candidates: pairs above identifyThreshold, sorted descending by score
 //   - pairScores: lookup map used by the complete-linkage gate
 //   - scoredFns: set of function indices that had at least one below-threshold
-//     full score computed. Any function in this set that later remains a singleton
+//     full score computed. Any function in this set that later remains a singleton(group with a single function)
 //     is a genuine orphan — it had structural affinity to something but every pair
 //     still fell below identifyThreshold. Functions absent from this set either
 //     never shared enough trigram structure to score against anything (structurally
 //     unique) or scored above threshold and joined a cluster.
-func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg ClusterConfig) ([]scoredPair, map[pairKey]float64, map[int]bool, error) {
+func scorePairs(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg ClusterConfig) ([]scoredPair, map[pairKey]float64, map[int]bool, error) {
 	// pre-compute per-function keys and sets once — reused across all pair lookups.
 	keys := make([]string, len(fns))
 	importSets := make([]map[string]bool, len(fns))
 	callSets := make([]map[string]bool, len(fns))
 
 	for i, fn := range fns {
-		keys[i] = seqKey(fn.TokenSeq)
-		importSets[i] = toStringSet(fn.DirectImports)
-		callSets[i] = toStringSet(fn.CallTargets)
+		keys[i] = seqKey(fn.TokenSeq)                 // [1,15,7] -> "1,15,7"
+		importSets[i] = toStringSet(fn.DirectImports) // []string -> [map]->{}
+		callSets[i] = toStringSet(fn.CallTargets)     // []string -> [map]->{}
 	}
 
 	var candidates []scoredPair
@@ -331,15 +285,15 @@ func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg Clu
 
 	var g errgroup.Group
 	var m sync.Mutex
-	chunkSize := len(sharedCounts) / 1000
-	if chunkSize == 0 {
-		chunkSize = 30
+	numOfChunks := len(sharedCounts) / 1000
+	if numOfChunks == 0 {
+		numOfChunks = 30
 	}
 	g.SetLimit(runtime.GOMAXPROCS(0))
-	chunk := make(map[int]map[pairKey]int, chunkSize)
+	chunk := make(map[int]map[pairKey]int, numOfChunks)
 	i := 0
 	for pk, cnt := range sharedCounts {
-		index := i % chunkSize
+		index := i % numOfChunks
 		if val, ok := chunk[index]; !ok {
 			chunk[index] = map[pairKey]int{pk: cnt}
 		} else {
@@ -355,19 +309,14 @@ func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg Clu
 			var localScore []scoredPair
 			localPairScore := make(map[pairKey]float64)
 			for pk, cnt := range val {
-				// require ≥2 shared trigrams when both functions have
+				// two functions pk[i] and pk[j] require ≥2 shared trigrams when both functions have
 				// enough trigrams to be discriminating
-				minShared := 1
-				if len(fns[pk.i].TokenSeqHash) >= 2 && len(fns[pk.j].TokenSeqHash) >= 2 {
-					minShared = 2
-				}
-				if cnt < minShared {
+				if cnt < 2 {
 					continue
 				}
 
-				// identical sequence → seqSim = 1.0, no edit distance needed.
 				var seqS float64
-				if keys[pk.i] == keys[pk.j] {
+				if keys[pk.i] == keys[pk.j] { // identical sequence → seqSim = 1.0, no edit distance needed.
 					seqS = 1.0
 				} else {
 					// TODO slowest piece in this function.
@@ -383,8 +332,7 @@ func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg Clu
 
 				if score < cfg.IdentifyThreshold {
 					// Had real affinity but didn't qualify — genuine orphan candidates if
-					// they remain singletons. Functions scoring above threshold join clusters
-					// and can never reach the singleton check, so marking them here is moot.
+					// they remain singletons(one group with just 1 function).
 					localOrphans[pk.i] = true
 					localOrphans[pk.j] = true
 					continue // below threshold — not a clustering candidate
@@ -423,10 +371,10 @@ func scorePairsCfg(fns []*ds.FunctionMeta, sharedCounts map[pairKey]int, cfg Clu
 	return candidates, pairScores, potentialOrphans, nil
 }
 
-// agglomerateCfg runs complete-linkage agglomerative clustering over the scored
+// runs complete-linkage agglomerative clustering over the scored
 // pairs using Union-Find for efficient membership tracking.
 // Returns clusterMembers: root index → all member indices in that cluster.
-func agglomerateCfg(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64, cfg ClusterConfig) map[int][]int {
+func agglomerate(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64, cfg ClusterConfig) map[int][]int {
 	parent := make([]int, len(fns))
 	for i := range parent {
 		parent[i] = i
@@ -455,7 +403,7 @@ func agglomerateCfg(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores 
 			continue // already in the same cluster
 		}
 
-		if !completeLinkageCheckCfg(clusterMembers[ri], clusterMembers[rj], pairScores, cfg) {
+		if !completeLinkageCheck(clusterMembers[ri], clusterMembers[rj], pairScores, cfg) {
 			continue
 		}
 
@@ -471,10 +419,11 @@ func agglomerateCfg(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores 
 	return clusterMembers
 }
 
-// completeLinkageCheckCfg returns true only when every cross-cluster pair (a, b)
+//	returns true only when every cross-cluster pair (a, b)
+//
 // has a recorded score above identifyThreshold. A missing pair is treated as
 // score 0 — if two functions were never candidates they cannot bridge clusters.
-func completeLinkageCheckCfg(membA, membB []int, pairScores map[pairKey]float64, cfg ClusterConfig) bool {
+func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64, cfg ClusterConfig) bool {
 	for _, a := range membA {
 		for _, b := range membB {
 			i, j := a, b
@@ -500,7 +449,7 @@ func completeLinkageCheckCfg(membA, membB []int, pairScores map[pairKey]float64,
 //     identifyThreshold. Functions that never shared enough trigrams to score
 //     against anything are structurally unique, not orphaned.
 //   - passes the standard eligibility guard (not generated, ≥4 tokens, not test, not init)
-func buildClustersCfg(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
+func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
 	var clusters []*ds.Cluster
 	var orphans []*ds.FunctionMeta
 
@@ -898,6 +847,7 @@ func Representatives(c ds.Cluster, n int) []ds.FunctionMeta {
 func SeqSim(a, b []int) float64 { return seqSimilarity(a, b) }
 
 // seqSimilarity returns 1 − (editDistance / maxLen), clamped to [0, 1].
+// a value of 1 means identical, 0 means a cannot be converted to b.
 func seqSimilarity(a, b []int) float64 {
 	la, lb := len(a), len(b)
 	if la == 0 && lb == 0 {
@@ -1207,11 +1157,11 @@ func seqKey(tokens []int) string {
 	if len(tokens) == 0 {
 		return ""
 	}
-	parts := make([]string, len(tokens))
+	strs := make([]string, len(tokens))
 	for i, t := range tokens {
-		parts[i] = fmt.Sprintf("%d", t)
+		strs[i] = strconv.Itoa(t)
 	}
-	return strings.Join(parts, ",")
+	return strings.Join(strs, ",")
 }
 
 func jaccard(a, b map[string]bool) float64 {

@@ -219,9 +219,8 @@ func writeBeatsHtmlFile(s *State) error {
 // based on function metadata created so far , performs clustering.
 func perfomClustering(s *State) error {
 
-	cfg := ast.DefaultClusterConfig()
 	cluster := func(fMeta []*ds.FunctionMeta) ([]*ds.Cluster, []*ds.FunctionMeta, error) {
-		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, cfg) // bug here donest use the language filter.
+		clusters, orphans, err := ast.IdentifyClustersWithConfig(fMeta, ast.DefaultClusterConfig())
 		if err != nil {
 			return nil, nil, err
 		}

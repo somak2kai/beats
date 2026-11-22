@@ -54,7 +54,7 @@ func makeNoiseFns(n int) []*ds.FunctionMeta {
 func TestBuildTrigramMap_ExcludesShortSeqs(t *testing.T) {
 	// len=2 < minTokenSeqLen=4 → no entries in the trigram map.
 	fns := []*ds.FunctionMeta{makeFn([]int{1, 2}, nil, nil)}
-	m := buildTrigramMap(fns)
+	m := buildTrigramMap(fns, DefaultClusterConfig())
 	if len(m) != 0 {
 		t.Fatalf("expected empty map for short seq, got %d entries", len(m))
 	}
@@ -63,7 +63,7 @@ func TestBuildTrigramMap_ExcludesShortSeqs(t *testing.T) {
 func TestBuildTrigramMap_IndexesFunction(t *testing.T) {
 	seq := []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
 	fns := []*ds.FunctionMeta{makeFn(seq, nil, nil)}
-	m := buildTrigramMap(fns)
+	m := buildTrigramMap(fns, DefaultClusterConfig())
 	if len(m) == 0 {
 		t.Fatal("expected non-empty trigram map for valid seq")
 	}
@@ -82,7 +82,7 @@ func TestBuildTrigramMap_TwoIdenticalFunctionsShareBuckets(t *testing.T) {
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 	}
-	m := buildTrigramMap(fns)
+	m := buildTrigramMap(fns, DefaultClusterConfig())
 	// Identical seqs produce identical hashes → both indices land in the same buckets.
 	for h, indices := range m {
 		if len(indices) != 2 {
@@ -99,7 +99,7 @@ func TestBuildTrigramMap_DisjointSeqsNeverShareBuckets(t *testing.T) {
 		makeFn(seq1, nil, nil),
 		makeFn(seq2, nil, nil),
 	}
-	m := buildTrigramMap(fns)
+	m := buildTrigramMap(fns, DefaultClusterConfig())
 	for _, indices := range m {
 		if len(indices) > 1 {
 			t.Fatal("disjoint sequences should never share a trigram bucket")
@@ -115,8 +115,8 @@ func TestCountSharedTrigrams_IdenticalSeqs(t *testing.T) {
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 	}
-	m := buildTrigramMap(fns)
-	shared := countSharedTrigrams(m)
+	m := buildTrigramMap(fns, DefaultClusterConfig())
+	shared := countSharedTrigrams(m, DefaultClusterConfig())
 	if shared[pairKey{0, 1}] == 0 {
 		t.Fatal("expected pair (0,1) to share trigrams for identical sequences")
 	}
@@ -124,12 +124,12 @@ func TestCountSharedTrigrams_IdenticalSeqs(t *testing.T) {
 
 func TestCountSharedTrigrams_SkipsLargeBuckets(t *testing.T) {
 	// A bucket with more than maxTrigranBucket entries is a stop-word — skip it.
-	hugeBucket := make([]int, maxTrigranBucket+1)
+	hugeBucket := make([]int, maxTrigramBucket+1)
 	for i := range hugeBucket {
 		hugeBucket[i] = i
 	}
 	m := map[int64][]int{999: hugeBucket}
-	shared := countSharedTrigrams(m)
+	shared := countSharedTrigrams(m, DefaultClusterConfig())
 	if len(shared) != 0 {
 		t.Fatalf("stop-word bucket should be skipped, got %d pairs", len(shared))
 	}
@@ -143,8 +143,8 @@ func TestCountSharedTrigrams_PairsAlwaysOrdered(t *testing.T) {
 		makeFn(seq, nil, nil),
 		makeFn(seq, nil, nil),
 	}
-	m := buildTrigramMap(fns)
-	for pk := range countSharedTrigrams(m) {
+	m := buildTrigramMap(fns, DefaultClusterConfig())
+	for pk := range countSharedTrigrams(m, DefaultClusterConfig()) {
 		if pk.i >= pk.j {
 			t.Fatalf("pairKey not ordered: i=%d j=%d", pk.i, pk.j)
 		}
@@ -276,7 +276,7 @@ func TestCompleteLinkageCheck_AllPairsAboveThreshold(t *testing.T) {
 		{1, 2}: 0.76,
 		{1, 3}: 0.78,
 	}
-	if !completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
+	if !completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true — all cross-cluster pairs are above threshold")
 	}
 }
@@ -288,7 +288,7 @@ func TestCompleteLinkageCheck_MissingPairFails(t *testing.T) {
 		{1, 2}: 0.70,
 		{1, 3}: 0.60,
 	}
-	if completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
+	if completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected false — missing pair is treated as score 0")
 	}
 }
@@ -300,7 +300,7 @@ func TestCompleteLinkageCheck_OnePairBelowThreshold(t *testing.T) {
 		{1, 2}: 0.70,
 		{1, 3}: 0.60,
 	}
-	if completeLinkageCheckCfg([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
+	if completeLinkageCheck([]int{0, 1}, []int{2, 3}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected false — one cross-cluster pair is below threshold")
 	}
 }
@@ -309,14 +309,14 @@ func TestCompleteLinkageCheck_NormalisesIndexOrder(t *testing.T) {
 	// membA=[3], membB=[0]: a=3, b=0 → after swap i=0, j=3.
 	// Score is stored under key {0,3} — the check must normalise before lookup.
 	scores := map[pairKey]float64{{0, 3}: 0.80}
-	if !completeLinkageCheckCfg([]int{3}, []int{0}, scores, DefaultClusterConfig()) {
+	if !completeLinkageCheck([]int{3}, []int{0}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true — check must normalise (a,b) to (min,max) before lookup")
 	}
 }
 
 func TestCompleteLinkageCheck_SingletonClusters(t *testing.T) {
 	scores := map[pairKey]float64{{0, 1}: 0.80}
-	if !completeLinkageCheckCfg([]int{0}, []int{1}, scores, DefaultClusterConfig()) {
+	if !completeLinkageCheck([]int{0}, []int{1}, scores, DefaultClusterConfig()) {
 		t.Fatal("expected true for singleton clusters with a passing score")
 	}
 }
@@ -475,7 +475,7 @@ func TestIsInitCluster_Empty(t *testing.T) {
 var seq5 = []int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}
 
 func TestIdentifyClusters_NilInput(t *testing.T) {
-	if got, _, _ := IdentifyClusters(nil); got != nil {
+	if got, _, _ := IdentifyClustersWithConfig(nil, DefaultClusterConfig()); got != nil {
 		t.Fatalf("expected nil for nil input, got %v", got)
 	}
 }
@@ -489,7 +489,7 @@ func TestIdentifyClusters_IdenticalFunctionsClustered(t *testing.T) {
 		[]*ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
 		makeNoiseFns(97)...,
 	)
-	clusters, _, err := IdentifyClusters(fns)
+	clusters, _, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster for identical functions, got %d", len(clusters))
@@ -503,7 +503,7 @@ func TestIdentifyClusters_StructurallyDifferentNotClustered(t *testing.T) {
 	// Disjoint token sequences → no shared trigrams → no candidates → no cluster.
 	f0 := makeFn([]int{TK_IF, TK_FOR, TK_CALL, TK_RETURN, TK_RETURN}, []string{"fmt"}, nil)
 	f1 := makeFn([]int{TK_RANGE, TK_DEFER, TK_CALL_PKG, TK_ASSIGN, TK_GO}, []string{"os"}, nil)
-	if clusters, _, _ := IdentifyClusters([]*ds.FunctionMeta{f0, f1}); len(clusters) != 0 {
+	if clusters, _, _ := IdentifyClustersWithConfig([]*ds.FunctionMeta{f0, f1}, DefaultClusterConfig()); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for structurally different functions, got %d", len(clusters))
 	}
 }
@@ -527,7 +527,7 @@ func TestIdentifyClusters_CompleteLinkagePreventsChaining(t *testing.T) {
 
 	// 4 target + 96 noise = 100 total → primitiveThreshold = 5 → cluster of 3 survives (3 < 5).
 	fns := append([]*ds.FunctionMeta{f0, f1, f2, f3}, makeNoiseFns(96)...)
-	clusters, _, err := IdentifyClusters(fns)
+	clusters, _, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	// F3 is blocked by complete linkage and becomes a singleton → dropped (identifyMinSize=3).
 	// Only {F0,F1,F2} survives.
@@ -559,7 +559,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 		},
 		makeNoiseFns(93)...,
 	)
-	clusters, _, err := IdentifyClusters(fns)
+	clusters, _, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(clusters) < 2 {
 		t.Fatalf("expected ≥2 clusters, got %d", len(clusters))
@@ -573,7 +573,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 func TestIdentifyClusters_SingletonDropped(t *testing.T) {
 	// One function alone cannot form a cluster (identifyMinSize=3).
 	fns := []*ds.FunctionMeta{makeFn(seq5, []string{"fmt"}, nil)}
-	if clusters, _, _ := IdentifyClusters(fns); len(clusters) != 0 {
+	if clusters, _, _ := IdentifyClustersWithConfig(fns, DefaultClusterConfig()); len(clusters) != 0 {
 		t.Fatalf("expected 0 clusters for a single function, got %d", len(clusters))
 	}
 }
@@ -588,7 +588,7 @@ func TestIdentifyClusters_InitClusterDropped(t *testing.T) {
 	// The cluster of 2 is dropped at the identifyMinSize=3 gate (2 < 3),
 	// before even reaching isInitCluster — result is still 0 clusters.
 	fns := append([]*ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)
-	if clusters, _, _ := IdentifyClusters(fns); len(clusters) != 0 {
+	if clusters, _, _ := IdentifyClustersWithConfig(fns, DefaultClusterConfig()); len(clusters) != 0 {
 		t.Fatalf("expected init cluster to be dropped, got %d clusters", len(clusters))
 	}
 }
@@ -603,7 +603,7 @@ func TestIdentifyClusters_OrphanPromoted(t *testing.T) {
 	f0 := makeFn(seq5, []string{"fmt"}, []string{"fmt.Println"})
 	f1 := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
 	fns := append([]*ds.FunctionMeta{f0, f1}, makeNoiseFns(98)...)
-	_, orphans, err := IdentifyClusters(fns)
+	_, orphans, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(orphans) != 2 {
 		t.Fatalf("expected 2 orphans (both scored below threshold), got %d", len(orphans))
@@ -624,7 +624,7 @@ func TestIdentifyClusters_ClusteredFunctionNotOrphan(t *testing.T) {
 		},
 		makeNoiseFns(97)...,
 	)
-	clusters, orphans, err := IdentifyClusters(fns)
+	clusters, orphans, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster, got %d", len(clusters))
@@ -650,7 +650,7 @@ func TestIdentifyClusters_MixedClusterAndOrphan(t *testing.T) {
 		},
 		makeNoiseFns(96)...,
 	)
-	clusters, orphans, err := IdentifyClusters(fns)
+	clusters, orphans, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster, got %d", len(clusters))
@@ -667,7 +667,7 @@ func TestIdentifyClusters_StructurallyUniqueNotOrphaned(t *testing.T) {
 	// structurally unique, not orphaned.
 	fUnique := makeFn([]int{50000, 50001, 50002, 50003, 50004}, []string{"fmt"}, []string{"fmt.Println"})
 	fns := append([]*ds.FunctionMeta{fUnique}, makeNoiseFns(99)...)
-	_, orphans, err := IdentifyClusters(fns)
+	_, orphans, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	if len(orphans) != 0 {
 		t.Fatalf("expected 0 orphans for a structurally unique function, got %d", len(orphans))
@@ -681,7 +681,7 @@ func TestIdentifyClusters_OrphanExcludesInit(t *testing.T) {
 	fInit.Name = "init"
 	fOther := makeFn(seq5, []string{"net"}, []string{"net.Dial"})
 	fns := append([]*ds.FunctionMeta{fInit, fOther}, makeNoiseFns(98)...)
-	_, orphans, err := IdentifyClusters(fns)
+	_, orphans, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
 	for _, o := range orphans {
 		if o.Name == "init" {
