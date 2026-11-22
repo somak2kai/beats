@@ -190,6 +190,10 @@ func extractCallTargets(fn *ast.FuncDecl, aliasMap map[string]string) []string {
 		if !ok {
 			return true // chained call like a.b.Method() — X is not a bare ident
 		}
+		// prevents cases where local variable name shadows import aliasing.
+		if ident.Obj != nil { //lint:ignore
+			return true // bound to a local declaration, not an import
+		}
 		if path, exists := aliasMap[ident.Name]; exists {
 			seen[path+"."+sel.Sel.Name] = true
 		}
