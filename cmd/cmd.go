@@ -55,19 +55,17 @@ type StateJava struct {
 
 func getPipeline() []stage {
 	return []stage{
-		{exec: resetDb, isSkipInDryRun: true},               // 1. wipes off existing data
-		{exec: getFileMetadata},                             // 2. identifies files to scan
-		{exec: getGolangFunctionMetadata},                   // 3. runs ast parser to get go function metadata
-		{exec: getJavaFunctionMetadata},                     // 4. runs jbeats ast parser to get java function metadata
-		{exec: perfomClustering},                            // 5. performs clustering on function metadata
-		{exec: classifyClusters},                            // 6. runs classification on clusters identified into high, medium
-		{exec: saveClusterInDb, isSkipInDryRun: true},       // 7. saves cluster information to badgerdb
-		{exec: identifyOrphans},                             //8. runs analysis to identify functions which did not join clusters
-		{exec: saveOrphansInDB, isSkipInDryRun: true},       // 9. saves orphans information to badger db
-		{exec: populateFunctionIndex},                       // 10. gets and populates additional metadata for function metadata
-		{exec: saveFunctionIndexInDb, isSkipInDryRun: true}, // 11. writes function index metadata to badger
-		{exec: writeOutlierHtmlFile, isSkipInDryRun: true},  // 12. creates the .beats/outlier.md files for skills to read.
-		{exec: writeBeatsHtmlFile, isSkipInDryRun: true},    //13. creates the .beats/report.html files
+		{exec: resetDb, isSkipInDryRun: true},              // 1. wipes off existing data
+		{exec: getFileMetadata},                            // 2. identifies files to scan
+		{exec: getGolangFunctionMetadata},                  // 3. runs ast parser to get go function metadata
+		{exec: getJavaFunctionMetadata},                    // 4. runs jbeats ast parser to get java function metadata
+		{exec: perfomClustering},                           // 5. performs clustering on function metadata
+		{exec: classifyClusters},                           // 6. runs classification on clusters identified into high, medium
+		{exec: saveClusterInDb, isSkipInDryRun: true},      // 7. saves cluster information to badgerdb
+		{exec: identifyOrphans},                            //8. runs analysis to identify functions which did not join clusters
+		{exec: saveOrphansInDB, isSkipInDryRun: true},      // 9. saves orphans information to badger db
+		{exec: writeOutlierHtmlFile, isSkipInDryRun: true}, // 10. creates the .beats/outlier.md files for skills to read.
+		{exec: writeBeatsHtmlFile, isSkipInDryRun: true},   //11. creates the .beats/report.html files
 	}
 }
 
@@ -158,14 +156,14 @@ func getGolangFunctionMetadata(s *State) error {
 }
 
 // gets and populates additional metadata for function metadata
-func populateFunctionIndex(s *State) error {
+func populateFunctionIndex(s *State) error { // nolint:unused
 	s.Index = ds.PopulateIndex(s.FunctionMetadata)
 	s.Java.Index = ds.PopulateIndex(s.Java.FunctionMetadata)
 	return nil
 }
 
 // saves function index created in badger db.
-func saveFunctionIndexInDb(s *State) error {
+func saveFunctionIndexInDb(s *State) error { // nolint:unused
 
 	tmp, err := beatsDBPath(s.RepositoryPath)
 	if err != nil {

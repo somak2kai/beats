@@ -63,12 +63,12 @@ func (d *BadgerXDb) StoreFunctionMeta(id string, lang ds.Language, fn ds.Functio
 	return d.db.Update(key, fn)
 }
 
-func (d *BadgerXDb) StorePostings(hash int64, lang ds.Language, fnId []string) error {
+func (d *BadgerXDb) StorePostings(hash int64, lang ds.Language, fnId []string) error { // nolint:unused
 	key := append([]byte("post:"+string(lang)+":"), int64ToBytes(hash)...)
 	return d.db.Update(key, fnId)
 }
 
-func (d *BadgerXDb) StoreDocFreq(hash int64, lang ds.Language, count int) error {
+func (d *BadgerXDb) StoreDocFreq(hash int64, lang ds.Language, count int) error { // nolint:unused
 	key := append([]byte("freq:"+string(lang)+":"), int64ToBytes(hash)...)
 	return d.db.Update(key, count)
 }
