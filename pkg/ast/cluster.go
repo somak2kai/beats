@@ -196,7 +196,6 @@ func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*d
 		return ka < kb
 	})
 
-	primitiveThreshold := float64(len(fns)) * cfg.PrimitiveThreshold
 	trigramMap := buildTrigramMap(fns, cfg)
 	fnPairToTrigramCount := countSharedTrigrams(trigramMap, cfg)
 
@@ -214,7 +213,7 @@ func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*d
 	}
 
 	clusterMembers := agglomerate(fns, candidates, pairScores, cfg)
-	cl, orph := buildClusters(fns, clusterMembers, primitiveThreshold, scoredFns, cfg)
+	cl, orph := buildClusters(fns, clusterMembers, float64(len(fns))*cfg.PrimitiveThreshold, scoredFns, cfg)
 	return cl, orph, nil
 }
 
@@ -267,16 +266,7 @@ func countSharedTrigrams(trigramMap map[int64][]int, cfg ClusterConfig) map[pair
 
 // filters and scores candidate pairs using the three-term similarity
 // formula: ∛(seqSim × importJaccard × callJaccard).
-//
-// Returns:
-//   - candidates: pairs above identifyThreshold, sorted descending by score
-//   - pairScores: lookup map used by the complete-linkage gate
-//   - scoredFns: set of function indices that had at least one below-threshold
-//     full score computed. Any function in this set that later remains a singleton(group with a single function)
-//     is a genuine orphan — it had structural affinity to something but every pair
-//     still fell below identifyThreshold. Functions absent from this set either
-//     never shared enough trigram structure to score against anything (structurally
-//     unique) or scored above threshold and joined a cluster.
+// returns pair of functions with their score(above formula) and potential orphans functions.
 func scorePairs(fns []*ds.FunctionMeta, fnsPairToTrigramCount map[pairKey]int, cfg ClusterConfig) ([]scoredPair, map[pairKey]float64, map[int]bool, error) {
 	// pre-compute per-function keys and sets once — reused across all pair lookups.
 	keys := make([]string, len(fns))
@@ -386,17 +376,15 @@ func scorePairs(fns []*ds.FunctionMeta, fnsPairToTrigramCount map[pairKey]int, c
 	return candidates, pairScores, potentialOrphans, nil
 }
 
-// runs complete-linkage agglomerative clustering over the scored
-// pairs using Union-Find for efficient membership tracking.
-// Returns clusterMembers: root index → all member indices in that cluster.
+// effectively answers the question (A,B=0.9), (C,D=0.78),(B,C=0.82) should these cluster and if so how.
 func agglomerate(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map[pairKey]float64, cfg ClusterConfig) map[int][]int {
 	parent := make([]int, len(fns))
 	for i := range parent {
-		parent[i] = i
+		parent[i] = i //parent of self is self.
 	}
 	clusterMembers := make(map[int][]int, len(fns))
 	for i := range fns {
-		clusterMembers[i] = []int{i}
+		clusterMembers[i] = []int{i} // initial state, self function belongs to its own cluster. eg cluster(f1) defnitely has f1.
 	}
 
 	findRoot := func(x int) int {
@@ -408,7 +396,7 @@ func agglomerate(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map
 	}
 
 	for _, cp := range candidates {
-		if cp.score < identifyThreshold {
+		if cp.score < cfg.IdentifyThreshold {
 			break // sorted descending — everything below is under threshold
 		}
 
@@ -424,20 +412,18 @@ func agglomerate(fns []*ds.FunctionMeta, candidates []scoredPair, pairScores map
 
 		// merge smaller group into larger to keep clusterMembers lookups cheap.
 		if len(clusterMembers[ri]) < len(clusterMembers[rj]) {
-			ri, rj = rj, ri
+			ri, rj = rj, ri // ri is now bigger than rj
 		}
 		parent[rj] = ri
 		clusterMembers[ri] = append(clusterMembers[ri], clusterMembers[rj]...)
-		delete(clusterMembers, rj)
+		delete(clusterMembers, rj) // since j joined the cluster of i, we can delete this membership.
 	}
 
 	return clusterMembers
 }
 
-//	returns true only when every cross-cluster pair (a, b)
-//
-// has a recorded score above identifyThreshold. A missing pair is treated as
-// score 0 — if two functions were never candidates they cannot bridge clusters.
+// checks if every function pairing for functions in memB with functions in memA scores above the threshold.
+// eg (A,B)=0.9 (B,C)=0.8 then A,C if scores above threshold, then A,B,C will cluster together else not.
 func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64, cfg ClusterConfig) bool {
 	for _, a := range membA {
 		for _, b := range membB {
@@ -483,9 +469,11 @@ func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primiti
 			}
 			continue
 		}
-		if float64(len(idxs)) >= primitiveThreshold {
-			continue // structural stop-word — too common to carry signal
-		}
+		// // say total functions is 1000 and primitive threshold is 5%, if there is a cluster with number of functions
+		// // greater than equal to 50, its too noisy to be of any value. we ignore it.
+		// if float64(len(idxs)) >= primitiveThreshold {
+		// 	continue // structural stop-word — too common to carry signal
+		// }
 
 		metas := make([]ds.FunctionMeta, len(idxs))
 		for k, idx := range idxs {
