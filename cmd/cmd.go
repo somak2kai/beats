@@ -503,10 +503,11 @@ func writeOutlierHtmlFile(s *State) error {
 			tier = "low"
 		}
 		idiom := cl.SemanticIdiom
-		commonSubseq := ast.SeqString(cl.CommonSeq)
+		rep := cl.Rep()
+		shape := ast.SeqString(rep.TokenSeq)
 
 		fmt.Fprintf(&sb, "[%s] tier: %s  size: %d  idiom: %q\n", hash, tier, cl.Size, idiom)
-		fmt.Fprintf(&sb, "  common subsequence of cluster: %s\n", commonSubseq)
+		fmt.Fprintf(&sb, "  representative shape of cluster (%s/%s): %s\n", rep.Package, rep.Name, shape)
 		fmt.Fprintf(&sb, "  peers:\n")
 
 		cr := buildClusterResult(cl)
@@ -526,8 +527,7 @@ func writeOutlierHtmlFile(s *State) error {
 		fmt.Fprintf(&sb, "--- [%d] %s/%s (%s:%d) ---\n", i+1, r.Package, r.Func, r.File, r.Line)
 		if len(r.Candidates) > 0 {
 			c := r.Candidates[0]
-			fmt.Fprintf(&sb, "closest cluster: %s  score: %.3f  cyclo delta: %s\n",
-				c.ClusterID, c.Score, signedDelta(r.CycloDelta))
+			fmt.Fprintf(&sb, "closest cluster: %s  score: %.3f\n", c.ClusterID, c.Score)
 		}
 		fmt.Fprintf(&sb, "token delta:  %s\n", formatDeltaText(r.TokenDelta))
 		fmt.Fprintf(&sb, "import delta: %s\n", formatDeltaText(r.ImportDelta))

@@ -16,7 +16,6 @@ func makeClusterWithStats(hash string, size int, mean, std float64) *ds.Cluster 
 		ShapeHash: hash,
 		Tier:      "high",
 		Size:      size,
-		CommonSeq: []int{1, 2, 3},
 		Stats: ds.ClusterStats{
 			MeanScore: mean,
 			StdScore:  std,
@@ -25,7 +24,7 @@ func makeClusterWithStats(hash string, size int, mean, std float64) *ds.Cluster 
 		CallCoherence:  0.6,
 		CompositeScore: 1.23,
 		Members: []ds.FunctionMeta{
-			{Name: "m1", Package: "pkg", FileMeta: ds.FileMeta{Path: "a.go"}, Start_line: 1},
+			{Name: "m1", Package: "pkg", FileMeta: ds.FileMeta{Path: "a.go"}, Start_line: 1, TokenSeq: []int{1, 2, 3}},
 		},
 	}
 }
@@ -163,7 +162,7 @@ func TestBuildExportPayload_ClusterFieldMapping(t *testing.T) {
 		t.Errorf("Size: want 5, got %d", c.Size)
 	}
 	if c.CommonShape == "" {
-		t.Errorf("CommonShape should be populated from CommonSeq")
+		t.Errorf("CommonShape should be populated from the representative member")
 	}
 	if len(c.Members) != 1 || c.Members[0].Func != "m1" {
 		t.Errorf("Members not serialised correctly: %+v", c.Members)
@@ -177,7 +176,6 @@ func TestBuildExportPayload_OrphanCandidateFieldMapping(t *testing.T) {
 		ImpScore:   0.5,
 		CallScore:  0.6,
 		ArithScore: 0.6,
-		CycloDelta: -1.5,
 		Idiom:      "webhook handler",
 	}}
 	orphans := []*ds.OrphanedFunction{
@@ -210,9 +208,6 @@ func TestBuildExportPayload_OrphanCandidateFieldMapping(t *testing.T) {
 	}
 	if c.SeqScore != 0.7 || c.ImpScore != 0.5 || c.CallScore != 0.6 {
 		t.Errorf("sub-scores wrong: %+v", c)
-	}
-	if c.CycloDelta != -1.5 {
-		t.Errorf("CycloDelta: %v", c.CycloDelta)
 	}
 	if c.Idiom != "webhook handler" {
 		t.Errorf("Idiom: %q", c.Idiom)
@@ -262,7 +257,6 @@ func TestExportPayload_JSONFieldNames(t *testing.T) {
 				SeqScore:    0.7,
 				ImpScore:    0.6,
 				CallScore:   0.5,
-				CycloDelta:  1.0,
 			}},
 		}},
 	}
@@ -288,7 +282,6 @@ func TestExportPayload_JSONFieldNames(t *testing.T) {
 		`"seq_score":0.7`,
 		`"imp_score":0.6`,
 		`"call_score":0.5`,
-		`"cyclo_delta":1`,
 	} {
 		if !containsSubstring(s, want) {
 			t.Errorf("JSON missing %q\n  got: %s", want, s)

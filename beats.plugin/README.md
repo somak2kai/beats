@@ -30,7 +30,7 @@ directly so analysis runs without any additional queries.
 This plugin wires that pipeline into Claude so you can run it conversationally
 and get a peer-grounded LLM analysis of every outlier:
 
-- **Signal** — the exact structural delta (token, import, call, or cyclo) that
+- **Signal** — the exact structural delta (token, import, or call) that
   separates the function from its closest cluster
 - **Peer comparison** — Claude reads the actual bodies of cluster members to
   ground every verdict in real code, not abstract metrics

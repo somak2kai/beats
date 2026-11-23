@@ -125,34 +125,6 @@ type ControlFlowCounts struct {
 	Goto int
 }
 
-type ClusterProfile struct {
-	CycloMin, CycloMax  int
-	CycloMean, CycloStd float64
-
-	NestingMax int
-
-	CallsMin, CallsMax int
-	CallsMean          float64
-	// fraction of members with at least one defer
-	DeferRate        float64
-	EarlyReturnRate  float64
-	ContextParamRate float64
-	ErrorReturnRate  float64
-	GoroutineRate    float64
-
-	// Percentile distributions — used for conformity scoring (Apps 2, 3, 9).
-	// All values are linear-interpolated over the sorted member distribution.
-	CycloP50, CycloP75, CycloP95                      float64
-	NestingP50, NestingP75, NestingP95                float64
-	CallsP50, CallsP75, CallsP95                      float64
-	EarlyReturnsP50, EarlyReturnsP75, EarlyReturnsP95 float64
-	DeferCountP50, DeferCountP75, DeferCountP95       float64
-	// most frequent DirectImports across members
-	TopImports []string
-	// most frequent CallTargets across members
-	TopCallTargets []string
-}
-
 // RankedMember is a cluster member with its arithmetic-mean pairwise score.
 // Used to track the top-3 most representative members (medoids).
 type RankedMember struct {
@@ -170,6 +142,10 @@ type ClusterStats struct {
 	StdScore float64
 	// up to 3 members with highest mean pairwise score (medoids)
 	Top3 []RankedMember
+
+	// MostRepresentativeFunc is the medoid: the member with the highest average
+	// geometric score
+	MostRepresentativeFunc RankedMember
 }
 
 // ClusterCandidate is a cluster that an orphaned function has some affinity
@@ -185,9 +161,6 @@ type ClusterCandidate struct {
 	// CallTargets Jaccard
 	CallScore  float64
 	ArithScore float64
-	// CycloDelta is orphan cyclomatic complexity minus cluster mean cyclomatic complexity.
-	// Positive = orphan is more complex than the cluster average; negative = simpler.
-	CycloDelta float64
 	// SemanticIdiom of the candidate cluster (if enriched)
 	Idiom string
 }
@@ -205,12 +178,8 @@ type Cluster struct {
 	SeqKey string
 	// SHA-256 prefix of SeqKey — stable identity across runs (16 hex chars)
 	ShapeHash string
-	TokenSeq  []int
-	// LCS of all member token sequences — structural skeleton shared by every member
-	CommonSeq []int
 	Members   []FunctionMeta
 	Size      int
-	Profile   ClusterProfile
 	// summary statistics for the cluster.
 	Stats ClusterStats
 	// mean pairwise Jaccard of DirectImports
@@ -265,4 +234,17 @@ func PopulateIndex(fMeta []*FunctionMeta) *Index {
 		freq[k] = len(v)
 	}
 	return index
+}
+
+// Rep returns the member that represents the cluster's token sequence, imports
+// and call targets: Stats.MostRepresentativeFunc (the medoid). Falls back to the
+// first member when stats are absent (clusters of size < 2, or older DBs).
+func (c *Cluster) Rep() FunctionMeta {
+	if m := c.Stats.MostRepresentativeFunc.Meta; m.Name != "" {
+		return m
+	}
+	if len(c.Members) > 0 {
+		return c.Members[0]
+	}
+	return FunctionMeta{}
 }

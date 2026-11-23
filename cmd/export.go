@@ -47,7 +47,6 @@ type ExportOrphanCandidate struct {
 	SeqScore    float64 `json:"seq_score"`
 	ImpScore    float64 `json:"imp_score"`
 	CallScore   float64 `json:"call_score"`
-	CycloDelta  float64 `json:"cyclo_delta"`
 	Idiom       string  `json:"idiom,omitempty"`
 }
 
@@ -195,7 +194,6 @@ func toExportOrphan(o *ds.OrphanedFunction) ExportOrphan {
 			SeqScore:    c.SeqScore,
 			ImpScore:    c.ImpScore,
 			CallScore:   c.CallScore,
-			CycloDelta:  c.CycloDelta,
 			Idiom:       c.Idiom,
 		})
 	}

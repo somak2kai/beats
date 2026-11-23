@@ -127,7 +127,7 @@ cat "$REPO/.beats/outlier.md"
 
 Same format `beats-analyze` consumes: `=== Established Patterns ===` (clusters
 with full peer bodies) and `=== Outlier Functions ===` (each outlier with
-`token/import/call/cyclo` deltas and its body). If the file is missing, tell the
+`token/import/call` deltas and its body). If the file is missing, tell the
 user to run `beats init` first. If the header says `outliers: 0`, note it — the
 outlier pass will be empty, but the **systemic pass still runs** (a conformity
 trap has no outliers by definition).
@@ -206,7 +206,7 @@ exploitability depends on the source, state the assumption ("if `path` is
 request-controlled"). The anchor rule holds: no named sink/primitive, no finding.
 
 ── PASS C — Systemic conformity-trap scan (anchor: the shared convention) ──
-For each cluster in the all-clusters JSON, read the common subsequence and the
+For each cluster in the all-clusters JSON, read the representative shape and the
 member bodies and ask TWO questions:
   1. Is the SHARED CONVENTION itself insecure? (e.g. every member opens a file
      and none defer Close; every member builds SQL by concatenation.) If yes,

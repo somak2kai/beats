@@ -73,10 +73,6 @@ func TestStoreLoadCluster_RoundTrip(t *testing.T) {
 			{Name: "Fn1", Package: "pkg"},
 			{Name: "Fn2", Package: "pkg"},
 		},
-		Profile: ds.ClusterProfile{
-			CycloMin: 1,
-			CycloMax: 4,
-		},
 	}
 	if err := bdb.StoreCluster(TierRaw, "abc123", c); err != nil {
 		t.Fatalf("StoreCluster: %v", err)
@@ -93,9 +89,6 @@ func TestStoreLoadCluster_RoundTrip(t *testing.T) {
 	}
 	if len(got.Members) != len(c.Members) {
 		t.Errorf("Members count: want %d, got %d", len(c.Members), len(got.Members))
-	}
-	if got.Profile.CycloMax != c.Profile.CycloMax {
-		t.Errorf("CycloMax: want %d, got %d", c.Profile.CycloMax, got.Profile.CycloMax)
 	}
 }
 

@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"math"
 	"testing"
 
 	"github.com/somak2kai/beats/pkg/hash"
@@ -333,14 +334,15 @@ func TestAssembleCluster_PicksModalSeq(t *testing.T) {
 		{TokenSeq: seqB},
 	}
 	c := assembleCluster(metas)
-	if len(c.TokenSeq) != len(seqA) {
-		t.Fatalf("expected modal seq length %d, got %d", len(seqA), len(c.TokenSeq))
-	}
-	for i, tok := range seqA {
-		if c.TokenSeq[i] != tok {
-			t.Fatalf("token[%d]: expected %d, got %d", i, tok, c.TokenSeq[i])
-		}
-	}
+	require.Equal(t, seqKey(seqA), c.SeqKey) // modal seq drives identity
+}
+
+func TestClusterRep_MedoidThenFallback(t *testing.T) {
+	c := ds.Cluster{Members: []ds.FunctionMeta{{Name: "first"}, {Name: "mid"}}}
+	require.Equal(t, "first", c.Rep().Name) // no stats → first member
+	c.Stats.MostRepresentativeFunc.Meta = ds.FunctionMeta{Name: "mid"}
+	require.Equal(t, "mid", c.Rep().Name)
+	require.Equal(t, "", (&ds.Cluster{}).Rep().Name)
 }
 
 func TestAssembleCluster_SetsSize(t *testing.T) {
@@ -771,5 +773,33 @@ func TestOrphanScore_NoImportsOrCalls(t *testing.T) {
 	want := 1.0 / 3.0
 	if absFloat(arith-want) > 1e-9 {
 		t.Fatalf("arith: expected %f, got %f", want, arith)
+	}
+}
+
+func TestComputeClusterStats_MostRepresentativeFuncIsCentralMember(t *testing.T) {
+	// B is the base shape; A, C and D each differ from B by one token at a
+	// different position, so they differ from each other by two. B is the
+	// member most similar to all the others and must be picked.
+	b := []int{TK_IF, TK_CALL, TK_ASSIGN, TK_RETURN, TK_RETURN, TK_RETURN}
+	a := []int{TK_FOR, TK_CALL, TK_ASSIGN, TK_RETURN, TK_RETURN, TK_RETURN}
+	c := []int{TK_IF, TK_CALL, TK_DEFER, TK_RETURN, TK_RETURN, TK_RETURN}
+	d := []int{TK_IF, TK_CALL, TK_ASSIGN, TK_RETURN, TK_GO, TK_RETURN}
+
+	mk := func(name string, seq []int) ds.FunctionMeta {
+		fn := makeFn(seq, []string{"fmt"}, []string{"fmt.Println"})
+		fn.Name = name
+		return *fn
+	}
+	metas := []ds.FunctionMeta{mk("A", a), mk("B", b), mk("C", c), mk("D", d)}
+
+	stats := computeClusterStats(metas)
+	if got := stats.MostRepresentativeFunc.Meta.Name; got != "B" {
+		t.Fatalf("MostRepresentativeFunc = %s, want B", got)
+	}
+	// Each of B's three pairs has one edit in six tokens: seqS = 5/6, and
+	// imports/calls are identical, so the geometric score is ∛(5/6).
+	want := math.Cbrt(5.0 / 6.0)
+	if got := stats.MostRepresentativeFunc.Score; math.Abs(got-want) > 1e-9 {
+		t.Errorf("MostRepresentativeFunc.Score = %f, want %f", got, want)
 	}
 }

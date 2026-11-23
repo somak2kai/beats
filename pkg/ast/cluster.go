@@ -152,7 +152,6 @@ func IdentifyOrphansWithConfig(orphanMetas []*ds.FunctionMeta, cluster []*ds.Clu
 					ImpScore:   impS,
 					CallScore:  callS,
 					ArithScore: arith,
-					CycloDelta: float64(orphan.Features.CyclomaticComplexity) - cl.Profile.CycloMean,
 					Idiom:      cl.SemanticIdiom,
 				})
 			}
@@ -441,15 +440,6 @@ func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64, cf
 }
 
 // buildClusters converts raw cluster membership data into Cluster objects.
-// Filters out clusters smaller than identifyMinSize (currently 3), structural stop-words, test clusters, and init clusters.
-// Disambiguates ShapeHash collisions and sorts by size descending.
-//
-// Returns clusters and orphan metas. An orphan is a singleton that:
-//   - appeared in scoredFns — it had at least one full pair score computed,
-//     meaning it had structural affinity to something but every pair fell below
-//     identifyThreshold. Functions that never shared enough trigrams to score
-//     against anything are structurally unique, not orphaned.
-//   - passes the standard eligibility guard (not generated, ≥4 tokens, not test, not init)
 func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
 	var clusters []*ds.Cluster
 	var orphans []*ds.FunctionMeta
@@ -458,6 +448,7 @@ func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primiti
 		if len(idxs) < cfg.IdentifyMinSize {
 			// Clusters below identifyMinSize are dropped. Only true singletons (size 1)
 			// are eligible as orphans — size-2 clusters are silently discarded.
+			// This is because two data points(size 2 clusters) are not meaningful enough to form a pattern.
 			// An orphan must have had a real score computed (it almost joined something);
 			// GeneratedCode and TestCode functions are excluded by buildTrigramMap and
 			// never appear in scoredFns.
@@ -469,11 +460,6 @@ func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primiti
 			}
 			continue
 		}
-		// // say total functions is 1000 and primitive threshold is 5%, if there is a cluster with number of functions
-		// // greater than equal to 50, its too noisy to be of any value. we ignore it.
-		// if float64(len(idxs)) >= primitiveThreshold {
-		// 	continue // structural stop-word — too common to carry signal
-		// }
 
 		metas := make([]ds.FunctionMeta, len(idxs))
 		for k, idx := range idxs {
@@ -500,19 +486,18 @@ func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primiti
 }
 
 // assembleCluster builds a single Cluster value from its member FunctionMeta slice.
-// Picks the modal token sequence as the cluster representative — members may have
-// slightly different sequences when merged via near-identity.
+// The modal token sequence gives the cluster its identity (SeqKey/ShapeHash);
+// the cluster's representative shape is Stats.MostRepresentativeFunc (see Cluster.Rep).
 func assembleCluster(metas []ds.FunctionMeta) *ds.Cluster {
 	seqFreq := make(map[string]int)
-	seqForKey := make(map[string][]int)
 	for _, m := range metas {
 		k := seqKey(m.TokenSeq)
 		seqFreq[k]++
-		seqForKey[k] = m.TokenSeq
 	}
 	bestKey := ""
 	for k, cnt := range seqFreq {
-		if bestKey == "" || cnt > seqFreq[bestKey] {
+		// tie → smallest key
+		if bestKey == "" || cnt > seqFreq[bestKey] || (cnt == seqFreq[bestKey] && k < bestKey) {
 			bestKey = k
 		}
 	}
@@ -520,12 +505,9 @@ func assembleCluster(metas []ds.FunctionMeta) *ds.Cluster {
 	c := &ds.Cluster{
 		SeqKey:    bestKey,
 		ShapeHash: shapeHash(bestKey),
-		TokenSeq:  seqForKey[bestKey],
-		CommonSeq: CommonSubsequence(metas),
 		Members:   metas,
 		Size:      len(metas),
 	}
-	c.Profile = computeProfile(metas)
 	c.Coherence = computeCoherence(metas)
 	c.CallCoherence = computeCallCoherence(metas)
 	c.Stats = computeClusterStats(metas)
@@ -601,136 +583,6 @@ func isInitCluster(members []ds.FunctionMeta) bool {
 	return len(members) > 0
 }
 
-// ── Profile ───────────────────────────────────────────────────────────────────
-
-func computeProfile(members []ds.FunctionMeta) ds.ClusterProfile {
-	n := float64(len(members))
-	var p ds.ClusterProfile
-
-	// initialise min/max sentinels
-	p.CycloMin = math.MaxInt32
-	p.CallsMin = math.MaxInt32
-
-	importFreq := make(map[string]int)
-	callFreq := make(map[string]int)
-
-	// accumulators for std dev and percentile computation
-	cycloVals := make([]float64, len(members))
-	nestingVals := make([]float64, len(members))
-	callVals := make([]float64, len(members))
-	earlyReturnVals := make([]float64, len(members))
-	deferCountVals := make([]float64, len(members))
-
-	for i, fn := range members {
-		f := fn.Features
-
-		// cyclomatic
-		if f.CyclomaticComplexity < p.CycloMin {
-			p.CycloMin = f.CyclomaticComplexity
-		}
-		if f.CyclomaticComplexity > p.CycloMax {
-			p.CycloMax = f.CyclomaticComplexity
-		}
-		p.CycloMean += float64(f.CyclomaticComplexity)
-		cycloVals[i] = float64(f.CyclomaticComplexity)
-
-		// nesting
-		if f.NestingDepth > p.NestingMax {
-			p.NestingMax = f.NestingDepth
-		}
-		nestingVals[i] = float64(f.NestingDepth)
-
-		// outbound calls
-		if f.OutboundCalls < p.CallsMin {
-			p.CallsMin = f.OutboundCalls
-		}
-		if f.OutboundCalls > p.CallsMax {
-			p.CallsMax = f.OutboundCalls
-		}
-		p.CallsMean += float64(f.OutboundCalls)
-		callVals[i] = float64(f.OutboundCalls)
-
-		// early returns and defer (raw counts for percentiles)
-		earlyReturnVals[i] = float64(f.EarlyReturns)
-		deferCountVals[i] = float64(f.ControlFlow.Defer)
-
-		// rates (boolean / count → fraction)
-		if f.ControlFlow.Defer > 0 {
-			p.DeferRate++
-		}
-		if fn.Features.EarlyReturns > 0 {
-			p.EarlyReturnRate++
-		}
-		if f.HasContextParam {
-			p.ContextParamRate++
-		}
-		if f.HasErrorReturn {
-			p.ErrorReturnRate++
-		}
-		if f.GoroutineSpawns > 0 {
-			p.GoroutineRate++
-		}
-
-		// frequency maps
-		for _, imp := range fn.DirectImports {
-			importFreq[imp]++
-		}
-		for _, ct := range fn.CallTargets {
-			callFreq[ct]++
-		}
-	}
-
-	// normalise means
-	p.CycloMean /= n
-	p.CallsMean /= n
-	p.DeferRate /= n
-	p.EarlyReturnRate /= n
-	p.ContextParamRate /= n
-	p.ErrorReturnRate /= n
-	p.GoroutineRate /= n
-
-	// cyclo std dev (second pass — before sort)
-	var variance float64
-	for _, v := range cycloVals {
-		d := v - p.CycloMean
-		variance += d * d
-	}
-	p.CycloStd = math.Sqrt(variance / n)
-
-	// sort all distributions then compute percentiles
-	sort.Float64s(cycloVals)
-	sort.Float64s(nestingVals)
-	sort.Float64s(callVals)
-	sort.Float64s(earlyReturnVals)
-	sort.Float64s(deferCountVals)
-
-	p.CycloP50 = percentileF(cycloVals, 0.50)
-	p.CycloP75 = percentileF(cycloVals, 0.75)
-	p.CycloP95 = percentileF(cycloVals, 0.95)
-
-	p.NestingP50 = percentileF(nestingVals, 0.50)
-	p.NestingP75 = percentileF(nestingVals, 0.75)
-	p.NestingP95 = percentileF(nestingVals, 0.95)
-
-	p.CallsP50 = percentileF(callVals, 0.50)
-	p.CallsP75 = percentileF(callVals, 0.75)
-	p.CallsP95 = percentileF(callVals, 0.95)
-
-	p.EarlyReturnsP50 = percentileF(earlyReturnVals, 0.50)
-	p.EarlyReturnsP75 = percentileF(earlyReturnVals, 0.75)
-	p.EarlyReturnsP95 = percentileF(earlyReturnVals, 0.95)
-
-	p.DeferCountP50 = percentileF(deferCountVals, 0.50)
-	p.DeferCountP75 = percentileF(deferCountVals, 0.75)
-	p.DeferCountP95 = percentileF(deferCountVals, 0.95)
-
-	// top N by frequency
-	p.TopImports = topNKeys(importFreq, 5)
-	p.TopCallTargets = topNKeys(callFreq, 5)
-
-	return p
-}
-
 // computeCoherence returns mean pairwise Jaccard similarity of DirectImports.
 // 1.0 = all members share the same imports (tight domain)
 // 0.0 = members import completely different things (heterogeneous)
@@ -803,49 +655,6 @@ func meanPairwiseJaccard(sets []map[string]bool) float64 {
 	return total / float64(pairs)
 }
 
-// Representatives returns the n members closest to the cluster centroid
-// in [cyclomatic, nesting, outboundCalls] space. Use these as LLM examples.
-func Representatives(c ds.Cluster, n int) []ds.FunctionMeta {
-	if len(c.Members) <= n {
-		return c.Members
-	}
-
-	centroid := [3]float64{
-		c.Profile.CycloMean,
-		float64(c.Profile.NestingMax) / 2,
-		c.Profile.CallsMean,
-	}
-
-	type scored struct {
-		fn   ds.FunctionMeta
-		dist float64
-	}
-	scores := make([]scored, len(c.Members))
-	for i, fn := range c.Members {
-		f := fn.Features
-		v := [3]float64{
-			float64(f.CyclomaticComplexity),
-			float64(f.NestingDepth),
-			float64(f.OutboundCalls),
-		}
-		var dist float64
-		for k := range centroid {
-			d := centroid[k] - v[k]
-			dist += d * d
-		}
-		scores[i] = scored{fn, dist}
-	}
-	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].dist < scores[j].dist
-	})
-
-	result := make([]ds.FunctionMeta, n)
-	for i := range result {
-		result[i] = scores[i].fn
-	}
-	return result
-}
-
 // SeqSim is the exported form of seqSimilarity, for use by the calibrate package.
 func SeqSim(a, b []int) float64 { return seqSimilarity(a, b) }
 
@@ -885,68 +694,6 @@ func editDistance(a, b []int) int {
 		prev, curr = curr, prev
 	}
 	return prev[lb]
-}
-
-// ── Cross-cluster analysis helpers ───────────────────────────────────────────
-
-// lcsInts returns the Longest Common Subsequence of two int slices.
-func lcsInts(a, b []int) []int {
-	m, n := len(a), len(b)
-	dp := make([][]int, m+1)
-	for i := range dp {
-		dp[i] = make([]int, n+1)
-	}
-	for i := 1; i <= m; i++ {
-		for j := 1; j <= n; j++ {
-			if a[i-1] == b[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
-			} else if dp[i-1][j] >= dp[i][j-1] {
-				dp[i][j] = dp[i-1][j]
-			} else {
-				dp[i][j] = dp[i][j-1]
-			}
-		}
-	}
-	length := dp[m][n]
-	if length == 0 {
-		return nil
-	}
-	result := make([]int, length)
-	i, j, k := m, n, length-1
-	for i > 0 && j > 0 {
-		if a[i-1] == b[j-1] {
-			result[k] = a[i-1]
-			i--
-			j--
-			k--
-		} else if dp[i-1][j] >= dp[i][j-1] {
-			i--
-		} else {
-			j--
-		}
-	}
-	return result
-}
-
-// CommonSubsequence returns the longest token subsequence shared by ALL
-// members, computed by iterative pairwise LCS reduction starting from the
-// first member's sequence.
-//
-// Note: two clusters can share the same common subsequence — the ShapeHash
-// remains the unique cluster identifier. Returns nil when members is empty
-// or no token is common to all members.
-func CommonSubsequence(members []ds.FunctionMeta) []int {
-	if len(members) == 0 {
-		return nil
-	}
-	common := members[0].TokenSeq
-	for _, m := range members[1:] {
-		common = lcsInts(common, m.TokenSeq)
-		if len(common) == 0 {
-			return nil
-		}
-	}
-	return common
 }
 
 // SeqString is the exported form of seqString, for use outside this package.
@@ -1007,21 +754,47 @@ func computeClusterStats(metas []ds.FunctionMeta) ds.ClusterStats {
 		callSets[i] = toStringSet(m.CallTargets)
 	}
 
-	// Per-member mean arithmetic pairwise score
-	memberScores := make([]float64, n)
+	// Pairwise scores, computed once per unordered pair and mirrored.
+	// arith = (seqS+impS+callS)/3 — matches orphan scoring
+	// geo   = ∛(seqS×impS×callS)  — the score used to form the cluster finds the most representative function for the cluster.
+	arith := make([][]float64, n)
+	geo := make([][]float64, n)
+	for i := range arith {
+		arith[i] = make([]float64, n)
+		geo[i] = make([]float64, n)
+	}
 	for i := 0; i < n; i++ {
-		var total float64
+		for j := i + 1; j < n; j++ {
+			s := seqSimilarity(metas[i].TokenSeq, metas[j].TokenSeq)
+			im := jaccard(importSets[i], importSets[j])
+			c := jaccard(callSets[i], callSets[j])
+			arith[i][j] = (s + im + c) / 3.0
+			geo[i][j] = math.Cbrt(s * im * c)
+			arith[j][i], geo[j][i] = arith[i][j], geo[i][j]
+		}
+	}
+
+	// Each member's average score against the n-1 other members.
+	// memberScores (arithmetic) keeps μ, σ and Top3 exactly as before.
+	// The member with the highest average geometric score is the medoid:
+	// the function most similar to all the others, by the clustering's own score.
+	memberScores := make([]float64, n)
+	bestIdx, bestGeo := 0, -1.0
+	for i := 0; i < n; i++ {
+		var aTotal, gTotal float64
 		for j := 0; j < n; j++ {
 			if i == j {
 				continue
 			}
-			total += arithPairwiseScore(
-				metas[i].TokenSeq, metas[j].TokenSeq,
-				importSets[i], importSets[j],
-				callSets[i], callSets[j],
-			)
+			aTotal += arith[i][j]
+			gTotal += geo[i][j]
 		}
-		memberScores[i] = total / float64(n-1)
+		memberScores[i] = aTotal / float64(n-1)
+
+		g := gTotal / float64(n-1)
+		if g > bestGeo || (g == bestGeo && memberKey(metas[i]) < memberKey(metas[bestIdx])) {
+			bestIdx, bestGeo = i, g
+		}
 	}
 
 	// Overall mean and sample std dev
@@ -1060,20 +833,16 @@ func computeClusterStats(metas []ds.FunctionMeta) ds.ClusterStats {
 	}
 
 	return ds.ClusterStats{
-		MeanScore: mean,
-		StdScore:  std,
-		Top3:      top3,
+		MeanScore:              mean,
+		StdScore:               std,
+		Top3:                   top3,
+		MostRepresentativeFunc: ds.RankedMember{Meta: metas[bestIdx], Score: bestGeo},
 	}
 }
 
-// arithPairwiseScore computes (seqS + impS + callS) / 3 for a pair of functions.
-// Unlike the geometric mean used in clustering, this never collapses to 0 when
-// one dimension is 0, making it suitable for orphan affinity analysis.
-func arithPairwiseScore(seqA, seqB []int, impsA, impsB, callsA, callsB map[string]bool) float64 {
-	seqS := seqSimilarity(seqA, seqB)
-	impS := jaccard(impsA, impsB)
-	callS := jaccard(callsA, callsB)
-	return (seqS + impS + callS) / 3.0
+// memberKey gives a stable tie-break order for cluster members.
+func memberKey(m ds.FunctionMeta) string {
+	return m.Package + "/" + m.Name
 }
 
 // OrphanScore computes the three dimension scores and arithmetic mean between
@@ -1117,7 +886,7 @@ func WriteIndex(w io.Writer, repo string, clusters []ds.Cluster) error {
 		fmt.Fprintf(w, "## %s\n", c.Label) //nolint:errcheck
 		//nolint:errcheck
 		fmt.Fprintf(w, "id:%s  size:%d  coherence:%.2f  shape:%s\n\n",
-			c.ShapeHash, c.Size, c.Coherence, seqString(c.TokenSeq))
+			c.ShapeHash, c.Size, c.Coherence, seqString(c.Rep().TokenSeq))
 
 		for _, m := range c.Members {
 			fmt.Fprintf(w, "- %s.%s  %s:%d\n", m.Package, m.Name, m.FileMeta.Path, m.Start_line) //nolint:errcheck
@@ -1133,26 +902,6 @@ func WriteIndex(w io.Writer, repo string, clusters []ds.Cluster) error {
 func shapeHash(seqKey string) string {
 	h := sha256.Sum256([]byte(seqKey))
 	return fmt.Sprintf("%016x", h[:8])
-}
-
-// percentileF returns the p-th percentile of a pre-sorted slice using linear
-// interpolation. p must be in [0, 1]. Caller is responsible for sorting.
-func percentileF(sorted []float64, p float64) float64 {
-	n := len(sorted)
-	if n == 0 {
-		return 0
-	}
-	if n == 1 {
-		return sorted[0]
-	}
-	idx := p * float64(n-1)
-	lo := int(idx)
-	hi := lo + 1
-	if hi >= n {
-		return sorted[n-1]
-	}
-	frac := idx - float64(lo)
-	return sorted[lo]*(1-frac) + sorted[hi]*frac
 }
 
 // seqKey converts a token sequence to a stable string map key.
@@ -1182,31 +931,6 @@ func jaccard(a, b map[string]bool) float64 {
 		return 0.0
 	}
 	return float64(intersection) / float64(union)
-}
-
-// topNKeys returns the n most frequent keys from freq, sorted by count desc.
-// Ties are broken alphabetically for determinism — this is a display field
-// (used only in the LLM label file), not a clustering signal.
-func topNKeys(freq map[string]int, n int) []string {
-	type kv struct {
-		key   string
-		count int
-	}
-	ranked := make([]kv, 0, len(freq))
-	for k, v := range freq {
-		ranked = append(ranked, kv{k, v})
-	}
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].count != ranked[j].count {
-			return ranked[i].count > ranked[j].count
-		}
-		return ranked[i].key < ranked[j].key
-	})
-	out := make([]string, 0, n)
-	for i := 0; i < n && i < len(ranked); i++ {
-		out = append(out, ranked[i].key)
-	}
-	return out
 }
 
 var tokenNames = []string{

@@ -242,7 +242,7 @@ Before reasoning, read the entire `outlier.md` and understand its two sections.
 **`=== Established Patterns ===`** — one entry per cluster:
 ```
 [<full_sha256_hash>] tier: ...  size: ...  idiom: "..."
-  common subsequence of cluster: <token sequence>
+  representative shape of cluster (<package>/<FuncName>): <token sequence>
   peers:
     package/FuncName (file:line)
       <full function body>
@@ -251,7 +251,7 @@ Before reasoning, read the entire `outlier.md` and understand its two sections.
 **`=== Outlier Functions ===`** — one entry per outlier:
 ```
 --- [N] package/FuncName (file:line) ---
-closest cluster: <full_sha256_hash>  score: ...  cyclo delta: ...
+closest cluster: <full_sha256_hash>  score: ...
 token delta:  ...
 import delta: ...
 call delta:   ...
@@ -325,7 +325,7 @@ the `closest cluster: <hash>` field exactly against the `[<hash>]` entries in
 === Established Patterns ===. The peers: bodies under that cluster entry are
 the reference. Use them as reference, not as ground truth.
 
-Ask one question per signal (token, import, call, cyclo), and always ask it
+Ask one question per signal (token, import, call), and always ask it
 against the peer bodies:
 
   Does the function body explain this deviation from peers?
@@ -341,8 +341,8 @@ Use the outlier body and peer bodies only to answer that question. They are not
 an independent source of general code review findings.
 
 Do NOT:
-- Flag anything that cannot be directly traced to a token, import, call, or
-  cyclo delta — if the structural signals look unremarkable, classify as
+- Flag anything that cannot be directly traced to a token, import, or call
+  delta — if the structural signals look unremarkable, classify as
   false_positive regardless of what else you notice in the body
 - Perform general code review — string literals, variable names, comments, and
   logic unrelated to the structural deviation are out of scope
@@ -424,7 +424,7 @@ Do not wrap in markdown code fences. Output raw JSON only.
 
 Rules for category_reasoning:
 - Max 200 words.
-- Must cite the specific structural signal (token/import/call/cyclo delta or
+- Must cite the specific structural signal (token/import/call delta or
   peer comparison) that drove the classification.
 - For confirmed_bug: describe the mechanically verifiable incorrect behavior.
 - For probable_bug: explain what evidence is missing for full confirmation.
@@ -473,7 +473,7 @@ finding — that is what this step exists to make unnecessary.** It is cheap:
 these two categories are typically a handful of findings out of hundreds of
 outliers.
 
-beats' structural signal (token/import/call/cyclo delta vs. a peer cluster)
+beats' structural signal (token/import/call delta vs. a peer cluster)
 tells you a function looks different from its peers. It tells you nothing
 about two things that determine whether "bug" is actually true:
 

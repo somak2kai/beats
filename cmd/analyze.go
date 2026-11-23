@@ -34,13 +34,12 @@ type ClusterRow struct {
 	Tier             string  // "high" | "medium" | "low"
 	ConfidenceScore  float64 // ln(size) × ln(numPackages+1) × confidence(tier) × meanScore² × (impCoh+callCoh)/2
 	Label            string
-	CommonShape      string  // human-readable LCS of all member token sequences
+	CommonShape      string  // human-readable token sequence of the representative member
 	AvgPairwiseScore float64 // mean cbrt score across all member pairs
 	Size             int
 	Coherence        float64 // mean pairwise Jaccard of DirectImports
 	CallCoherence    float64 // mean pairwise Jaccard of CallTargets
-	CycloMean        float64
-	TopImports       []string
+	RepImports       []string
 	Packages         []string    // unique package names, sorted
 	Members          []MemberRow // sorted by descending pairwise score
 	// LLM enrichment — empty until beats update cluster has been run
@@ -62,14 +61,13 @@ type OutlierDiff struct {
 	FilePath string
 	Line     int
 	// orphan cyclomatic complexity minus cluster mean; positive = more complex, negative = simpler
-	CycloDelta     float64
-	TokenShape     string   // orphan's full token sequence — compare visually to cluster LCS in header
-	TokensAdded    []string // token types in orphan but not in cluster LCS (set diff)
-	TokensRemoved  []string // token types in cluster LCS but not in orphan (set diff)
-	ImportsAdded   []string // imports in orphan not in cluster TopImports (short names)
-	ImportsRemoved []string // cluster TopImports not in orphan (short names)
-	CallsAdded     []string // call targets in orphan not in cluster TopCallTargets
-	CallsRemoved   []string // cluster TopCallTargets not in orphan
+	TokenShape     string   // orphan's full token sequence — compare visually to cluster shape in header
+	TokensAdded    []string // token types in orphan beyond the representative member (multiset diff)
+	TokensRemoved  []string // token types in the representative member but not orphan (multiset diff)
+	ImportsAdded   []string // imports in orphan not in representative member (short names)
+	ImportsRemoved []string // representative member imports not in orphan (short names)
+	CallsAdded     []string // call targets in orphan not in representative member
+	CallsRemoved   []string // representative member call targets not in orphan
 }
 
 // ClusterOutlierGroup groups all outlier functions that point to the same cluster.
@@ -77,7 +75,7 @@ type ClusterOutlierGroup struct {
 	ClusterID    string // first 6 hex chars of ShapeHash
 	ClusterHash  string
 	ClusterLabel string // SemanticIdiom or Label if enriched
-	CommonShape  string // human-readable cluster LCS
+	CommonShape  string // human-readable representative member shape
 	Tier         string // "high" | "medium" | "low"
 	Outliers     []OutlierDiff
 }
@@ -216,8 +214,8 @@ func buildClusterRow(c *ds.Cluster) ClusterRow {
 		avgScore = totalScore / float64(len(memberScores))
 	}
 
-	// common token subsequence → human-readable shape (pre-computed and stored in cluster)
-	commonShape := ast.SeqString(c.CommonSeq)
+	// representative member's token sequence → human-readable shape
+	commonShape := ast.SeqString(c.Rep().TokenSeq)
 
 	pkgSet := make(map[string]bool)
 	members := make([]MemberRow, 0, len(c.Members))
@@ -268,8 +266,7 @@ func buildClusterRow(c *ds.Cluster) ClusterRow {
 		Size:             c.Size,
 		Coherence:        c.Coherence,
 		CallCoherence:    c.CallCoherence,
-		CycloMean:        c.Profile.CycloMean,
-		TopImports:       c.Profile.TopImports,
+		RepImports:       c.Rep().DirectImports,
 		Packages:         pkgs,
 		Members:          members,
 		SemanticIdiom:    c.SemanticIdiom,
@@ -493,13 +490,13 @@ func buildOutlierGroups(clusters []*ds.Cluster, orphans []*ds.OrphanedFunction) 
 			tier = "low"
 		}
 
-		// Use cluster profile data for import/call comparison — always populated
-		// from all cluster members, unlike medoid DirectImports which may be empty.
-		topImports := make([]string, len(cl.Profile.TopImports))
-		for i, imp := range cl.Profile.TopImports {
+		// compare outliers against the cluster's representative member
+		rep := cl.Rep()
+		topImports := make([]string, len(rep.DirectImports))
+		for i, imp := range rep.DirectImports {
 			topImports[i] = shortImport(imp)
 		}
-		topCalls := cl.Profile.TopCallTargets
+		topCalls := rep.CallTargets
 
 		var outliers []OutlierDiff
 		for _, e := range entries {
@@ -513,14 +510,13 @@ func buildOutlierGroups(clusters []*ds.Cluster, orphans []*ds.OrphanedFunction) 
 
 			impAdded, impRemoved := stringSetDiff(orphanImports, topImports)
 			callAdded, callRemoved := stringSetDiff(o.Meta.CallTargets, topCalls)
-			tokAdded, tokRemoved := tokenSetDiff(o.Meta.TokenSeq, cl.CommonSeq)
+			tokAdded, tokRemoved := tokenSetDiff(o.Meta.TokenSeq, rep.TokenSeq)
 
 			outliers = append(outliers, OutlierDiff{
 				Name:           o.Meta.Name,
 				Package:        o.Meta.Package,
 				FilePath:       o.Meta.FileMeta.Path,
 				Line:           o.Meta.Start_line,
-				CycloDelta:     o.Candidates[0].CycloDelta,
 				TokenShape:     ast.SeqString(o.Meta.TokenSeq),
 				TokensAdded:    tokAdded,
 				TokensRemoved:  tokRemoved,
@@ -535,7 +531,7 @@ func buildOutlierGroups(clusters []*ds.Cluster, orphans []*ds.OrphanedFunction) 
 			ClusterID:    stableID,
 			ClusterHash:  cl.ShapeHash,
 			ClusterLabel: label,
-			CommonShape:  ast.SeqString(cl.CommonSeq),
+			CommonShape:  ast.SeqString(rep.TokenSeq),
 			Tier:         tier,
 			Outliers:     outliers,
 		})
@@ -868,15 +864,6 @@ func pct(a, b int) string {
 }
 
 func f2(v float64) string { return fmt.Sprintf("%.2f", v) }
-func f1(v float64) string { return fmt.Sprintf("%.1f", v) }
-
-// signedDelta formats a float with an explicit sign prefix, e.g. "+3.0", "-2.0", "0.0".
-func signedDelta(v float64) string {
-	if v > 0 {
-		return fmt.Sprintf("+%.1f", v)
-	}
-	return fmt.Sprintf("%.1f", v)
-}
 
 func joinComma(ss []string) string { return strings.Join(ss, ", ") }
 
@@ -979,13 +966,11 @@ func renderHTML(w *os.File, report RepoReport) error {
 		"confidenceBar": confidenceBar,
 		"pct":           pct,
 		"f2":            f2,
-		"f1":            f1,
 		"f3":            func(v float64) string { return fmt.Sprintf("%.3f", v) },
 		"joinComma":     joinComma,
 		"labelOrHash":   labelOrHash,
 		"shortPath":     shortPath,
 		"diffChips":     diffChips,
-		"signedDelta":   signedDelta,
 	}
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
@@ -1431,18 +1416,17 @@ table.members tr.member-hidden{display:none;}
           <code class="outlier-cluster-id" title="Click to select · Ctrl+C to copy">{{.ClusterID}}</code>
           <button class="outlier-cluster-link" onclick="event.stopPropagation();jumpToCluster('{{.ClusterID}}')">↗ jump</button>
           {{if .ClusterLabel}}<span class="outlier-cluster-lbl">{{.ClusterLabel}}</span>{{end}}
-          <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap;">Longest Common Subsequence:</span>{{tokenChips .CommonShape}}
+          <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap;">Representative Shape:</span>{{tokenChips .CommonShape}}
         </summary>
         <table class="outlier-tbl">
           <thead><tr>
             <th>Function</th>
             <th>Package</th>
             <th>File : Line</th>
-            <th title="This function's full token sequence — compare to cluster LCS above to see where the structure diverges">Token Shape</th>
-            <th title="Token types present in this function but absent from the cluster LCS (+), or in the LCS but not here (−)">Token Δ</th>
-            <th title="Imports present in this function but not in cluster's common imports (+), or vice versa (−)">Import Δ</th>
-            <th title="Call targets present in this function but not in cluster's common calls (+), or vice versa (−)">Call Δ</th>
-            <th title="Cyclomatic complexity of this function minus the cluster mean. Positive = more complex than the cluster average; negative = simpler.">Cyclo Δ</th>
+            <th title="This function's full token sequence — compare to the cluster's representative shape above to see where the structure diverges">Token Shape</th>
+            <th title="Token types this function has beyond the cluster's representative function (+), or that the representative has but this one lacks (−)">Token Δ</th>
+            <th title="Imports in this function but not in the cluster's representative function (+), or vice versa (−)">Import Δ</th>
+            <th title="Call targets in this function but not in the cluster's representative function (+), or vice versa (−)">Call Δ</th>
           </tr></thead>
           <tbody>
 {{range .Outliers}}
@@ -1454,7 +1438,6 @@ table.members tr.member-hidden{display:none;}
               <td>{{diffChips .TokensAdded .TokensRemoved}}</td>
               <td>{{diffChips .ImportsAdded .ImportsRemoved}}</td>
               <td>{{diffChips .CallsAdded .CallsRemoved}}</td>
-              <td style="font-variant-numeric:tabular-nums;font-size:11px;white-space:nowrap;">{{signedDelta .CycloDelta}}</td>
             </tr>
 {{end}}
           </tbody>
@@ -1523,8 +1506,7 @@ table.members tr.member-hidden{display:none;}
       <tr class="cl-detail" id="detail-high-{{$i}}">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+            <span class="detail-meta-item">imports: <strong>{{joinComma $cl.RepImports}}</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1588,8 +1570,7 @@ table.members tr.member-hidden{display:none;}
       <tr class="cl-detail" id="detail-medium-{{$i}}">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+            <span class="detail-meta-item">imports: <strong>{{joinComma $cl.RepImports}}</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1653,8 +1634,7 @@ table.members tr.member-hidden{display:none;}
       <tr class="cl-detail" id="detail-low-{{$i}}">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>{{joinComma $cl.TopImports}}</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>{{f1 $cl.CycloMean}}</strong></span>
+            <span class="detail-meta-item">imports: <strong>{{joinComma $cl.RepImports}}</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>

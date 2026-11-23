@@ -488,12 +488,14 @@ func TestBuildOutlierGroups_PrimitiveClusterSkipped(t *testing.T) {
 
 func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 	cl := &ds.Cluster{
-		ShapeHash:   "abc123",
-		CommonSeq:   []int{ast.TK_IF, ast.TK_RETURN},
+		ShapeHash: "abc123",
+		Members: []ds.FunctionMeta{{
+			TokenSeq:      []int{ast.TK_IF, ast.TK_RETURN},
+			DirectImports: []string{"fmt"},
+			CallTargets:   []string{"fmt.Println"},
+		}},
 		IsPrimitive: false,
 	}
-	cl.Profile.TopImports = []string{"fmt"}
-	cl.Profile.TopCallTargets = []string{"fmt.Println"}
 
 	orphan := &ds.OrphanedFunction{
 		Meta: ds.FunctionMeta{

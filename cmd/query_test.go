@@ -11,12 +11,12 @@ import (
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // makeCluster builds a minimal Cluster for use in tests.
-func makeCluster(hash, tier string, size int, commonSeq []int) *ds.Cluster {
+func makeCluster(hash, tier string, size int, seq []int) *ds.Cluster {
 	return &ds.Cluster{
 		ShapeHash: hash,
 		Tier:      tier,
 		Size:      size,
-		CommonSeq: commonSeq,
+		Members:   []ds.FunctionMeta{{TokenSeq: seq}}, // sole member → Rep()
 	}
 }
 
@@ -105,17 +105,17 @@ func TestBuildOutlierResults_UnknownCluster_EmptyDeltas(t *testing.T) {
 
 func TestBuildOutlierResults_DeltasComputedFromCluster(t *testing.T) {
 	cl := makeCluster("abc", "high", 10, []int{ast.TK_IF, ast.TK_RETURN})
-	cl.Profile.TopImports = []string{"fmt"}
-	cl.Profile.TopCallTargets = []string{"fmt.Println"}
+	cl.Members[0].DirectImports = []string{"fmt"}
+	cl.Members[0].CallTargets = []string{"fmt.Println"}
 
 	orphans := []*ds.OrphanedFunction{{
 		Meta: ds.FunctionMeta{
 			Name:          "foo",
-			TokenSeq:      []int{ast.TK_IF, ast.TK_FOR, ast.TK_RETURN}, // FOR is extra vs LCS
+			TokenSeq:      []int{ast.TK_IF, ast.TK_FOR, ast.TK_RETURN}, // FOR is extra vs representative
 			DirectImports: []string{"os"},                              // os extra, fmt removed
 			CallTargets:   []string{"os.Exit"},                         // os.Exit extra, fmt.Println removed
 		},
-		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc", ArithScore: 0.80, CycloDelta: 2.5}},
+		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc", ArithScore: 0.80}},
 	}}
 
 	results := buildOutlierResults(orphans, map[string]*ds.Cluster{"abc": cl})
@@ -124,7 +124,7 @@ func TestBuildOutlierResults_DeltasComputedFromCluster(t *testing.T) {
 	}
 	r := results[0]
 
-	// TK_FOR is in orphan but not in cluster LCS → Added
+	// TK_FOR is in orphan but not in the representative member → Added
 	forName := ast.TokenName(ast.TK_FOR)
 	found := false
 	for _, a := range r.TokenDelta.Added {
@@ -150,11 +150,6 @@ func TestBuildOutlierResults_DeltasComputedFromCluster(t *testing.T) {
 	}
 	if len(r.CallDelta.Removed) != 1 || r.CallDelta.Removed[0] != "fmt.Println" {
 		t.Errorf("CallDelta.Removed: want [fmt.Println], got %v", r.CallDelta.Removed)
-	}
-
-	// CycloDelta carried from candidate
-	if r.CycloDelta != 2.5 {
-		t.Errorf("CycloDelta: want 2.5, got %f", r.CycloDelta)
 	}
 }
 
@@ -186,7 +181,7 @@ func TestBuildOutlierResults_CandidateEntryFields(t *testing.T) {
 		t.Errorf("Idiom: want %q, got %q", "error wrapper", c.Idiom)
 	}
 	if c.CommonShape == "" {
-		t.Errorf("CommonShape should not be empty for a known cluster with a non-nil CommonSeq")
+		t.Errorf("CommonShape should not be empty for a known cluster with a representative member")
 	}
 	// Score is carried through
 	if c.Score != 0.82 {
@@ -275,7 +270,7 @@ func TestBuildClusterResult_TopLevelFields(t *testing.T) {
 		ShapeHash: "abc123",
 		Tier:      "high",
 		Size:      7,
-		CommonSeq: []int{ast.TK_IF, ast.TK_RETURN},
+		Members:   []ds.FunctionMeta{{TokenSeq: []int{ast.TK_IF, ast.TK_RETURN}}},
 	}
 	r := buildClusterResult(cl)
 	if r.ShapeHash != "abc123" {
@@ -288,7 +283,7 @@ func TestBuildClusterResult_TopLevelFields(t *testing.T) {
 		t.Errorf("Size: want 7, got %d", r.Size)
 	}
 	if r.CommonShape == "" {
-		t.Errorf("CommonShape should not be empty for non-nil CommonSeq")
+		t.Errorf("CommonShape should not be empty for representative member")
 	}
 }
 
@@ -333,7 +328,7 @@ func TestBuildClusterResult_MemberMetaTransferred(t *testing.T) {
 		t.Errorf("Body: want %q, got %q", "func funcA() {}", m.Body)
 	}
 	if m.Tokens == "" {
-		t.Errorf("Tokens should not be empty for non-nil TokenSeq")
+		t.Errorf("Tokens should not be empty for representative member")
 	}
 }
 

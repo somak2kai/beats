@@ -69,7 +69,6 @@ type OutlierResult struct {
 	TokenDelta  DeltaStrings     `json:"token_delta"`
 	ImportDelta DeltaStrings     `json:"import_delta"`
 	CallDelta   DeltaStrings     `json:"call_delta"`
-	CycloDelta  float64          `json:"cyclo_delta"`
 	Candidates  []CandidateEntry `json:"candidates"`
 }
 
@@ -157,17 +156,18 @@ func buildOutlierResults(orphans []*ds.OrphanedFunction, clusterByHash map[strin
 
 		var tokAdded, tokRemoved, impAdded, impRemoved, callAdded, callRemoved []string
 		if ok {
-			topImports := make([]string, len(cl.Profile.TopImports))
-			for i, imp := range cl.Profile.TopImports {
+			rep := cl.Rep()
+			topImports := make([]string, len(rep.DirectImports))
+			for i, imp := range rep.DirectImports {
 				topImports[i] = shortImport(imp)
 			}
 			orphanImports := make([]string, len(o.Meta.DirectImports))
 			for i, imp := range o.Meta.DirectImports {
 				orphanImports[i] = shortImport(imp)
 			}
-			tokAdded, tokRemoved = tokenSetDiff(o.Meta.TokenSeq, cl.CommonSeq)
+			tokAdded, tokRemoved = tokenSetDiff(o.Meta.TokenSeq, rep.TokenSeq)
 			impAdded, impRemoved = stringSetDiff(orphanImports, topImports)
-			callAdded, callRemoved = stringSetDiff(o.Meta.CallTargets, cl.Profile.TopCallTargets)
+			callAdded, callRemoved = stringSetDiff(o.Meta.CallTargets, rep.CallTargets)
 		}
 
 		candidates := make([]CandidateEntry, 0, len(o.Candidates))
@@ -180,7 +180,7 @@ func buildOutlierResults(orphans []*ds.OrphanedFunction, clusterByHash map[strin
 			if cl, ok := clusterByHash[c.ShapeHash]; ok {
 				entry.Tier = cl.Tier
 				entry.Size = cl.Size
-				entry.CommonShape = ast.SeqString(cl.CommonSeq)
+				entry.CommonShape = ast.SeqString(cl.Rep().TokenSeq)
 			}
 			candidates = append(candidates, entry)
 		}
@@ -194,7 +194,6 @@ func buildOutlierResults(orphans []*ds.OrphanedFunction, clusterByHash map[strin
 			TokenDelta:  DeltaStrings{Added: tokAdded, Removed: tokRemoved},
 			ImportDelta: DeltaStrings{Added: impAdded, Removed: impRemoved},
 			CallDelta:   DeltaStrings{Added: callAdded, Removed: callRemoved},
-			CycloDelta:  top.CycloDelta,
 			Candidates:  candidates,
 		})
 	}
@@ -221,7 +220,6 @@ func printOutliersText(results []OutlierResult) {
 		fmt.Printf("  token delta:   %s\n", formatDeltaText(r.TokenDelta))
 		fmt.Printf("  import delta:  %s\n", formatDeltaText(r.ImportDelta))
 		fmt.Printf("  call delta:    %s\n", formatDeltaText(r.CallDelta))
-		fmt.Printf("  cyclo delta:   %s\n", signedDelta(r.CycloDelta))
 		fmt.Println("candidates:")
 		for j, c := range r.Candidates {
 			idiom := ""
@@ -327,7 +325,7 @@ func buildClusterResult(cl *ds.Cluster) ClusterResult {
 		ShapeHash:   cl.ShapeHash,
 		Tier:        cl.Tier,
 		Size:        cl.Size,
-		CommonShape: ast.SeqString(cl.CommonSeq),
+		CommonShape: ast.SeqString(cl.Rep().TokenSeq),
 		Members:     members,
 	}
 }

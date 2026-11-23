@@ -6,6 +6,7 @@ import (
 	"math/rand"
 )
 
+// This is fully claude coded out , this was needed to check if any kind of calibration is required for tuning the knobs that controls beats behavior.
 // ── The problem with "composite quality scores" ──────────────────────────────
 //
 // There's no ground truth. We can't say threshold 0.75 is "better" than 0.70
