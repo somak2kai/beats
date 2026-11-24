@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How beats works</title>
+<style>
+  /* Embedded in index.html through an iframe; fills whatever box it is given. */
+  :root {
+    color-scheme: light;
+    --ink: #1f2a44;
+    --soft: #e6eaf6;
+    --steel: #d7dcee;
+    --indigo: #3b4cc0;
+    --red: #e5534b;
+    --green: #2ea86b;
+    --orange: #f0a04b;
+  }
+
+  * {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: #fff;
+    color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 6px;
+  }
+
+  svg {
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .bar {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: #fff;
+    border: 2px solid var(--soft);
+    border-radius: 999px;
+    min-height: 40px;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+
+  button:hover {
+    border-color: var(--indigo);
+  }
+
+  button:focus-visible,
+  .dot:focus-visible {
+    outline: 2px solid var(--indigo);
+    outline-offset: 2px;
+  }
+
+  .dots {
+    display: flex;
+    gap: 2px;
+  }
+
+  .dot {
+    width: 36px;
+    height: 40px;
+    border: 0;
+    background: none;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .dot::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--soft);
+    transition: background .2s, transform .2s;
+  }
+
+  .dot.on::after {
+    background: var(--indigo);
+    transform: scale(1.25);
+  }
+
+  @media (max-width: 520px) {
+    body {
+      padding: 6px 6px 4px;
+    }
+
+    .bar {
+      gap: 4px;
+    }
+
+    button {
+      padding: 0 12px;
+    }
+
+    .dot {
+      width: 22px;
+    }
+  }
+</style>
+</head>
+<body>
+<svg id="scene" viewBox="0 0 1200 488" role="img" aria-label="A person walks along the beats pipeline: codebase in, functions out, fingerprints, clustering, outliers, review, a cleaner codebase">
+          <!-- step label -->
+          <g id="pill">
+            <rect id="pillR" x="0" y="18" height="52" rx="26" fill="var(--soft)"/>
+            <text id="pillT" x="600" y="53" text-anchor="middle" font-size="26" font-weight="700" fill="var(--ink)"></text>
+          </g>
+
+          <!-- floor shadows -->
+          <ellipse cx="560" cy="474" rx="520" ry="9" fill="#eef1f9"/>
+
+          <!-- belt -->
+          <g id="belt">
+            <rect x="110" y="290" width="900" height="44" rx="22" fill="var(--ink)"/>
+            <g id="rollers"></g>
+            <rect x="170" y="334" width="14" height="28" fill="var(--ink)"/>
+            <rect x="940" y="334" width="14" height="28" fill="var(--ink)"/>
+          </g>
+
+          <!-- things riding the belt sit under the machine so they come out of it -->
+          <g id="items"></g>
+
+          <!-- beats machine -->
+          <g id="mach" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round">
+            <path d="M180 112 h80 l-22 38 h-36 z" fill="var(--steel)"/>
+            <rect x="140" y="150" width="200" height="140" rx="18" fill="var(--steel)"/>
+            <rect x="316" y="170" width="16" height="100" rx="6" fill="#c3c9e2"/>
+            <rect x="170" y="194" width="130" height="54" rx="10" fill="var(--ink)" stroke="none"/>
+            <text x="235" y="231" text-anchor="middle" font-size="28" font-weight="700" fill="#fff" stroke="none">beats</text>
+            <g id="ticks" stroke="var(--indigo)" stroke-width="4" stroke-linecap="round" opacity="0">
+              <line x1="220" y1="72" x2="220" y2="92"/><line x1="196" y1="78" x2="204" y2="96"/><line x1="244" y1="78" x2="236" y2="96"/>
+            </g>
+          </g>
+
+          <!-- step 3: fingerprint card -->
+          <g id="card3" opacity="0">
+            <rect x="368" y="96" width="196" height="132" rx="14" fill="#fff" stroke="var(--ink)" stroke-width="3"/>
+            <g id="rows3"></g>
+          </g>
+
+          <!-- steps 4-5: screen on the belt -->
+          <g id="screen" stroke="var(--ink)" stroke-width="4">
+            <rect x="596" y="96" width="228" height="176" rx="16" fill="var(--steel)"/>
+            <rect x="612" y="112" width="196" height="144" rx="8" fill="#fff" stroke-width="3"/>
+            <rect x="690" y="272" width="40" height="18" fill="var(--steel)"/>
+          </g>
+          <g id="dotsG"></g>
+          <circle id="outRing" r="22" fill="none" stroke="var(--red)" stroke-width="3" stroke-dasharray="6 5" opacity="0"/>
+
+          <!-- step 5: outliers card -->
+          <line id="outLine" x1="0" y1="0" x2="868" y2="150" stroke="var(--red)" stroke-width="3" opacity="0"/>
+          <g id="card5" opacity="0">
+            <rect x="866" y="110" width="160" height="128" rx="14" fill="#fff" stroke="var(--ink)" stroke-width="3"/>
+            <path d="M866 124 a14 14 0 0 1 14 -14 h132 a14 14 0 0 1 14 14 v22 h-160 z" fill="#fde3e1" stroke="var(--ink)" stroke-width="3"/>
+            <text x="946" y="136" text-anchor="middle" font-size="18" font-weight="700" fill="var(--ink)">Outliers</text>
+            <g id="rows5"></g>
+          </g>
+
+          <!-- step 7: done -->
+          <g id="done" opacity="0">
+            <g stroke="var(--green)" stroke-width="4" stroke-linecap="round" id="rays"></g>
+            <circle cx="1090" cy="150" r="40" fill="#fff" stroke="var(--green)" stroke-width="6"/>
+            <circle cx="1090" cy="150" r="29" fill="var(--green)"/>
+            <path d="M1076 151 l10 10 l19 -21" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+
+          <!-- the person -->
+          <g id="hu" stroke="var(--ink)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <g id="legL" transform="translate(0,-48)"><path d="M0 0 L0 46 l10 0"/></g>
+            <g id="legR" transform="translate(0,-48)"><path d="M0 0 L0 46 l10 0"/></g>
+            <path d="M0 -92 C 3 -76 3 -62 0 -48"/>
+            <g id="armL" transform="translate(0,-84)"><line x1="0" y1="0" x2="0" y2="34"/></g>
+            <circle cx="0" cy="-110" r="18" fill="#fff"/>
+            <path id="smile" d="M3 -108 q6 5 11 0" stroke-width="3" opacity="0"/>
+            <g id="armR" transform="translate(0,-84)"><line x1="0" y1="0" x2="0" y2="34"/></g>
+            <!-- carried folder (step 1) -->
+            <g id="carry" stroke="none">
+              <rect x="8" y="-90" width="44" height="34" rx="4" fill="var(--indigo)"/>
+              <text x="30" y="-67" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">&lt;/&gt;</text>
+            </g>
+            <!-- report (steps 6-7) -->
+            <g id="paper" opacity="0" stroke-width="2.5">
+              <rect x="20" y="-132" width="44" height="56" rx="3" fill="#fff" transform="rotate(8 42 -104)"/>
+              <g transform="rotate(8 42 -104)" stroke="#9aa3c4"><line x1="27" y1="-120" x2="55" y2="-120"/><line x1="27" y1="-110" x2="50" y2="-110"/><line x1="27" y1="-90" x2="52" y2="-90"/></g>
+              <path d="M27 -96 h22" stroke="var(--red)" stroke-width="4" transform="rotate(8 42 -104)"/>
+            </g>
+          </g>
+
+          <!-- folder flying into the hopper -->
+          <g id="fly" opacity="0">
+            <rect x="-22" y="-17" width="44" height="34" rx="4" fill="var(--indigo)"/>
+            <text x="0" y="6" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">&lt;/&gt;</text>
+          </g>
+        </svg>
+<div class="bar">
+          <button id="play" type="button">Pause</button>
+          <div class="dots" id="dots"></div>
+          <button id="replay" type="button">Replay</button>
+        </div>
+<script>
+{
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const el = (tag, attrs, parent, text) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const c01 = v => Math.max(0, Math.min(1, v));
+const ease = v => { v = c01(v); return v < .5 ? 2 * v * v : 1 - ((-2 * v + 2) ** 2) / 2; };
+const lerp = (a, b, k) => a + (b - a) * k;
+
+const LABELS = ["1. Codebase in", "2. Functions out", "3. AST tokens, call targets, direct imports",
+  "4. Clustering happens", "5. Outliers detected", "6. Review outliers", "7. A cleaner, healthier codebase"];
+const STOP = [96, 380, 470, 710, 940, 1080, 1080];
+const SPEED = 2;
+const STEP = 3.6, WALK = 1.2, HOLD = 1.6, TOTAL = LABELS.length * STEP + HOLD;
+
+/* static pieces */
+for (let x = 140; x <= 980; x += 42) el("circle", { cx: x, cy: 312, r: 9, fill: "#fff", stroke: "var(--ink)", "stroke-width": 3 }, $("rollers"));
+
+const rows3 = $("rows3");
+const ROW3 = [["AST tokens", "var(--green)"], ["Call targets", "var(--indigo)"], ["Direct imports", "#8a5fc1"]];
+const r3 = ROW3.map(([t, c], i) => {
+  const g = el("g", { opacity: 0 }, rows3);
+  el("circle", { cx: 394, cy: 130 + i * 36, r: 10, fill: c }, g);
+  el("path", { d: `M389 ${130 + i * 36} l4 4 l7 -8`, fill: "none", stroke: "#fff", "stroke-width": 2.5, "stroke-linecap": "round" }, g);
+  el("text", { x: 414, y: 136 + i * 36, "font-size": 17, fill: "var(--ink)" }, g, t);
+  return g;
+});
+
+const rows5 = $("rows5");
+const r5 = [0, 1, 2].map(i => {
+  const g = el("g", { opacity: 0 }, rows5);
+  el("circle", { cx: 888, cy: 172 + i * 22, r: 6, fill: "var(--red)" }, g);
+  el("rect", { x: 902, y: 168 + i * 22, width: 100 - i * 14, height: 8, rx: 4, fill: "#dfe3f0" }, g);
+  return g;
+});
+
+for (let i = 0; i < 8; i++) {
+  const a = i / 8 * Math.PI * 2;
+  el("line", { x1: 1090 + Math.cos(a) * 52, y1: 150 + Math.sin(a) * 52, x2: 1090 + Math.cos(a) * 64, y2: 150 + Math.sin(a) * 64 }, $("rays"));
+}
+
+/* functions on the belt */
+const items = $("items");
+const fns = [0, 1, 2].map(() => {
+  const g = el("g", { opacity: 0 }, items);
+  el("path", { d: "M-22 -52 h32 l12 12 v40 h-44 z", fill: "#fff", stroke: "var(--ink)", "stroke-width": 3, "stroke-linejoin": "round" }, g);
+  el("text", { x: 0, y: -18, "text-anchor": "middle", "font-size": 18, "font-weight": 700, fill: "var(--indigo)" }, g, "f()");
+  return g;
+});
+
+/* dots on the screen: scattered, then families, one left out */
+const FAM = ["var(--indigo)", "var(--green)", "var(--orange)"];
+const CENT = [[662, 160], [756, 150], [700, 222]];
+let seed = 11;
+const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+const dots = [];
+CENT.forEach((c, f) => { for (let k = 0; k < 5; k++) { const a = k / 5 * 6.283 + f; dots.push({ f, sx: 625 + rnd() * 170, sy: 122 + rnd() * 124, tx: c[0] + Math.cos(a) * 14, ty: c[1] + Math.sin(a) * 12 }); } });
+const OUT = { f: -1, sx: 640 + rnd() * 140, sy: 140 + rnd() * 90, tx: 778, ty: 226 };
+dots.push(OUT);
+const dotEls = dots.map(() => el("circle", { r: 7 }, $("dotsG")));
+const ring = $("outRing"); ring.setAttribute("cx", OUT.tx); ring.setAttribute("cy", OUT.ty);
+const outLine = $("outLine"); outLine.setAttribute("x1", OUT.tx + 20); outLine.setAttribute("y1", OUT.ty - 10);
+
+/* person */
+const hu = $("hu"), armL = $("armL"), armR = $("armR"), legL = $("legL"), legR = $("legR");
+const rot = (g, y, a) => g.setAttribute("transform", `translate(0,${y}) rotate(${a.toFixed(1)})`);
+
+/* step label */
+const pillT = $("pillT"), pillR = $("pillR");
+let curStep = -1;
+const dotsBar = $("dots");
+dotsBar.innerHTML = LABELS.map((l, i) => `<button class="dot" type="button" data-i="${i}" aria-label="${l}"></button>`).join("");
+const dotBtns = [...dotsBar.children];
+function setStep(k) {
+  if (k === curStep) return;
+  curStep = k;
+  pillT.textContent = LABELS[k];
+  const w = pillT.getComputedTextLength() + 56;
+  pillR.setAttribute("x", (600 - w / 2).toFixed(1));
+  pillR.setAttribute("width", w.toFixed(1));
+  dotBtns.forEach((b, i) => b.classList.toggle("on", i === k));
+}
+
+function frame(t) {
+  const k = Math.max(0, Math.min(LABELS.length - 1, Math.floor(t / STEP)));
+  const lt = t - k * STEP;
+  setStep(k);
+
+  // walk to the stop, then gesture
+  const from = k === 0 ? -60 : STOP[k - 1], to = STOP[k];
+  const w = c01(lt / WALK), walking = w < 1 && Math.abs(to - from) > 1;
+  const x = lerp(from, to, ease(w));
+  hu.setAttribute("transform", `translate(${x.toFixed(1)},470) scale(1)`);
+  const sw = walking ? Math.sin(t * 9) * 24 : 0, stance = walking ? 0 : 8;
+  rot(legL, -48, sw + stance); rot(legR, -48, -sw - stance);
+  const s = ease((lt - WALK) / .5);
+  let aR = -sw * .8, aL = sw * .8;
+  if (k === 0) { aR = walking ? -55 : lerp(-55, -122, s); aL = sw * .8; }
+  else if (!walking && k <= 4) { aR = lerp(0, k === 1 ? -95 : -122, s); aL = lerp(0, 14, s); }
+  else if (k >= 5) { aR = walking ? aR : lerp(0, -105, s); aL = walking ? aL : lerp(0, -80, s); if (k === 6) { aR = -105; aL = -80; } }
+  rot(armR, -84, aR); rot(armL, -84, aL);
+
+  // step 1: carry the folder, toss it in the hopper
+  const tossK = k === 0 ? c01((lt - WALK - .3) / .9) : 1;
+  $("carry").setAttribute("opacity", k === 0 && tossK <= 0 ? 1 : 0);
+  const fly = $("fly");
+  if (k === 0 && tossK > 0 && tossK < 1) {
+    const fx = lerp(x + 30, 220, tossK), fy = lerp(398, 128, tossK) - Math.sin(tossK * Math.PI) * 90;
+    fly.setAttribute("transform", `translate(${fx.toFixed(1)},${fy.toFixed(1)}) scale(${lerp(1, .8, tossK).toFixed(2)})`);
+    fly.setAttribute("opacity", 1);
+  } else fly.setAttribute("opacity", 0);
+  $("ticks").setAttribute("opacity", (k === 0 && tossK >= 1) || k === 1 || k === 2 ? (0.5 + 0.5 * Math.sin(t * 8)).toFixed(2) : 0);
+
+  // step 2: functions roll out
+  fns.forEach((g, i) => {
+    const p = k === 1 ? (lt - .3 - i * .7) / 1.6 : k === 2 ? 1 : -1;
+    const on = p > 0;
+    g.setAttribute("opacity", on && k <= 2 ? 1 : 0);
+    if (on) g.setAttribute("transform", `translate(${lerp(320, 560 - i * 54, ease(Math.min(1, p))).toFixed(1)},290)`);
+  });
+
+  // step 3: the fingerprint card
+  $("card3").setAttribute("opacity", k === 2 ? c01((lt - .2) / .4) : 0);
+  r3.forEach((g, i) => g.setAttribute("opacity", k === 2 ? c01((lt - .6 - i * .45) / .3) : 0));
+
+  // step 4: dots gather into families
+  const g4 = k < 3 ? 0 : k === 3 ? ease((lt - WALK * .6) / 1.8) : 1;
+  dots.forEach((d, i) => {
+    const e = dotEls[i];
+    e.setAttribute("cx", lerp(d.sx, d.tx, g4).toFixed(1));
+    e.setAttribute("cy", lerp(d.sy, d.ty, g4).toFixed(1));
+    e.setAttribute("fill", g4 > .5 ? (d.f < 0 ? (k >= 4 ? "var(--red)" : "#9aa3c4") : FAM[d.f]) : "#b9c0da");
+  });
+
+  // step 5: the outlier is circled and listed
+  const g5 = k < 4 ? 0 : k === 4 ? c01((lt - .4) / .5) : 1;
+  ring.setAttribute("opacity", g5);
+  ring.setAttribute("stroke-dashoffset", (-t * 20).toFixed(1));
+  outLine.setAttribute("opacity", k >= 4 ? c01((lt - .8) / .4) * (k === 4) + (k > 4 ? 1 : 0) : 0);
+  $("card5").setAttribute("opacity", k === 4 ? c01((lt - 1) / .4) : k > 4 ? 1 : 0);
+  r5.forEach((g, i) => g.setAttribute("opacity", k === 4 ? c01((lt - 1.4 - i * .3) / .3) : k > 4 ? 1 : 0));
+
+  // steps 6-7: reading the report, then the all-clear
+  $("paper").setAttribute("opacity", k === 5 ? (walking ? 0 : s) : k === 6 ? 1 : 0);
+  const d7 = k === 6 ? ease(lt / .6) : 0;
+  const done = $("done");
+  done.setAttribute("opacity", d7.toFixed(2));
+  done.setAttribute("transform", `translate(1090,150) scale(${lerp(.6, 1, d7).toFixed(2)}) translate(-1090,-150)`);
+  $("smile").setAttribute("opacity", d7.toFixed(2));
+}
+
+/* playback */
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let t = 0, playing = !reduce, last = performance.now();
+const playBtn = $("play");
+const setBtn = () => { playBtn.textContent = playing ? "Pause" : "Play"; };
+function tick(now) {
+  const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
+  if (playing && visible) { t += dt * SPEED; if (t >= TOTAL) t = 0; }
+  frame(t);
+  requestAnimationFrame(tick);
+}
+let visible = !document.hidden;
+document.addEventListener("visibilitychange", () => { visible = !document.hidden; });
+playBtn.addEventListener("click", () => { playing = !playing; setBtn(); });
+$("replay").addEventListener("click", () => { t = 0; playing = true; setBtn(); });
+dotsBar.addEventListener("click", e => {
+  const b = e.target.closest(".dot"); if (!b) return;
+  const i = +b.dataset.i;
+  t = playing ? i * STEP : i * STEP + STEP - .01;
+  frame(t);
+});
+if (reduce) t = TOTAL - .01;
+setBtn();
+frame(t);
+requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>

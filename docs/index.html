@@ -147,7 +147,7 @@
       color: var(--text2);
     }
 
-    .story p + p {
+    .story p+p {
       margin-top: 16px;
     }
 
@@ -248,6 +248,23 @@
     .report-link svg {
       flex-shrink: 0;
     }
+
+    /* Walkthrough animation (its own page, walkthrough.html) */
+    .walk {
+      max-width: 880px;
+      margin: 0 auto 40px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .walk iframe {
+      display: block;
+      width: 100%;
+      aspect-ratio: 880 / 400;
+      border: 0;
+    }
+
     /* Small screens: drop the long repository URL column, tighten the title */
     @media (max-width: 600px) {
       body {
@@ -266,6 +283,10 @@
       .reports-table td:nth-child(2) {
         display: none;
       }
+
+      .walk iframe {
+        aspect-ratio: 16 / 10;
+      }
     }
   </style>
 </head>
@@ -278,13 +299,13 @@
       <h1>beats</h1>
       <p class="lead">Every codebase develops structural habits — recurring shapes in how functions are written that
         no one named but everyone follows. Beats finds those patterns and surfaces the functions that don't fit them,
-        with the exact delta:</p>
-      <ul class="deltas">
-        <li>a missing guard</li>
-        <li>a dropped call target</li>
-        <li>an absent cleanup step</li>
-      </ul>
+        with the exact delta</p>
+
     </header>
+
+    <!-- <div class="walk">
+      <iframe src="walkthrough.html" title="How beats works: animated walkthrough" loading="lazy"></iframe>
+    </div> -->
 
     <details class="story" open>
       <summary>How it started</summary>
