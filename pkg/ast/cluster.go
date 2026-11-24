@@ -33,7 +33,6 @@ type ClusterConfig struct {
 	MaxTrigramBucket       int     // trigram stop-word cutoff (default 300)
 	MinTokenSeqLen         int     // min tokens to participate (default 5) any less we dont have enough information to decide on clustering vs orphans.
 	IdentifyMinSize        int     // min cluster members (default 3)
-	PrimitiveThreshold     float64 // max cluster as fraction of corpus (default 0.05)
 	SeqFastReject          float64 // orphan medoid gate (default 0.30)
 	ClusterToleranceK      float64 // multiplier for μ−k×σ dynamic admission (default 1.5).
 	// ToleranceShrinkK is the pseudo-count for empirical-Bayes shrinkage of the
@@ -49,7 +48,6 @@ func DefaultClusterConfig() ClusterConfig {
 		MaxTrigramBucket:       maxTrigramBucket,
 		MinTokenSeqLen:         minTokenSeqLen,
 		IdentifyMinSize:        identifyMinSize,
-		PrimitiveThreshold:     0.05,
 		SeqFastReject:          0.30,
 		// we take 1.5 as value since as part of Bells curve , that means 7percentile , as in give me score
 		// where bar admits anything that scores at least as well as the weakest ~7% of members would.
@@ -69,13 +67,8 @@ type scoredPair struct {
 	score float64 // indicates scoring of possibility of belonging in same cluster for the function metadata pair.
 }
 
-// IdentifyOrphans uses DefaultClusterConfig. See IdentifyOrphansWithConfig.
-func IdentifyOrphans(orphanMetas []*ds.FunctionMeta, cluster []*ds.Cluster) ([]*ds.OrphanedFunction, error) {
-	return IdentifyOrphansWithConfig(orphanMetas, cluster, DefaultClusterConfig())
-}
-
 // IdentifyOrphansWithConfig scores each orphaned function against every
-// non-primitive cluster to identify potential outlier functions.
+// cluster to identify potential outlier functions.
 //
 // Scoring: the orphan is scored against ALL cluster members (not just the
 // medoid) using arithmetic mean (seqS+impS+callS)/3.
@@ -100,7 +93,7 @@ func IdentifyOrphansWithConfig(orphanMetas []*ds.FunctionMeta, cluster []*ds.Clu
 			var candidates []ds.ClusterCandidate
 
 			for idx, cl := range cluster {
-				if cl.IsPrimitive || len(cl.Stats.Top3) == 0 || len(cl.Members) == 0 {
+				if len(cl.Stats.Top3) == 0 || len(cl.Members) == 0 {
 					continue
 				}
 
@@ -212,7 +205,7 @@ func IdentifyClustersWithConfig(fns []*ds.FunctionMeta, cfg ClusterConfig) ([]*d
 	}
 
 	clusterMembers := agglomerate(fns, candidates, pairScores, cfg)
-	cl, orph := buildClusters(fns, clusterMembers, float64(len(fns))*cfg.PrimitiveThreshold, scoredFns, cfg)
+	cl, orph := buildClusters(fns, clusterMembers, scoredFns, cfg)
 	return cl, orph, nil
 }
 
@@ -440,7 +433,7 @@ func completeLinkageCheck(membA, membB []int, pairScores map[pairKey]float64, cf
 }
 
 // buildClusters converts raw cluster membership data into Cluster objects.
-func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, primitiveThreshold float64, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
+func buildClusters(fns []*ds.FunctionMeta, clusterMembers map[int][]int, scoredFns map[int]bool, cfg ClusterConfig) ([]*ds.Cluster, []*ds.FunctionMeta) {
 	var clusters []*ds.Cluster
 	var orphans []*ds.FunctionMeta
 
@@ -654,9 +647,6 @@ func meanPairwiseJaccard(sets []map[string]bool) float64 {
 	}
 	return total / float64(pairs)
 }
-
-// SeqSim is the exported form of seqSimilarity, for use by the calibrate package.
-func SeqSim(a, b []int) float64 { return seqSimilarity(a, b) }
 
 // seqSimilarity returns 1 − (editDistance / maxLen), clamped to [0, 1].
 // a value of 1 means identical, 0 means a cannot be converted to b.

@@ -36,11 +36,8 @@ func absFloat(x float64) float64 {
 // integers (10000+i*100 ...) that are extremely unlikely to hash-collide with
 // the test sequences or with each other.
 //
-// Purpose: IdentifyClusters drops clusters whose size ≥ 5% of the total corpus
-// (primitiveThreshold). Tests that form small clusters (size 2-3) must pad the
-// corpus to at least 20× the cluster size so the cluster is not mis-classified
-// as a structural stop-word. Passing 98 noise functions gives a 100-function
-// corpus where the threshold is 5, safely above any cluster in these tests.
+// Purpose: gives tests a realistic corpus of unrelated functions around the
+// clusters they build, so results don't depend on a tiny, all-similar input.
 func makeNoiseFns(n int) []*ds.FunctionMeta {
 	fns := make([]*ds.FunctionMeta, n)
 	for i := range fns {
@@ -487,7 +484,6 @@ func TestIdentifyClusters_IdenticalFunctionsClustered(t *testing.T) {
 	imp := []string{"fmt"}
 	calls := []string{"fmt.Println"}
 	// 3 target functions + 97 noise = 100 total.
-	// primitiveThreshold = 100 * 0.05 = 5 → a cluster of 3 survives (3 < 5).
 	fns := append(
 		[]*ds.FunctionMeta{makeFn(seq5, imp, calls), makeFn(seq5, imp, calls), makeFn(seq5, imp, calls)},
 		makeNoiseFns(97)...,
@@ -528,7 +524,7 @@ func TestIdentifyClusters_CompleteLinkagePreventsChaining(t *testing.T) {
 	f2 := makeFn(seq5, []string{"fmt", "os", "io"}, []string{"fmt.Println", "os.Exit", "io.Close"})
 	f3 := makeFn(seq5, []string{"io", "net"}, []string{"io.Close", "net.Dial"})
 
-	// 4 target + 96 noise = 100 total → primitiveThreshold = 5 → cluster of 3 survives (3 < 5).
+	// 4 target + 96 noise = 100 total.
 	fns := append([]*ds.FunctionMeta{f0, f1, f2, f3}, makeNoiseFns(96)...)
 	clusters, _, err := IdentifyClustersWithConfig(fns, DefaultClusterConfig())
 	require.NoError(t, err)
@@ -548,7 +544,7 @@ func TestIdentifyClusters_SortedBySizeDescending(t *testing.T) {
 	imp2, calls2 := []string{"os"}, []string{"os.Exit"}
 
 	// Four functions sharing seq2 (larger cluster) + three sharing seq5 (smaller).
-	// 7 target + 93 noise = 100 total → primitiveThreshold = 5 → cluster of 4 (4<5)
+	// 7 target + 93 noise = 100 total.
 	// and cluster of 3 (3<5) both survive.
 	fns := append(
 		[]*ds.FunctionMeta{
@@ -587,7 +583,7 @@ func TestIdentifyClusters_InitClusterDropped(t *testing.T) {
 	fn := makeFn(seq5, imp, calls)
 	fn.Name = "init"
 	fn2 := fn
-	// 2 init functions + 98 noise = 100 total → primitiveThreshold = 5.
+	// 2 init functions + 98 noise = 100 total.
 	// The cluster of 2 is dropped at the identifyMinSize=3 gate (2 < 3),
 	// before even reaching isInitCluster — result is still 0 clusters.
 	fns := append([]*ds.FunctionMeta{fn, fn2}, makeNoiseFns(98)...)

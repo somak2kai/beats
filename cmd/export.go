@@ -128,16 +128,13 @@ func runExport(args []string) {
 //
 // minScore filters clusters by Stats.MeanScore (inclusive lower bound). It
 // does NOT affect corpus_size — corpus_size is the total function count
-// across ALL clusters (including primitives if present) plus orphans, so the
+// across ALL clusters plus orphans, so the
 // number stays stable regardless of what the caller filters on the read side.
 func buildExportPayload(repo string, clusters []*ds.Cluster, orphans []*ds.OrphanedFunction, minScore float64) ExportPayload {
 	corpus := 0
 	exportClusters := make([]ExportCluster, 0, len(clusters))
 	for _, cl := range clusters {
 		corpus += cl.Size
-		if cl.IsPrimitive {
-			continue
-		}
 		if cl.Stats.MeanScore < minScore {
 			continue
 		}

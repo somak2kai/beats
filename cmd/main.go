@@ -25,8 +25,6 @@ func main() {
 		runQuery(os.Args[2:])
 	case "export":
 		runExport(os.Args[2:])
-	case "calibrate":
-		runCalibrate(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("beats %s\n", Version)
 	default:
@@ -43,7 +41,6 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  beats query     cluster shape <hash> --repo <path> [--format text|json]")
 	fmt.Fprintln(os.Stderr, "  beats export    --repo <path> [--format json] [--min-score N]")
 	fmt.Fprintln(os.Stderr, "  beats analyze   --repo <path>")
-	fmt.Fprintln(os.Stderr, "  beats calibrate --repo <path> [--bootstraps N]")
 	fmt.Fprintln(os.Stderr, "  beats version")
 }
 

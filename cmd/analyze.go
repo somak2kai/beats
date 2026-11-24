@@ -466,8 +466,7 @@ func buildOutlierGroups(clusters []*ds.Cluster, orphans []*ds.OrphanedFunction) 
 		if hash == "" {
 			continue
 		}
-		cl, ok := clusterByHash[hash]
-		if !ok || cl.IsPrimitive {
+		if _, ok := clusterByHash[hash]; !ok {
 			continue
 		}
 		groupMap[hash] = append(groupMap[hash], entry{o})
@@ -564,9 +563,6 @@ func buildReport(repo string, clusters []*ds.Cluster, orphanedFns []*ds.Orphaned
 	var functionsInClusters int
 
 	for _, c := range clusters {
-		if c.IsPrimitive {
-			continue // never show primitive clusters — structural stop-words
-		}
 		row := buildClusterRow(c)
 		rows = append(rows, row)
 		totalCoherence += c.Coherence
@@ -702,9 +698,6 @@ func buildReport(repo string, clusters []*ds.Cluster, orphanedFns []*ds.Orphaned
 	// ── package coverage ─────────────────────────────────────────────────────
 	pkgClustered := make(map[string]int)
 	for _, c := range clusters {
-		if c.IsPrimitive {
-			continue
-		}
 		for _, m := range c.Members {
 			pkgClustered[m.Package]++
 		}

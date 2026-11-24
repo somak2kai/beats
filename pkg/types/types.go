@@ -186,8 +186,6 @@ type Cluster struct {
 	Coherence float64
 	// mean pairwise Jaccard of CallTargets
 	CallCoherence float64
-	// true if cluster is too common to be meaningful (IDF stop-word)
-	IsPrimitive bool
 	// filled later by labelling pass
 	Label string
 

@@ -310,9 +310,6 @@ func classifyClusters(s *State) error {
 
 		var high, medium, low int
 		for _, cl := range cluster {
-			if cl.IsPrimitive {
-				continue
-			}
 			cl.Tier = clusterTier(cl.Stats.StdScore)
 			pkgSet := make(map[string]struct{}, len(cl.Members))
 			for _, m := range cl.Members {
@@ -361,9 +358,6 @@ func saveClusterInDb(s *State) error {
 	persist := func(clusters []*ds.Cluster, lang ds.Language) error {
 
 		for idx, cl := range clusters {
-			if cl.IsPrimitive {
-				continue
-			}
 			if err := bDb.StoreClusterByIndex(db.TierIdentified, idx, string(lang), cl); err != nil {
 				slog.Error("unable to save identified cluster",
 					slog.Int("index", idx),
@@ -392,7 +386,7 @@ func identifyOrphans(s *State) error {
 		if len(cltrs) == 0 || len(orphans) == 0 {
 			return nil, nil
 		}
-		result, err := ast.IdentifyOrphans(orphans, cltrs)
+		result, err := ast.IdentifyOrphansWithConfig(orphans, cltrs, ast.DefaultClusterConfig())
 		if err != nil {
 			return nil, err
 		}
@@ -452,11 +446,11 @@ func writeOutlierHtmlFile(s *State) error {
 		return nil
 	}
 
-	// Index non-primitive clusters by ShapeHash (both Go and Java).
+	// Index clusters by ShapeHash (both Go and Java).
 	allClusters := slices.Concat(s.IdentifiedCluster, s.Java.IdentifiedCluster)
 	clusterByHash := make(map[string]*ds.Cluster, len(allClusters))
 	for _, cl := range allClusters {
-		if !cl.IsPrimitive && cl.ShapeHash != "" {
+		if cl.ShapeHash != "" {
 			clusterByHash[cl.ShapeHash] = cl
 		}
 	}

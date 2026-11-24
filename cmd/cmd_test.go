@@ -473,19 +473,6 @@ func TestBuildOutlierGroups_UnknownShapeHashSkipped(t *testing.T) {
 	}
 }
 
-func TestBuildOutlierGroups_PrimitiveClusterSkipped(t *testing.T) {
-	// Orphan whose best candidate resolves to a primitive cluster must be skipped.
-	cl := &ds.Cluster{ShapeHash: "abc", IsPrimitive: true}
-	orphans := []*ds.OrphanedFunction{{
-		Meta:       ds.FunctionMeta{Name: "foo"},
-		Candidates: []ds.ClusterCandidate{{ShapeHash: "abc"}},
-	}}
-	groups := buildOutlierGroups([]*ds.Cluster{cl}, orphans)
-	if len(groups) != 0 {
-		t.Errorf("expected 0 groups for primitive cluster, got %d", len(groups))
-	}
-}
-
 func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 	cl := &ds.Cluster{
 		ShapeHash: "abc123",
@@ -494,7 +481,6 @@ func TestBuildOutlierGroups_ValidGroupProduced(t *testing.T) {
 			DirectImports: []string{"fmt"},
 			CallTargets:   []string{"fmt.Println"},
 		}},
-		IsPrimitive: false,
 	}
 
 	orphan := &ds.OrphanedFunction{

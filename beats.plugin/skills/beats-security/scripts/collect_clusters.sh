@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # collect_clusters.sh <repo>
 #
-# Emits a JSON array of every non-primitive cluster (with member bodies) so the
+# Emits a JSON array of every cluster (with member bodies) so the
 # systemic (Pass C) conformity-trap scan can see clusters that produced NO
 # outlier — the exact place a shared insecure convention hides.
 #

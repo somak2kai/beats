@@ -109,26 +109,6 @@ func TestBuildExportPayload_MinScoreFiltersClustersNotCorpus(t *testing.T) {
 	}
 }
 
-func TestBuildExportPayload_SkipsPrimitiveClusters(t *testing.T) {
-	prim := makeClusterWithStats("prim", 100, 0.99, 0.001)
-	prim.IsPrimitive = true
-	clusters := []*ds.Cluster{
-		prim,
-		makeClusterWithStats("h1", 3, 0.9, 0.02),
-	}
-	p := buildExportPayload("r", clusters, nil, 0)
-	if len(p.Clusters) != 1 {
-		t.Fatalf("Clusters: want 1 (primitive dropped), got %d", len(p.Clusters))
-	}
-	if p.Clusters[0].ShapeHash != "h1" {
-		t.Errorf("wrong survivor: %s", p.Clusters[0].ShapeHash)
-	}
-	// Corpus size DOES include primitive-cluster members — total code count.
-	if p.CorpusSize != 103 {
-		t.Errorf("CorpusSize: want 103, got %d", p.CorpusSize)
-	}
-}
-
 func TestBuildExportPayload_ClusterFieldMapping(t *testing.T) {
 	cl := makeClusterWithStats("h1", 5, 0.94, 0.03)
 	cl.Coherence = 0.82

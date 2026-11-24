@@ -448,7 +448,7 @@ Report to the user, in one short block:
 - **outliers: 0** → normal; Pass A is empty but Passes B and C still run.
 - **report.html not found** → skip 3b; systemic pass covers only outlier.md's
   clusters. Tell the user the systemic scan was partial.
-- **collect_clusters.sh returns []** → no non-primitive clusters; note it.
+- **collect_clusters.sh returns []** → no clusters; note it.
 - **model did not return valid JSON** → re-run Step 4 asking for JSON only; do
   not hand-write the matrix.
 - **binary not found after install** → add `$(go env GOPATH)/bin` to PATH.
