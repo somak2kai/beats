@@ -32,37 +32,59 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
       min-height: 100vh;
-      padding: 48px 24px 80px;
+      padding: 72px 24px 96px;
       line-height: 1.6;
     }
 
     .container {
-      max-width: 800px;
+      max-width: 880px;
       margin: 0 auto;
     }
 
     /* Header */
     .header {
-      margin-bottom: 56px;
+      margin-bottom: 64px;
     }
 
     .header h1 {
-      font-size: 32px;
+      font-size: 44px;
       font-weight: 700;
       letter-spacing: -0.03em;
-      margin-bottom: 10px;
+      line-height: 1.1;
+      margin-bottom: 20px;
       color: var(--text);
     }
 
-    .header h1 span {
-      color: var(--text3);
+    .lead {
+      font-size: 19px;
+      line-height: 1.6;
+      color: var(--text);
+      max-width: 640px;
+      margin-bottom: 24px;
     }
 
-    .header p {
-      font-size: 15px;
+    .deltas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      list-style: none;
+      margin-bottom: 8px;
+    }
+
+    .deltas li {
+      font-size: 13px;
       color: var(--text2);
-      max-width: 520px;
-      line-height: 1.65;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 12px;
+    }
+
+    .deltas li::before {
+      content: "−";
+      color: var(--q4);
+      margin-right: 6px;
+      font-weight: 700;
     }
 
     .tagline {
@@ -71,7 +93,25 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--text3);
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    /* Story */
+    .story {
+      margin-bottom: 64px;
+      padding-left: 20px;
+      border-left: 2px solid var(--border);
+      max-width: 640px;
+    }
+
+    .story p {
+      font-size: 16px;
+      line-height: 1.75;
+      color: var(--text2);
+    }
+
+    .story p + p {
+      margin-top: 16px;
     }
 
     /* Section label */
@@ -81,7 +121,7 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--text3);
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
     /* Quadrant layout */
@@ -431,6 +471,25 @@
     .report-link svg {
       flex-shrink: 0;
     }
+    /* Small screens: drop the long repository URL column, tighten the title */
+    @media (max-width: 600px) {
+      body {
+        padding: 48px 20px 72px;
+      }
+
+      .header h1 {
+        font-size: 36px;
+      }
+
+      .lead {
+        font-size: 17px;
+      }
+
+      .reports-table th:nth-child(2),
+      .reports-table td:nth-child(2) {
+        display: none;
+      }
+    }
   </style>
 </head>
 
@@ -438,18 +497,26 @@
   <div class="container">
 
     <header class="header">
-      <div class="tagline">structural fingerprints for Go/Java Codebase</div>
+      <div class="tagline">Structural fingerprints for Go/Java codebases</div>
       <h1>beats</h1>
-      <p>It started with a simple question and a casestudy to keep me busy</p>
-      <p>I am fascinated by shapes , they intrigue me .A visual imprint can become so clear/ingrained it can help you
-        navigate in the dark.So naturally , i was like oooohh! does this happen for codebase as well?
-        And thereby —
-        does vocabulary-independent clustering find real patterns in real codebases.</p>
-      <p>Every codebase develops structural habits — recurring shapes in how
-        functions are written that no one named but everyone follows. Beats finds those patterns and surfaces the
-        functions that don't fit them, with the exact delta: a missing guard, a dropped call target, an absent cleanup
-        step. Explore the reports below to see what that looks like across real OSS codebases.</p>
+      <p class="lead">Every codebase develops structural habits — recurring shapes in how functions are written that
+        no one named but everyone follows. Beats finds those patterns and surfaces the functions that don't fit them,
+        with the exact delta:</p>
+      <ul class="deltas">
+        <li>a missing guard</li>
+        <li>a dropped call target</li>
+        <li>an absent cleanup step</li>
+      </ul>
     </header>
+
+    <section class="story">
+      <div class="section-label">How it started</div>
+      <p>It started with a simple question and a case study to keep me busy.</p>
+      <p>I am fascinated by shapes; they intrigue me. A visual imprint can become so clear and ingrained that it can
+        help you navigate in the dark. So naturally, I was like oooohh! Does this happen for codebases as well? And
+        thereby: does vocabulary-independent clustering find real patterns in real codebases?</p>
+      <p>Explore the reports below to see what that looks like across real OSS codebases.</p>
+    </section>
 
     <div class="reports-section">
       <div class="section-label">Sample reports</div>
