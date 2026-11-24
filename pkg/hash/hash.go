@@ -2,7 +2,7 @@ package hash
 
 const (
 	_windowSize = 3
-	_windowStep = 2 // ~ 50% overlap
+	_windowStep = 2 // overlap (A,B,C,D,E,F,G) -> (A,B,C), (C,D,E), (E,F,G)
 	_rabinBase  = 131
 )
 
