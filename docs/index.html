@@ -15,16 +15,12 @@
     :root {
       --bg: #0f0f11;
       --bg2: #17171a;
-      --bg3: #1e1e22;
       --border: #2a2a30;
       --text: #e8e8ec;
       --text2: #9090a0;
       --text3: #606070;
       --q1: #4a7fc1;
-      --q2: #8a5fc1;
-      --q3: #4ac18a;
       --q4: #c15a5a;
-      --accent: #e8e8ec;
     }
 
     body {
@@ -37,7 +33,7 @@
     }
 
     .container {
-      max-width: 880px;
+      max-width: 1160px;
       margin: 0 auto;
     }
 
@@ -59,7 +55,7 @@
       font-size: 19px;
       line-height: 1.6;
       color: var(--text);
-      max-width: 640px;
+      max-width: 1100px;
       margin-bottom: 24px;
     }
 
@@ -96,12 +92,53 @@
       margin-bottom: 14px;
     }
 
-    /* Story */
+    /* Story (accordion, open by default) */
     .story {
       margin-bottom: 64px;
-      padding-left: 20px;
-      border-left: 2px solid var(--border);
-      max-width: 640px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg2);
+    }
+
+    .story summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text3);
+      user-select: none;
+    }
+
+    .story summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .story summary::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--text3);
+      border-bottom: 2px solid var(--text3);
+      transform: rotate(-45deg);
+      transition: transform 0.15s;
+    }
+
+    .story[open] summary::after {
+      transform: rotate(45deg);
+    }
+
+    .story summary:hover {
+      color: var(--text2);
+    }
+
+    .story-body {
+      padding: 0 20px 20px;
     }
 
     .story p {
@@ -122,266 +159,6 @@
       text-transform: uppercase;
       color: var(--text3);
       margin-bottom: 24px;
-    }
-
-    /* Quadrant layout */
-    .quad-wrap {
-      margin-bottom: 48px;
-    }
-
-    .axis-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      padding: 0 24px;
-    }
-
-    .axis-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-
-    .axis-line {
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-      margin: 0 12px;
-      position: relative;
-    }
-
-    .axis-line::after {
-      content: '→';
-      position: absolute;
-      right: -8px;
-      top: -9px;
-      font-size: 12px;
-      color: var(--text3);
-    }
-
-    .grid-outer {
-      display: flex;
-      align-items: stretch;
-      gap: 8px;
-    }
-
-    .axis-y-col {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      width: 20px;
-      padding: 8px 0;
-      flex-shrink: 0;
-    }
-
-    .axis-y-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-      writing-mode: vertical-rl;
-      transform: rotate(180deg);
-    }
-
-    .axis-y-line {
-      flex: 1;
-      width: 1px;
-      background: var(--border);
-      margin: 8px 0;
-      position: relative;
-    }
-
-    .axis-y-line::before {
-      content: '↑';
-      position: absolute;
-      top: -12px;
-      left: -4px;
-      font-size: 12px;
-      color: var(--text3);
-    }
-
-    .quad-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto;
-      gap: 3px;
-      flex: 1;
-    }
-
-    .quadrant {
-      background: var(--bg2);
-      border-radius: 10px;
-      padding: 18px;
-      transition: background 0.15s;
-    }
-
-    .quadrant:hover {
-      background: var(--bg3);
-    }
-
-    .quad-title {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 14px;
-      opacity: 0.6;
-    }
-
-    .q1 .quad-title {
-      color: var(--q1);
-    }
-
-    .q2 .quad-title {
-      color: var(--q2);
-    }
-
-    .q3 .quad-title {
-      color: var(--q3);
-    }
-
-    .q4 .quad-title {
-      color: var(--q4);
-    }
-
-    .use-case {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 8px 10px;
-      margin-bottom: 6px;
-      font-size: 12.5px;
-      color: var(--text2);
-      cursor: pointer;
-      transition: all 0.15s;
-      user-select: none;
-    }
-
-    .use-case:last-child {
-      margin-bottom: 0;
-    }
-
-    .use-case:hover {
-      color: var(--text);
-      border-color: #444;
-      transform: translateY(-1px);
-    }
-
-    .use-case.active {
-      color: var(--text);
-      border-color: #555;
-      background: #252528;
-    }
-
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      margin-top: 5px;
-    }
-
-    .q1 .dot {
-      background: var(--q1);
-    }
-
-    .q2 .dot {
-      background: var(--q2);
-    }
-
-    .q3 .dot {
-      background: var(--q3);
-    }
-
-    .q4 .dot {
-      background: var(--q4);
-    }
-
-    /* Detail panel */
-    .detail-panel {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 18px 20px;
-      min-height: 80px;
-      font-size: 13.5px;
-      color: var(--text2);
-      line-height: 1.65;
-      margin-top: 3px;
-      transition: opacity 0.2s;
-    }
-
-    .detail-panel.empty {
-      color: var(--text3);
-      font-style: italic;
-      display: flex;
-      align-items: center;
-    }
-
-    .detail-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 6px;
-    }
-
-    /* Divider */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 48px 0;
-    }
-
-    /* Prose section */
-    .prose h2 {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      letter-spacing: -0.02em;
-    }
-
-    .prose p {
-      font-size: 14px;
-      color: var(--text2);
-      margin-bottom: 16px;
-      max-width: 600px;
-    }
-
-    /* Footer */
-    .footer {
-      margin-top: 64px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: gap;
-    }
-
-    .footer span {
-      font-size: 12px;
-      color: var(--text3);
-    }
-
-    .footer a {
-      font-size: 12px;
-      color: var(--text2);
-      text-decoration: none;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 1px;
-    }
-
-    .footer a:hover {
-      color: var(--text);
-      border-color: var(--text2);
     }
 
     /* Reports table */
@@ -509,14 +286,16 @@
       </ul>
     </header>
 
-    <section class="story">
-      <div class="section-label">How it started</div>
-      <p>It started with a simple question and a case study to keep me busy.</p>
-      <p>I am fascinated by shapes; they intrigue me. A visual imprint can become so clear and ingrained that it can
-        help you navigate in the dark. So naturally, I was like oooohh! Does this happen for codebases as well? And
-        thereby: does vocabulary-independent clustering find real patterns in real codebases?</p>
-      <p>Explore the reports below to see what that looks like across real OSS codebases.</p>
-    </section>
+    <details class="story" open>
+      <summary>How it started</summary>
+      <div class="story-body">
+        <p>It started with a simple question and a case study to keep me busy.</p>
+        <p>I am fascinated by shapes; they intrigue me. A visual imprint can become so clear and ingrained that it can
+          help you navigate in the dark. So naturally, I was like oooohh! Does this happen for codebases as well? And
+          thereby: does vocabulary-independent clustering find real patterns in real codebases?</p>
+        <p>Explore the reports below to see what that looks like across real OSS codebases.</p>
+      </div>
+    </details>
 
     <div class="reports-section">
       <div class="section-label">Sample reports</div>
