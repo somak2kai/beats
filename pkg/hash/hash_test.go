@@ -1,6 +1,10 @@
 package hash
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 // windowSize=3, step=2 — kept in sync with the constants in hash.go.
 
@@ -26,6 +30,10 @@ func TestComputeWindowHash_ExactWindowSize(t *testing.T) {
 	}
 }
 
+func TestHashWindow_PositionalValues(t *testing.T) {
+	require.Equal(t, int64(17426), hashWindow([]int{1, 2, 3}))
+	require.Equal(t, int64(51746), hashWindow([]int{3, 2, 1}))
+}
 func TestComputeWindowHash_WindowCount(t *testing.T) {
 	// len=7, windowSize=3, step=2 → windows start at 0, 2, 4 (start+3 ≤ 7).
 	// start=6: 6+3=9 > 7, stops. Expected 3 windows.
