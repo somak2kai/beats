@@ -238,7 +238,7 @@ table.members tr.member-hidden{display:none;}
   </div>
   <div class="hdr-right">
     structural fingerprinting · ∛(seq × import × call)<br/>
-    2026-06-11 17:08:24
+    2026-11-25 17:16:58
   </div>
 </header>
 
@@ -247,12 +247,12 @@ table.members tr.member-hidden{display:none;}
   <div class="cards">
     <div class="card">
       <div class="lbl">Clusters</div>
-      <div class="val">16</div>
+      <div class="val">12</div>
       <div class="sub">structural patterns found</div>
     </div>
     <div class="card" style="border-color:rgba(52,211,153,.35);">
       <div class="lbl" style="color:var(--green);">High Structural Confidence Score</div>
-      <div class="val" style="color:var(--green);">16</div>
+      <div class="val" style="color:var(--green);">12</div>
       <div class="sub">std &lt; 0.05 — tight</div>
     </div>
     <div class="card" style="border-color:rgba(251,191,36,.30);">
@@ -366,17 +366,17 @@ table.members tr.member-hidden{display:none;}
 
         <div class="dist-row">
           <span class="dist-label">0.85 – 0.95</span>
-          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:45%"></div></div>
-          <span class="dist-count">5</span>
+          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:33%"></div></div>
+          <span class="dist-count">3</span>
         </div>
 
         <div class="dist-row">
           <span class="dist-label">0.95 – 1.00</span>
           <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:100%"></div></div>
-          <span class="dist-count">11</span>
+          <span class="dist-count">9</span>
         </div>
 
-        <p class="dist-explain">Heavy clone concentration: 68% of clusters score above 0.95, indicating a large number of near-identical function pairs.</p>
+        <p class="dist-explain">Heavy clone concentration: 75% of clusters score above 0.95, indicating a large number of near-identical function pairs.</p>
       </div>
       <div>
         <div class="dist-title">Size distribution — functions per cluster</div>
@@ -384,13 +384,13 @@ table.members tr.member-hidden{display:none;}
         <div class="dist-row">
           <span class="dist-label">3 – 4</span>
           <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:100%;background:var(--accent3)"></div></div>
-          <span class="dist-count">11</span>
+          <span class="dist-count">8</span>
         </div>
 
         <div class="dist-row">
           <span class="dist-label">5 – 9</span>
-          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:45%;background:var(--accent3)"></div></div>
-          <span class="dist-count">5</span>
+          <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:50%;background:var(--accent3)"></div></div>
+          <span class="dist-count">4</span>
         </div>
 
         <div class="dist-row">
@@ -399,7 +399,7 @@ table.members tr.member-hidden{display:none;}
           <span class="dist-count">0</span>
         </div>
 
-        <p class="dist-explain">31% of clusters have 5 or more members, with 0 clusters of size 10&#43;. A reasonable spread — the codebase has both local structural echoes and some broader recurring conventions.</p>
+        <p class="dist-explain">33% of clusters have 5 or more members, with 0 clusters of size 10&#43;. A reasonable spread — the codebase has both local structural echoes and some broader recurring conventions.</p>
       </div>
     </div>
   </div>
@@ -422,44 +422,26 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">validate</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:23%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:7%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">3 / 1</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
         <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">fs</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:23%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
         </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">3 / 0</span>
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
         <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">crio</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">zfs</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">devicemapper</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:30%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">4 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">podman</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:23%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
         </div>
@@ -467,12 +449,12 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">validate</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">utils</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:23%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:7%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
         </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">3 / 0</span>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 1</span>
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
@@ -485,7 +467,25 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">utils</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">cloudinfo</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">devicemapper</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:7%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 1</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">stdout</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -503,48 +503,12 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">manager</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">fakesysfs</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:7%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
         </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">cloudinfo</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">docker</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">stdout</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:15%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">2 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">overlay</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">0 / 1</span>
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
@@ -557,7 +521,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">elasticsearch</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">container</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -566,16 +530,7 @@ table.members tr.member-hidden{display:none;}
       </div>
 
       <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">netlink</span>
-        <div class="dist-bar-bg" style="position:relative;flex:1;">
-          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
-          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
-        </div>
-        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
-      </div>
-
-      <div class="dist-row" style="margin-bottom:4px;">
-        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">intel</span>
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">redis</span>
         <div class="dist-bar-bg" style="position:relative;flex:1;">
           <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
           <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
@@ -592,6 +547,51 @@ table.members tr.member-hidden{display:none;}
         <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
       </div>
 
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">influxdb</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">podman</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">overlay</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">zfs</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
+      <div class="dist-row" style="margin-bottom:4px;">
+        <span class="dist-label" style="min-width:180px;font-size:11px;font-family:monospace;">raw</span>
+        <div class="dist-bar-bg" style="position:relative;flex:1;">
+          <div class="dist-bar-fill" style="width:7%;background:var(--accent3);position:absolute;top:0;left:0;height:100%;"></div>
+          <div class="dist-bar-fill" style="width:0%;background:var(--red);opacity:0.7;position:absolute;top:0;left:0;height:100%;"></div>
+        </div>
+        <span class="dist-count" style="min-width:80px;text-align:right;font-size:11px;">1 / 0</span>
+      </div>
+
       <p class="dist-explain" style="margin-top:8px;">
         <span style="color:var(--accent3);">■</span> clustered &nbsp;
         <span style="color:var(--red);">■</span> structural outliers &nbsp;·&nbsp;
@@ -601,10 +601,176 @@ table.members tr.member-hidden{display:none;}
   </div>
 
 
+  <div class="dist-section" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div>
+      <div class="dist-title">Outlier delta direction</div>
+
+      <div class="dist-row">
+        <span class="dist-label">Missing from peers (−)</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:33%;background:ZgotmplZ"></div></div>
+        <span class="dist-count">1</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label">Extends peers (&#43;)</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:0%;background:ZgotmplZ"></div></div>
+        <span class="dist-count">0</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label">Mixed (&#43; and −)</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:100%;background:ZgotmplZ"></div></div>
+        <span class="dist-count">3</span>
+      </div>
+
+      <p class="dist-explain">Functions missing something peers have (−) are the strongest bug signal. Functions that extend peers (+) are usually intentional.</p>
+    </div>
+    <div>
+      <div class="dist-title">Token types missing from outliers vs peers</div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">BINARY_OP</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:100%;background:var(--red)"></div></div>
+        <span class="dist-count">6</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">RETURN</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:66%;background:var(--red)"></div></div>
+        <span class="dist-count">4</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">ASSIGN</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:50%;background:var(--red)"></div></div>
+        <span class="dist-count">3</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">CALL_METHOD</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:33%;background:var(--red)"></div></div>
+        <span class="dist-count">2</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">CALL</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:16%;background:var(--red)"></div></div>
+        <span class="dist-count">1</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">CALL_PKG</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:16%;background:var(--red)"></div></div>
+        <span class="dist-count">1</span>
+      </div>
+
+      <div class="dist-row">
+        <span class="dist-label" style="font-family:monospace;font-size:11px;">IF</span>
+        <div class="dist-bar-bg"><div class="dist-bar-fill" style="width:16%;background:var(--red)"></div></div>
+        <span class="dist-count">1</span>
+      </div>
+
+      <p class="dist-explain">Token types most frequently absent in outliers compared to their cluster peers — dominant types suggest a systemic missing pattern.</p>
+    </div>
+  </div>
+
 
     </div>
   </details>
 
+
+  <details class="legend" style="margin-bottom:20px;">
+    <summary>Potential Deviations <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px;">4 function(s) across 2 cluster(s) — functions that did not join but score close</span></summary>
+    <div class="outlier-body">
+
+      <details class="outlier-group" open>
+        <summary class="outlier-group-hdr">
+          <code class="outlier-cluster-id" title="Click to select · Ctrl+C to copy">2b09b5</code>
+          <button class="outlier-cluster-link" onclick="event.stopPropagation();jumpToCluster('2b09b5')">↗ jump</button>
+          
+          <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap;">Representative Shape:</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span>
+        </summary>
+        <table class="outlier-tbl">
+          <thead><tr>
+            <th>Function</th>
+            <th>Package</th>
+            <th>File : Line</th>
+            <th title="This function's full token sequence — compare to the cluster's representative shape above to see where the structure diverges">Token Shape</th>
+            <th title="Token types this function has beyond the cluster's representative function (+), or that the representative has but this one lacks (−)">Token Δ</th>
+            <th title="Imports in this function but not in the cluster's representative function (+), or vice versa (−)">Import Δ</th>
+            <th title="Call targets in this function but not in the cluster's representative function (+), or vice versa (−)">Call Δ</th>
+          </tr></thead>
+          <tbody>
+
+            <tr>
+              <td><span class="fn-name">validateCgroups</span></td>
+              <td><span class="fn-pkg">validate</span></td>
+              <td><span class="fn-file" title="cadvisor/validate/validate.go">cadvisor/validate/validate.go:184</span></td>
+              <td><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">COMPOSITE_LIT</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">COMPOSITE_LIT</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span></td>
+              <td><span class="diff-chips"><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+ASSIGN</span><span class="diff-add">+CALL</span><span class="diff-add">+CALL</span><span class="diff-add">+CALL</span><span class="diff-add">+CALL</span><span class="diff-add">+CALL_PKG</span><span class="diff-add">+COMPOSITE_LIT</span><span class="diff-add">+COMPOSITE_LIT</span><span class="diff-rem">−BINARY_OP</span><span class="diff-rem">−BINARY_OP</span><span class="diff-rem">−BINARY_OP</span><span class="diff-rem">−BINARY_OP</span></span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+            </tr>
+
+            <tr>
+              <td><span class="fn-name">FixCpuMask</span></td>
+              <td><span class="fn-pkg">utils</span></td>
+              <td><span class="fn-file" title="lib/utils/utils.go">lib/utils/utils.go:20</span></td>
+              <td><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span></td>
+              <td><span class="diff-chips"><span class="diff-rem">−ASSIGN</span><span class="diff-rem">−BINARY_OP</span><span class="diff-rem">−BINARY_OP</span><span class="diff-rem">−CALL</span><span class="diff-rem">−CALL_PKG</span><span class="diff-rem">−IF</span><span class="diff-rem">−RETURN</span><span class="diff-rem">−RETURN</span><span class="diff-rem">−RETURN</span><span class="diff-rem">−RETURN</span></span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </details>
+
+      <details class="outlier-group" open>
+        <summary class="outlier-group-hdr">
+          <code class="outlier-cluster-id" title="Click to select · Ctrl+C to copy">c6e775</code>
+          <button class="outlier-cluster-link" onclick="event.stopPropagation();jumpToCluster('c6e775')">↗ jump</button>
+          
+          <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap;">Representative Shape:</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span>
+        </summary>
+        <table class="outlier-tbl">
+          <thead><tr>
+            <th>Function</th>
+            <th>Package</th>
+            <th>File : Line</th>
+            <th title="This function's full token sequence — compare to the cluster's representative shape above to see where the structure diverges">Token Shape</th>
+            <th title="Token types this function has beyond the cluster's representative function (+), or that the representative has but this one lacks (−)">Token Δ</th>
+            <th title="Imports in this function but not in the cluster's representative function (+), or vice versa (−)">Import Δ</th>
+            <th title="Call targets in this function but not in the cluster's representative function (+), or vice versa (−)">Call Δ</th>
+          </tr></thead>
+          <tbody>
+
+            <tr>
+              <td><span class="fn-name">GetDistances</span></td>
+              <td><span class="fn-pkg">fakesysfs</span></td>
+              <td><span class="fn-file" title="sysfs/fakesysfs/fake.go">sysfs/fakesysfs/fake.go:235</span></td>
+              <td><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span></td>
+              <td><span class="diff-chips"><span class="diff-add">+BINARY_OP</span><span class="diff-add">+IF</span><span class="diff-add">+RETURN</span><span class="diff-rem">−ASSIGN</span><span class="diff-rem">−CALL_METHOD</span></span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+            </tr>
+
+            <tr>
+              <td><span class="fn-name">newThinLsClient</span></td>
+              <td><span class="fn-pkg">devicemapper</span></td>
+              <td><span class="fn-file" title="cadvisor/devicemapper/thin_ls_client.go">cadvisor/devicemapper/thin_ls_client.go:39</span></td>
+              <td><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">COMPOSITE_LIT</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span></td>
+              <td><span class="diff-chips"><span class="diff-add">+BINARY_OP</span><span class="diff-add">+CALL</span><span class="diff-add">+COMPOSITE_LIT</span><span class="diff-rem">−ASSIGN</span><span class="diff-rem">−CALL_METHOD</span></span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+              <td><span style="color:var(--muted2);font-size:10px;">—</span></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </details>
+
+    </div>
+  </details>
 
 
   <div class="sec-bar">
@@ -625,7 +791,7 @@ table.members tr.member-hidden{display:none;}
   </div>
 
   <div class="tier-tabs" id="tier-tabs">
-    <button class="tier-tab active" data-tier="high" onclick="switchTab('high')">High StrcScore<span class="tab-count">16</span></button>
+    <button class="tier-tab active" data-tier="high" onclick="switchTab('high')">High StrcScore<span class="tab-count">12</span></button>
     <button class="tier-tab" data-tier="medium" onclick="switchTab('medium')">Medium StrcScore<span class="tab-count">0</span></button>
     <button class="tier-tab" data-tier="low" onclick="switchTab('low')">Low StrcScore<span class="tab-count">0</span></button>
   </div>
@@ -650,64 +816,8 @@ table.members tr.member-hidden{display:none;}
       <tbody>
 
 
-      <tr class="cl-row" data-idx="0" data-stableid="814141" onclick="toggleRow('high', 0 )">
+      <tr class="cl-row" data-idx="0" data-stableid="db1847" onclick="toggleRow('high', 0 )">
         <td class="cl-ordinal">1</td>
-        <td><span class="cl-stableid">814141</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">8141417009906073</span></td>
-        <td class="num" style="vertical-align:middle;">5</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">2.88</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:36%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">containerd</span><span class="pkg-pill">crio</span><span class="pkg-pill">docker</span><span class="pkg-pill">podman</span><span class="pkg-pill">raw</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-0">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt, github.com/opencontainers/cgroups</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>3.0</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">containerd</span></td>
-              <td><span class="fn-file" title="container/containerd/handler.go">container/containerd/handler.go</span></td>
-              <td><span class="fn-line">229</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">crio</span></td>
-              <td><span class="fn-file" title="container/crio/handler.go">container/crio/handler.go</span></td>
-              <td><span class="fn-line">334</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">docker</span></td>
-              <td><span class="fn-file" title="container/docker/handler.go">container/docker/handler.go</span></td>
-              <td><span class="fn-line">380</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">podman</span></td>
-              <td><span class="fn-file" title="container/podman/handler.go">container/podman/handler.go</span></td>
-              <td><span class="fn-line">307</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">raw</span></td>
-              <td><span class="fn-file" title="container/raw/handler.go">container/raw/handler.go</span></td>
-              <td><span class="fn-line">249</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="1" data-stableid="db1847" onclick="toggleRow('high', 1 )">
-        <td class="cl-ordinal">2</td>
         <td><span class="cl-stableid">db1847</span></td>
         <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">db1847652ab28e3a</span></td>
         <td class="num" style="vertical-align:middle;">5</td>
@@ -718,11 +828,10 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">bigquery</span><span class="pkg-pill">elasticsearch</span><span class="pkg-pill">influxdb</span><span class="pkg-pill">kafka</span><span class="pkg-pill">redis</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-1">
+      <tr class="cl-detail" id="detail-high-0">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/storage, os</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>github.com/google/cadvisor/lib/storage, os</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -762,67 +871,54 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="2" data-stableid="ade12f" onclick="toggleRow('high', 2 )">
-        <td class="cl-ordinal">3</td>
-        <td><span class="cl-stableid">ade12f</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">ade12f5683b74cd9</span></td>
-        <td class="num" style="vertical-align:middle;">7</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">0.951</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">2.85</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:35%"></div></div></div></td>
+      <tr class="cl-row" data-idx="1" data-stableid="814141" onclick="toggleRow('high', 1 )">
+        <td class="cl-ordinal">2</td>
+        <td><span class="cl-stableid">814141</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">8141417009906073</span></td>
+        <td class="num" style="vertical-align:middle;">5</td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">2.88</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:36%"></div></div></div></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">devicemapper</span><span class="pkg-pill">fs</span><span class="pkg-pill">manager</span><span class="pkg-pill">zfs</span></div></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">containerd</span><span class="pkg-pill">crio</span><span class="pkg-pill">docker</span><span class="pkg-pill">podman</span><span class="pkg-pill">raw</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-2">
+      <tr class="cl-detail" id="detail-high-1">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>fmt, github.com/opencontainers/cgroups</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
 
-            <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">devicemapper</span></td>
-              <td><span class="fn-file" title="cadvisor/devicemapper/thin_pool_watcher.go">cadvisor/devicemapper/thin_pool_watcher.go</span></td>
-              <td><span class="fn-line">106</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.960</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:96%"></div></div></div></td>
+            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">containerd</span></td>
+              <td><span class="fn-file" title="container/containerd/handler.go">container/containerd/handler.go</span></td>
+              <td><span class="fn-line">228</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
-            <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
-              <td><span class="fn-line">95</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.960</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:96%"></div></div></div></td>
+            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">crio</span></td>
+              <td><span class="fn-file" title="container/crio/handler.go">container/crio/handler.go</span></td>
+              <td><span class="fn-line">356</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
-            <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
-              <td><span class="fn-line">94</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.960</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:96%"></div></div></div></td>
+            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">docker</span></td>
+              <td><span class="fn-file" title="container/docker/handler.go">container/docker/handler.go</span></td>
+              <td><span class="fn-line">380</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
-            <tr><td><span class="fn-name">getContainer</span></td><td><span class="fn-pkg">manager</span></td>
-              <td><span class="fn-file" title="cadvisor/manager/manager.go">cadvisor/manager/manager.go</span></td>
-              <td><span class="fn-line">592</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.954</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:95%"></div></div></div></td>
+            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">podman</span></td>
+              <td><span class="fn-file" title="container/podman/handler.go">container/podman/handler.go</span></td>
+              <td><span class="fn-line">307</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
-            <tr><td><span class="fn-name">getContainerData</span></td><td><span class="fn-pkg">manager</span></td>
-              <td><span class="fn-file" title="cadvisor/manager/manager.go">cadvisor/manager/manager.go</span></td>
-              <td><span class="fn-line">463</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.954</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:95%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetDeviceForLabel</span></td><td><span class="fn-pkg">fs</span></td>
-              <td><span class="fn-file" title="cadvisor/fs/fs.go">cadvisor/fs/fs.go</span></td>
-              <td><span class="fn-line">359</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.933</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:93%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetMountpointForDevice</span></td><td><span class="fn-pkg">fs</span></td>
-              <td><span class="fn-file" title="cadvisor/fs/fs.go">cadvisor/fs/fs.go</span></td>
-              <td><span class="fn-line">377</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.933</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:93%"></div></div></div></td>
+            <tr><td><span class="fn-name">GetCgroupPath</span></td><td><span class="fn-pkg">raw</span></td>
+              <td><span class="fn-file" title="container/raw/handler.go">container/raw/handler.go</span></td>
+              <td><span class="fn-line">249</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
             </tr>
 
           </tbody></table></div>
@@ -830,8 +926,8 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="3" data-stableid="bbcc8b" onclick="toggleRow('high', 3 )">
-        <td class="cl-ordinal">4</td>
+      <tr class="cl-row" data-idx="2" data-stableid="bbcc8b" onclick="toggleRow('high', 2 )">
+        <td class="cl-ordinal">3</td>
         <td><span class="cl-stableid">bbcc8b</span></td>
         <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">COMPOSITE_LIT</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">bbcc8ba9061eb8a6</span></td>
         <td class="num" style="vertical-align:middle;">4</td>
@@ -842,11 +938,10 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">btrfs</span><span class="pkg-pill">nfs</span><span class="pkg-pill">overlay</span><span class="pkg-pill">tmpfs</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-3">
+      <tr class="cl-detail" id="detail-high-2">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/fs, github.com/google/cadvisor/fs/vfs</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>github.com/google/cadvisor/lib/fs, github.com/google/cadvisor/lib/fs/vfs</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -880,10 +975,59 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="4" data-stableid="ac79de" onclick="toggleRow('high', 4 )">
+      <tr class="cl-row" data-idx="3" data-stableid="c6e775" onclick="toggleRow('high', 3 )">
+        <td class="cl-ordinal">4</td>
+        <td><span class="cl-stableid">c6e775</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">c6e775b4c7f3735e</span></td>
+        <td class="num" style="vertical-align:middle;">4</td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">0.946</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.74</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:21%"></div></div></div></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">devicemapper</span><span class="pkg-pill">fs</span><span class="pkg-pill">zfs</span></div></td>
+        <td style="vertical-align:middle;padding:6px 10px;"><span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="GetDistances#sysfs/fakesysfs/fake.go#235|newThinLsClient#cadvisor/devicemapper/thin_ls_client.go#39|"><span class="pot-icon">⚑</span>2</span></td>
+      </tr>
+      <tr class="cl-detail" id="detail-high-3">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">imports: <strong>fmt</strong></span>
+          </div>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+
+            <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">devicemapper</span></td>
+              <td><span class="fn-file" title="cadvisor/devicemapper/thin_pool_watcher.go">cadvisor/devicemapper/thin_pool_watcher.go</span></td>
+              <td><span class="fn-line">106</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">0.946</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">GetUsage</span></td><td><span class="fn-pkg">zfs</span></td>
+              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
+              <td><span class="fn-line">95</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">0.946</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">GetDeviceForLabel</span></td><td><span class="fn-pkg">fs</span></td>
+              <td><span class="fn-file" title="lib/fs/fs.go">lib/fs/fs.go</span></td>
+              <td><span class="fn-line">312</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">0.946</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">GetMountpointForDevice</span></td><td><span class="fn-pkg">fs</span></td>
+              <td><span class="fn-file" title="lib/fs/fs.go">lib/fs/fs.go</span></td>
+              <td><span class="fn-line">330</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">0.946</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
+            </tr>
+
+          </tbody></table></div>
+
+        </div></td>
+      </tr>
+
+      <tr class="cl-row" data-idx="4" data-stableid="25c47d" onclick="toggleRow('high', 4 )">
         <td class="cl-ordinal">5</td>
-        <td><span class="cl-stableid">ac79de</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">ac79de35d7d96752</span></td>
+        <td><span class="cl-stableid">25c47d</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">25c47dc0252d9ccf</span></td>
         <td class="num" style="vertical-align:middle;">3</td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
         <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.52</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:19%"></div></div></div></td>
@@ -895,52 +1039,7 @@ table.members tr.member-hidden{display:none;}
       <tr class="cl-detail" id="detail-high-4">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>path</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">ContainerNameToContainerdID</span></td><td><span class="fn-pkg">containerd</span></td>
-              <td><span class="fn-file" title="container/containerd/factory.go">container/containerd/factory.go</span></td>
-              <td><span class="fn-line">89</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">ContainerNameToCrioId</span></td><td><span class="fn-pkg">crio</span></td>
-              <td><span class="fn-file" title="container/crio/factory.go">container/crio/factory.go</span></td>
-              <td><span class="fn-line">98</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">ContainerNameToId</span></td><td><span class="fn-pkg">utils</span></td>
-              <td><span class="fn-file" title="docker/utils/docker.go">docker/utils/docker.go</span></td>
-              <td><span class="fn-line">109</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="5" data-stableid="25c47d" onclick="toggleRow('high', 5 )">
-        <td class="cl-ordinal">6</td>
-        <td><span class="cl-stableid">25c47d</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">25c47dc0252d9ccf</span></td>
-        <td class="num" style="vertical-align:middle;">3</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.52</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:19%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">containerd</span><span class="pkg-pill">crio</span><span class="pkg-pill">utils</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-5">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>path, strings</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>path, strings</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -968,30 +1067,72 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
+      <tr class="cl-row" data-idx="5" data-stableid="ac79de" onclick="toggleRow('high', 5 )">
+        <td class="cl-ordinal">6</td>
+        <td><span class="cl-stableid">ac79de</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">ac79de35d7d96752</span></td>
+        <td class="num" style="vertical-align:middle;">3</td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
+        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.52</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:19%"></div></div></div></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
+        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">containerd</span><span class="pkg-pill">crio</span><span class="pkg-pill">utils</span></div></td>
+        <td style="vertical-align:middle;padding:6px 10px;"></td>
+      </tr>
+      <tr class="cl-detail" id="detail-high-5">
+        <td colspan="10"><div class="detail-panel">
+          <div class="detail-meta">
+            <span class="detail-meta-item">imports: <strong>path</strong></span>
+          </div>
+          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
+          <tbody>
+
+            <tr><td><span class="fn-name">ContainerNameToContainerdID</span></td><td><span class="fn-pkg">containerd</span></td>
+              <td><span class="fn-file" title="container/containerd/factory.go">container/containerd/factory.go</span></td>
+              <td><span class="fn-line">89</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">ContainerNameToCrioId</span></td><td><span class="fn-pkg">crio</span></td>
+              <td><span class="fn-file" title="container/crio/factory.go">container/crio/factory.go</span></td>
+              <td><span class="fn-line">98</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+            <tr><td><span class="fn-name">ContainerNameToId</span></td><td><span class="fn-pkg">utils</span></td>
+              <td><span class="fn-file" title="docker/utils/docker.go">docker/utils/docker.go</span></td>
+              <td><span class="fn-line">109</span></td>
+              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
+            </tr>
+
+          </tbody></table></div>
+
+        </div></td>
+      </tr>
+
       <tr class="cl-row" data-idx="6" data-stableid="b22405" onclick="toggleRow('high', 6 )">
         <td class="cl-ordinal">7</td>
         <td><span class="cl-stableid">b22405</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">DEFER</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">b22405d954806239</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">DEFER</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">b22405d954806239</span></td>
         <td class="num" style="vertical-align:middle;">3</td>
         <td style="vertical-align:middle;"><span class="badge badge-green">0.961</span></td>
         <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.41</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:17%"></div></div></div></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">container</span><span class="pkg-pill">fs</span><span class="pkg-pill">resctrl</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
+        <td style="vertical-align:middle;padding:6px 10px;"><span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="GetDistances#sysfs/fakesysfs/fake.go#235|"><span class="pot-icon">⚑</span>1</span></td>
       </tr>
       <tr class="cl-detail" id="detail-high-6">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>fmt</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
 
             <tr><td><span class="fn-name">RegisterPlugin</span></td><td><span class="fn-pkg">fs</span></td>
-              <td><span class="fn-file" title="cadvisor/fs/plugin.go">cadvisor/fs/plugin.go</span></td>
-              <td><span class="fn-line">109</span></td>
+              <td><span class="fn-file" title="lib/fs/plugin.go">lib/fs/plugin.go</span></td>
+              <td><span class="fn-line">90</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.971</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:97%"></div></div></div></td>
             </tr>
 
@@ -1002,7 +1143,7 @@ table.members tr.member-hidden{display:none;}
             </tr>
 
             <tr><td><span class="fn-name">RegisterPlugin</span></td><td><span class="fn-pkg">container</span></td>
-              <td><span class="fn-file" title="cadvisor/container/factory.go">cadvisor/container/factory.go</span></td>
+              <td><span class="fn-file" title="lib/container/factory.go">lib/container/factory.go</span></td>
               <td><span class="fn-line">189</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.941</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
             </tr>
@@ -1027,8 +1168,7 @@ table.members tr.member-hidden{display:none;}
       <tr class="cl-detail" id="detail-high-7">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt, os, strings</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>fmt, os, strings</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1080,52 +1220,8 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="8" data-stableid="643565" onclick="toggleRow('high', 8 )">
+      <tr class="cl-row" data-idx="8" data-stableid="2d60f1" onclick="toggleRow('high', 8 )">
         <td class="cl-ordinal">9</td>
-        <td><span class="cl-stableid">643565</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">643565d7bfb6b68f</span></td>
-        <td class="num" style="vertical-align:middle;">3</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">0.893</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.25</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:15%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">crio</span><span class="pkg-pill">docker</span><span class="pkg-pill">podman</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-8">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/container, github.com/google/cadvisor/container/common, github.com/google/cadvisor/info/v1</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>1.7</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">GetSpec</span></td><td><span class="fn-pkg">docker</span></td>
-              <td><span class="fn-file" title="container/docker/handler.go">container/docker/handler.go</span></td>
-              <td><span class="fn-line">327</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.907</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:90%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetSpec</span></td><td><span class="fn-pkg">podman</span></td>
-              <td><span class="fn-file" title="container/podman/handler.go">container/podman/handler.go</span></td>
-              <td><span class="fn-line">262</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.903</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:90%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">GetSpec</span></td><td><span class="fn-pkg">crio</span></td>
-              <td><span class="fn-file" title="container/crio/handler.go">container/crio/handler.go</span></td>
-              <td><span class="fn-line">223</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.869</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:86%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="9" data-stableid="2d60f1" onclick="toggleRow('high', 9 )">
-        <td class="cl-ordinal">10</td>
         <td><span class="cl-stableid">2d60f1</span></td>
         <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">2d60f1a735ae1743</span></td>
         <td class="num" style="vertical-align:middle;">6</td>
@@ -1136,11 +1232,10 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">sysfs</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-9">
+      <tr class="cl-detail" id="detail-high-8">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>os, path</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>os, path</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1186,96 +1281,8 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="10" data-stableid="3fd615" onclick="toggleRow('high', 10 )">
-        <td class="cl-ordinal">11</td>
-        <td><span class="cl-stableid">3fd615</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">3fd61597bfb1a7d6</span></td>
-        <td class="num" style="vertical-align:middle;">3</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">0.879</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.22</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:15%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">intel</span><span class="pkg-pill">netlink</span><span class="pkg-pill">podman</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-10">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>3.7</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">GetExitCode</span></td><td><span class="fn-pkg">podman</span></td>
-              <td><span class="fn-file" title="container/podman/handler.go">container/podman/handler.go</span></td>
-              <td><span class="fn-line">348</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.894</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:89%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">checkMonitoringGroup</span></td><td><span class="fn-pkg">intel</span></td>
-              <td><span class="fn-file" title="resctrl/intel/collector.go">resctrl/intel/collector.go</span></td>
-              <td><span class="fn-line">98</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.882</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:88%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">New</span></td><td><span class="fn-pkg">netlink</span></td>
-              <td><span class="fn-file" title="cpuload/netlink/reader.go">cpuload/netlink/reader.go</span></td>
-              <td><span class="fn-line">33</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.861</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:86%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="11" data-stableid="2353be" onclick="toggleRow('high', 11 )">
-        <td class="cl-ordinal">12</td>
-        <td><span class="cl-stableid">2353be</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">FOR</span><span class="token-arrow">→</span><span class="token-chip">SELECT</span><span class="token-arrow">→</span><span class="token-chip">COMM</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">COMM</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span><span class="token-arrow">→</span><span class="token-chip">CALL_METHOD</span></span><span class="cl-hash">2353be5cb8e04311</span></td>
-        <td class="num" style="vertical-align:middle;">3</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.000</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.21</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:15%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">devicemapper</span><span class="pkg-pill">zfs</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-11">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>time</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>6.0</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">Start</span></td><td><span class="fn-pkg">devicemapper</span></td>
-              <td><span class="fn-file" title="cadvisor/devicemapper/thin_pool_watcher.go">cadvisor/devicemapper/thin_pool_watcher.go</span></td>
-              <td><span class="fn-line">76</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">Start</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="cadvisor/zfs/watcher.go">cadvisor/zfs/watcher.go</span></td>
-              <td><span class="fn-line">65</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">Start</span></td><td><span class="fn-pkg">zfs</span></td>
-              <td><span class="fn-file" title="fs/zfs/watcher.go">fs/zfs/watcher.go</span></td>
-              <td><span class="fn-line">64</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">1.000</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:100%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="12" data-stableid="e7af89" onclick="toggleRow('high', 12 )">
-        <td class="cl-ordinal">13</td>
+      <tr class="cl-row" data-idx="9" data-stableid="e7af89" onclick="toggleRow('high', 9 )">
+        <td class="cl-ordinal">10</td>
         <td><span class="cl-stableid">e7af89</span></td>
         <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">e7af8916834d7358</span></td>
         <td class="num" style="vertical-align:middle;">3</td>
@@ -1286,11 +1293,10 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">cloudinfo</span><span class="pkg-pill">gce</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-12">
+      <tr class="cl-detail" id="detail-high-9">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>os, strings</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>os, strings</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1318,10 +1324,10 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="13" data-stableid="cb40f8" onclick="toggleRow('high', 13 )">
-        <td class="cl-ordinal">14</td>
-        <td><span class="cl-stableid">cb40f8</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">RANGE</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span></span><span class="cl-hash">cb40f81282d4f090</span></td>
+      <tr class="cl-row" data-idx="10" data-stableid="12ea7a" onclick="toggleRow('high', 10 )">
+        <td class="cl-ordinal">11</td>
+        <td><span class="cl-stableid">12ea7a</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">RANGE</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span></span><span class="cl-hash">12ea7a7cd769b0a6</span></td>
         <td class="num" style="vertical-align:middle;">4</td>
         <td style="vertical-align:middle;"><span class="badge badge-green">0.862</span></td>
         <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.20</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:15%"></div></div></div></td>
@@ -1330,11 +1336,10 @@ table.members tr.member-hidden{display:none;}
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">statsd</span><span class="pkg-pill">stdout</span></div></td>
         <td style="vertical-align:middle;padding:6px 10px;"></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-13">
+      <tr class="cl-detail" id="detail-high-10">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>github.com/google/cadvisor/info/v1, strconv</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>2.5</strong></span>
+            <span class="detail-meta-item">imports: <strong>github.com/google/cadvisor/info/v1, strconv</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1347,7 +1352,7 @@ table.members tr.member-hidden{display:none;}
 
             <tr><td><span class="fn-name">perfStatsToValues</span></td><td><span class="fn-pkg">stdout</span></td>
               <td><span class="fn-file" title="storage/stdout/stdout.go">storage/stdout/stdout.go</span></td>
-              <td><span class="fn-line">193</span></td>
+              <td><span class="fn-line">201</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.862</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:86%"></div></div></div></td>
             </tr>
 
@@ -1359,7 +1364,7 @@ table.members tr.member-hidden{display:none;}
 
             <tr><td><span class="fn-name">resctrlStatsToValues</span></td><td><span class="fn-pkg">stdout</span></td>
               <td><span class="fn-file" title="storage/stdout/stdout.go">storage/stdout/stdout.go</span></td>
-              <td><span class="fn-line">199</span></td>
+              <td><span class="fn-line">207</span></td>
               <td><div class="score-wrap"><span class="score-num badge-green">0.862</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:86%"></div></div></div></td>
             </tr>
 
@@ -1368,67 +1373,22 @@ table.members tr.member-hidden{display:none;}
         </div></td>
       </tr>
 
-      <tr class="cl-row" data-idx="14" data-stableid="d60d08" onclick="toggleRow('high', 14 )">
-        <td class="cl-ordinal">15</td>
-        <td><span class="cl-stableid">d60d08</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">d60d080b435215a9</span></td>
-        <td class="num" style="vertical-align:middle;">3</td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">0.931</span></td>
-        <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">1.06</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:13%"></div></div></div></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
-        <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">devicemapper</span><span class="pkg-pill">fs</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
-      </tr>
-      <tr class="cl-detail" id="detail-high-14">
-        <td colspan="10"><div class="detail-panel">
-          <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt, strconv, strings</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>4.7</strong></span>
-          </div>
-          <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
-          <tbody>
-
-            <tr><td><span class="fn-name">ParseDMTable</span></td><td><span class="fn-pkg">devicemapper</span></td>
-              <td><span class="fn-file" title="fs/devicemapper/stats.go">fs/devicemapper/stats.go</span></td>
-              <td><span class="fn-line">68</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.948</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">parseDMTable</span></td><td><span class="fn-pkg">fs</span></td>
-              <td><span class="fn-file" title="cadvisor/fs/fs.go">cadvisor/fs/fs.go</span></td>
-              <td><span class="fn-line">751</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.948</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:94%"></div></div></div></td>
-            </tr>
-
-            <tr><td><span class="fn-name">parseDMStatus</span></td><td><span class="fn-pkg">devicemapper</span></td>
-              <td><span class="fn-file" title="fs/devicemapper/stats.go">fs/devicemapper/stats.go</span></td>
-              <td><span class="fn-line">46</span></td>
-              <td><div class="score-wrap"><span class="score-num badge-green">0.896</span><div class="score-bar-bg"><div class="score-bar-fill badge-green" style="width:89%"></div></div></div></td>
-            </tr>
-
-          </tbody></table></div>
-
-        </div></td>
-      </tr>
-
-      <tr class="cl-row" data-idx="15" data-stableid="3bbdbe" onclick="toggleRow('high', 15 )">
-        <td class="cl-ordinal">16</td>
-        <td><span class="cl-stableid">3bbdbe</span></td>
-        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">3bbdbee6337759f9</span></td>
+      <tr class="cl-row" data-idx="11" data-stableid="2b09b5" onclick="toggleRow('high', 11 )">
+        <td class="cl-ordinal">12</td>
+        <td><span class="cl-stableid">2b09b5</span></td>
+        <td><span class="caret">▶</span><span class="token-seq"><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">ASSIGN</span><span class="token-arrow">→</span><span class="token-chip">CALL_PKG</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">IF</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">BINARY_OP</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span><span class="token-arrow">→</span><span class="token-chip">RETURN</span></span><span class="cl-hash">2b09b57694dea5ce</span></td>
         <td class="num" style="vertical-align:middle;">3</td>
         <td style="vertical-align:middle;"><span class="badge badge-green">0.852</span></td>
         <td style="vertical-align:middle;"><div class="attn-wrap"><span class="attn-num">0.59</span><div class="attn-bar-bg"><div class="attn-bar-fill" style="width:7%"></div></div></div></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
         <td style="vertical-align:middle;"><span class="badge badge-green">1.00</span></td>
         <td style="vertical-align:middle;"><div class="pkg-pills"><span class="pkg-pill">validate</span></div></td>
-        <td style="vertical-align:middle;padding:6px 10px;"></td>
+        <td style="vertical-align:middle;padding:6px 10px;"><span class="pot-badge" onclick="showPotTooltip(event,this)" data-names="validateCgroups#cadvisor/validate/validate.go#184|FixCpuMask#lib/utils/utils.go#20|"><span class="pot-icon">⚑</span>2</span></td>
       </tr>
-      <tr class="cl-detail" id="detail-high-15">
+      <tr class="cl-detail" id="detail-high-11">
         <td colspan="10"><div class="detail-panel">
           <div class="detail-meta">
-            <span class="detail-meta-item">top imports: <strong>fmt</strong></span>
-            <span class="detail-meta-item">cyclo mean: <strong>5.0</strong></span>
+            <span class="detail-meta-item">imports: <strong>fmt</strong></span>
           </div>
           <div class="members-wrap"><table class="members"><thead><tr><th>Function</th><th>Package</th><th>File</th><th>Line</th><th>Score</th></tr></thead>
           <tbody>
@@ -1513,7 +1473,7 @@ table.members tr.member-hidden{display:none;}
 
 </div>
 
-<footer>beats · vocabulary-independent structural fingerprinting for Go · 2026-06-11 17:08:24</footer>
+<footer>beats · vocabulary-independent structural fingerprinting for Go · 2026-11-25 17:16:58</footer>
 
 <div id="pot-tooltip"><div class="pot-tt-title">Potential outliers</div><div id="pot-tt-body"></div></div>
 

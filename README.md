@@ -153,6 +153,7 @@ brew install beats
 Upgrade to the latest release at any time:
 
 ```bash
+brew update
 brew upgrade beats
 ```
 
