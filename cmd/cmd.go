@@ -550,45 +550,77 @@ func getJavaFunctionMetadata(s *State) error {
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	var mu sync.Mutex
 	s.Java = &StateJava{FunctionMetadata: make([]*ds.FunctionMeta, 0)}
+
+	var files []string
 	for _, val := range s.PkgToFileMetadata {
-		val := val
+		for _, m := range val {
+			if m.Lang != ds.Language_JAVA {
+				continue
+			}
+			rel, err := filepath.Rel(s.RepositoryPath, m.Path) // jbeats takes --inp paths relative to --repo.
+			if err != nil {
+				slog.Warn("skipping java file outside repo", slog.String("path", m.Path), slog.Any("error", err))
+				continue
+			}
+			files = append(files, rel)
+		}
+	}
+	slog.Info("Starting to scan java files...", slog.Int("total_num_files", len(files)))
+
+	const jbeatsBatchSize = 5
+	for start := 0; start < len(files); start += jbeatsBatchSize {
+		batch := files[start:min(start+jbeatsBatchSize, len(files))]
+
 		g.Go(func() error {
+
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			args := []string{fmt.Sprintf("--repo=%s", s.RepositoryPath)}
+			for _, f := range batch {
+				args = append(args, fmt.Sprintf("--inp=%s", f))
+			}
+			cmd := exec.CommandContext(ctx, "jbeats", args...)
+
+			// jbeats prints one output path per --inp, in order, with an empty line for a file it
+			// could not parse. It exits 1 if any file failed, but still prints the other paths.
+			out, err := cmd.Output()
+			if err != nil {
+				perr, ok := errors.AsType[*exec.ExitError](err)
+				switch {
+				case ctx.Err() != nil:
+					slog.Error("jbeats timed out; using any results it printed", slog.Any("files", batch))
+				case ok && perr.ExitCode() == 1:
+					// partial failure: failed files have an empty line, the rest are still valid.
+					first, _, _ := strings.Cut(strings.TrimSpace(string(perr.Stderr)), "\n")
+					slog.Warn("jbeats could not parse some files", slog.Any("files", batch), slog.String("error", first))
+				case ok:
+					slog.Error("jbeats crashed; skipping batch", slog.Any("files", batch), slog.Int("exit", perr.ExitCode()))
+					return nil
+				default:
+					return fmt.Errorf("jbeats failed for %v: %w", batch, err) // could not run jbeats at all
+				}
+			}
+			if strings.TrimSpace(string(out)) == "" {
+				return nil // nothing was produced for this batch
+			}
+			lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+			if len(lines) != len(batch) {
+				slog.Warn("jbeats returned an unexpected number of results", slog.Any("files", batch), slog.Int("got", len(lines)))
+			}
+
 			var localFncM []*ds.FunctionMeta
-			for _, m := range val {
-				if m.Lang != ds.Language_JAVA {
-					continue
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-				defer cancel()
-				cmd := exec.CommandContext(ctx, "jbeats",
-					fmt.Sprintf("--inp=%s", m.Path),
-					fmt.Sprintf("--repo=%s", s.RepositoryPath),
-				)
-
-				out, err := cmd.Output()
-				if err != nil {
-					if perr, ok := errors.AsType[*exec.ExitError](err); ok {
-						slog.Error("unable to execute beats ", slog.String("path", m.Path), slog.Any("error", perr), slog.String("stderr", strings.TrimSpace(string(perr.Stderr))))
-						continue
-					} else {
-						return fmt.Errorf("jbeats failed for %s: %w", m.Path, err)
-					}
-
-				}
-				if len(out) == 0 {
-					return fmt.Errorf("no output was generated for %s", m.Path)
-				}
-				jsonPath := strings.TrimSpace(string(out))
-				if _, err := os.Stat(jsonPath); errors.Is(err, os.ErrNotExist) {
-					return fmt.Errorf("output file does not exist for %s %s", m.Path, string(out))
+			for i, line := range lines {
+				jsonPath := strings.TrimSpace(line)
+				if jsonPath == "" {
+					continue // this file failed to parse; already reported on stderr
 				}
 				data, err := os.ReadFile(jsonPath)
 				if err != nil {
-					return fmt.Errorf("read jbeats output for %s: %w", m.Path, err)
+					return fmt.Errorf("read jbeats output for %s: %w", batchFile(batch, i), err)
 				}
 				var fileResult ds.JBeatsFileResult
 				if err := json.Unmarshal(data, &fileResult); err != nil {
-					return fmt.Errorf("parse jbeats output for %s: %w", m.Path, err)
+					return fmt.Errorf("parse jbeats output for %s: %w", batchFile(batch, i), err)
 				}
 				for _, fn := range fileResult.Functions {
 					meta := ds.ToFunctionMeta(fn)
@@ -599,6 +631,9 @@ func getJavaFunctionMetadata(s *State) error {
 					localFncM = append(localFncM, meta)
 				}
 				os.Remove(jsonPath) //nolint errcheck
+			}
+			if len(localFncM) == 0 {
+				return nil // every file failed or had no functions: nothing to merge
 			}
 			mu.Lock()
 			s.Java.FunctionMetadata = append(s.Java.FunctionMetadata, localFncM...)
@@ -613,6 +648,14 @@ func getJavaFunctionMetadata(s *State) error {
 	}
 	slog.Info("total number of java functions", slog.Int("count", len(s.Java.FunctionMetadata)))
 	return nil
+}
+
+// batchFile names the i-th file of a jbeats batch for error messages.
+func batchFile(batch []string, i int) string {
+	if i < len(batch) {
+		return batch[i]
+	}
+	return fmt.Sprintf("result %d of %v", i, batch)
 }
 
 // beatsDBPath returns the stable BadgerDB path for a given repo.
