@@ -7,8 +7,7 @@ import (
 	"os"
 )
 
-// default
-const Version = "dev"
+var Version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
