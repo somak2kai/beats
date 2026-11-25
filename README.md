@@ -35,16 +35,6 @@ Every codebase has a rhythm — recurring structural patterns that developers fa
 
 Beats finds where the variance is and where it isn't.
 
-### Reports from sample OSS repositories
-
-| Project | Repository | Report |
-|---|---|---|
-| Argo CD | [argoproj/argo-cd](https://github.com/argoproj/argo-cd) | [View →](https://somak2kai.github.io/beats/report-argocd.html) |
-| Mattermost | [mattermost/mattermost-server](https://github.com/mattermost/mattermost-server) | [View →](https://somak2kai.github.io/beats/report-mattermost.html) |
-| Gitea | [go-gitea/gitea](https://github.com/go-gitea/gitea) | [View →](https://somak2kai.github.io/beats/report-gitea.html) |
-| cAdvisor | [google/cadvisor](https://github.com/google/cadvisor) | [View →](https://somak2kai.github.io/beats/report-cadvisor.html) |
-| CockroachDB | [cockroachdb/cockroach](https://github.com/cockroachdb/cockroach) | [View →](https://somak2kai.github.io/beats/report-cockroachdb.html) |
-
 ---
 
 <details>
@@ -66,7 +56,7 @@ For each function, beats computes three features:
 No attempt is made to understand *what* a call target does or *what* an import statement provides. That would reintroduce vocabulary dependence and defeat the purpose.
 
 These three features — along with some additional metadata — form a **FunctionMetadata** record. <br>
-Beats collects FunctionMetadata across the entire codebase and clusters structurally similar functions. Similarity between two functions is computed as the geometric mean of three signals, each normalized to [0, 1]: token-sequence similarity (1 − normalized Levenshtein distance), Jaccard overlap of imports, and Jaccard overlap of called functions. Using the geometric mean (∛(A·B·C)) rather than a weighted sum means a pair must score well across all three dimensions to be considered similar — a function with high token overlap but no shared imports or calls won't be treated as a match
+Beats collects FunctionMetadata across the entire codebase and clusters structurally similar functions. 
 
 ### Potential outliers
 
@@ -77,14 +67,8 @@ For each outlier, beats surfaces the exact gap between the function and its clos
 - **Token delta** — token types present in the outlier but absent from the cluster's common subsequence, or vice versa. A `+IF` means the outlier has an extra branch peers don't; a `−DEFER` means it's missing a cleanup step they all share.
 - **Import delta** — packages the outlier uses that peers don't, or packages peers consistently use that this function omits.
 - **Call delta** — specific call targets (e.g. `errors.Is`, `sync.Mutex.Lock`) that peers share but the outlier skips, or that the outlier adds beyond the cluster norm.
-- **Cyclomatic delta** — how much more or less complex the outlier is relative to the cluster mean.
 
-The HTML report groups outliers by their closest cluster and visualises the signal across three charts:
-
-- **Package coverage** — the top 20 packages by function count, split into clustered (settled convention) vs outliers (structural ad-hoc). Surfaces which areas of the codebase have converged on patterns and which haven't.
-- **Delta direction** — breaks all outliers into three buckets: missing something peers have (strongest signal), extending beyond peers, or both. A repo dominated by the "missing" bucket has more structural drift worth reviewing.
-- **Token frequency** — the top 10 token types most commonly absent from outliers compared to their peer clusters. A dominant type appearing across many outliers (e.g. `DEFER`, `IF`) signals a systemic gap rather than a one-off.
-
+beats generates a `<repo>/.beats/report.html` that shows a visual representation of clusters , along with its potential outliers.
 beats also writes `<repo>/.beats/outlier.md` after indexing — a pre-computed document with every outlier, its deltas, and the full bodies of its closest cluster's peer functions. This is what the Claude skill reads to triage outliers without issuing any further queries.
 
 Remember, beats is a lens - not a prescription.
