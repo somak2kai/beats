@@ -108,6 +108,7 @@ This writes `<repo>/.beats/outlier.md` and `<repo>/.beats/report.html`. No Claud
 
 **Step 2 — triage in Claude:**
 
+Open claude terminal for the repo.
 > `mini fingerprint`
 
 Tell Claude the repo path when prompted. Claude reads `outlier.md` directly and outputs the full triage — no indexing, no repeated database queries, just analysis.
