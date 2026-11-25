@@ -41,6 +41,11 @@ func GetFileMetadata(root string) (ds.PkgToFileMeta, error) {
 			// continue
 			return nil
 		}
+
+		if strings.HasSuffix(entry.Name(), ".java") && isSkippableJavaFile(root, path) {
+			// continue
+			return nil
+		}
 		pkg, err := filepath.Rel(root, filepath.Dir(path))
 		if err != nil {
 			return err
@@ -76,4 +81,30 @@ func isSkippableGoFile(file string) bool {
 		strings.HasSuffix(file, "invalid.go") ||
 		strings.HasPrefix(file, "mock_") ||
 		strings.HasPrefix(file, "zz_generated")
+}
+
+// skip java files that live outside production source:
+//   - under "_" prefixed dirs or testdata: fixtures and deliberately odd code that shows up
+//     as fake outliers.
+//   - under src/test, src/it, src/integrationTest, src/testFixtures, src/jmh: Maven/Gradle test
+//     and benchmark source roots. Only matched directly under src/, since production packages
+//     can be named "test" (eg org.apache.hadoop.test).
+//   - under src/main/resources, src/test/resources: resources, not code.
+func isSkippableJavaFile(root, path string) bool {
+	rel, err := filepath.Rel(root, filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	// wrap in slashes so "/src/test/" never matches "src/testing" or "mysrc/test".
+	dir := "/" + filepath.ToSlash(rel) + "/"
+	for _, skip := range []string{
+		"/_", "/testdata/",
+		"/src/test/", "/src/it/", "/src/integrationTest/", "/src/testFixtures/", "/src/jmh/",
+		"/src/main/resources/",
+	} {
+		if strings.Contains(dir, skip) {
+			return true
+		}
+	}
+	return false
 }
